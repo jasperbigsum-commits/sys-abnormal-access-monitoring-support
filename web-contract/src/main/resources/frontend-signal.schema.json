@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Abnormal access monitoring frontend signal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["client_event_id", "occurred_at", "request_id", "route", "action"],
+  "properties": {
+    "contract_version": {"type": "string", "const": "1.0"},
+    "client_event_id": {"type": "string", "maxLength": 128},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "request_id": {"type": "string", "maxLength": 128},
+    "trace_id": {"type": "string", "maxLength": 128},
+    "route": {"type": "string", "maxLength": 512},
+    "action": {"type": "string", "maxLength": 128},
+    "device_id_hash": {"type": "string", "pattern": "^sha256:"},
+    "resource_type": {"type": "string", "maxLength": 128},
+    "resource_id_hash": {"type": "string", "pattern": "^sha256:"},
+    "attributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "feature": {"type": "string"}, "interaction": {"type": "string"},
+        "page_type": {"type": "string"}, "network_type": {"type": "string"},
+        "ui_version": {"type": "string"}, "resource_class": {"type": "string"},
+        "outcome_hint": {"type": "string"}
+      }
+    }
+  }
+}

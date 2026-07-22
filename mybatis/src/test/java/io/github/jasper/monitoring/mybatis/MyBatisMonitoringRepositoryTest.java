@@ -1,0 +1,236 @@
+package io.github.jasper.monitoring.mybatis;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.github.jasper.monitoring.api.AccountType;
+import io.github.jasper.monitoring.api.AlertStatus;
+import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.ControlStatus;
+import io.github.jasper.monitoring.api.DispositionType;
+import io.github.jasper.monitoring.api.RiskLevel;
+import io.github.jasper.monitoring.api.RuleMode;
+import io.github.jasper.monitoring.api.SecurityEventResult;
+import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.core.ControlCommand;
+import io.github.jasper.monitoring.core.ControlExecution;
+import io.github.jasper.monitoring.core.ControlRecord;
+import io.github.jasper.monitoring.core.AlertDisposition;
+import io.github.jasper.monitoring.core.MonitoringRepository;
+import io.github.jasper.monitoring.core.SecurityAlert;
+import io.github.jasper.monitoring.core.SecurityEvent;
+import io.github.jasper.monitoring.core.WhitelistEntry;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import javax.sql.DataSource;
+import org.apache.ibatis.datasource.unpooled.UnpooledDataSource;
+import org.apache.ibatis.jdbc.ScriptRunner;
+import org.apache.ibatis.session.Configuration;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.apache.ibatis.session.SqlSessionFactoryBuilder;
+import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
+import org.junit.jupiter.api.Test;
+
+class MyBatisMonitoringRepositoryTest {
+
+    @Test
+    void retrievesAlertsAndAppendsDispositionHistoryWithoutChangingEvents() throws Exception {
+        DataSource dataSource = new UnpooledDataSource(
+            "org.h2.Driver", "jdbc:h2:mem:monitoring-lifecycle;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        executeSchema(dataSource);
+        Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
+            "test", new JdbcTransactionFactory(), dataSource));
+        MonitoringRepository repository = MyBatisMonitoringRepositoryRegistrar.create(configuration);
+
+        Instant occurredAt = Instant.parse("2026-07-22T01:00:00Z");
+        SecurityEvent event = SecurityEvent.builder()
+            .eventId("event-lifecycle")
+            .systemId("orders")
+            .eventType(SecurityEventType.LOGIN_FAILURE)
+            .occurredAt(occurredAt)
+            .receivedAt(occurredAt)
+            .userId("alice")
+            .accountType(AccountType.PERSON)
+            .sourceIp("203.0.113.8")
+            .requestId("request-lifecycle")
+            .action("LOGIN")
+            .result(SecurityEventResult.FAILURE)
+            .build();
+        repository.saveEvent(event);
+        SecurityAlert alert = new SecurityAlert("alert-lifecycle", "AUTH-01", RiskLevel.HIGH, "AUTH-01:alice",
+            "alice", AlertStatus.NEW, occurredAt, occurredAt, 1);
+        repository.saveAlert(alert);
+
+        assertEquals(alert.getAlertId(), repository.findAlert("alert-lifecycle").get().getAlertId());
+        AlertDisposition disposition = new AlertDisposition("disposition-lifecycle", alert.getAlertId(),
+            DispositionType.ACKNOWLEDGED, "operator-1", "Investigating", null,
+            Instant.parse("2026-07-22T01:01:00Z"));
+        repository.appendAlertDisposition(disposition);
+
+        assertEquals(1, repository.findAlertDispositions(alert.getAlertId()).size());
+        assertEquals(DispositionType.ACKNOWLEDGED,
+            repository.findAlertDispositions(alert.getAlertId()).get(0).getDispositionType());
+        assertEquals(event.getEventId(), repository.findEventsSince(occurredAt).get(0).getEventId());
+        assertEquals(1, eventCount(dataSource));
+    }
+
+    @Test
+    void registersAdministrationMapperForRuleVersionsAndDispositionHistory() throws Exception {
+        DataSource dataSource = new UnpooledDataSource(
+            "org.h2.Driver", "jdbc:h2:mem:monitoring-admin;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        executeSchema(dataSource);
+        Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
+            "test", new JdbcTransactionFactory(), dataSource));
+        MyBatisMonitoringRepositoryRegistrar.register(configuration);
+        SqlSessionFactory factory = new SqlSessionFactoryBuilder().build(configuration);
+
+        try (SqlSession session = factory.openSession(false)) {
+            MonitoringAdministrationMapper mapper = session.getMapper(MonitoringAdministrationMapper.class);
+            mapper.insertRule("AUTH-01", 1, "Login failures", "count failures", RiskLevel.HIGH, RuleMode.ENFORCE,
+                true, Instant.parse("2026-07-22T01:00:00Z"), "security-admin");
+            mapper.appendAlertDisposition("disposition-1", "alert-1", DispositionType.ACKNOWLEDGED, "security-admin",
+                "Investigating", "ticket-42", Instant.parse("2026-07-22T01:05:00Z"));
+            mapper.insertWhitelist("AUTH-01", "alice", "Approved test window", "security-admin",
+                Instant.parse("2026-07-22T02:00:00Z"), Instant.parse("2026-07-22T01:00:00Z"));
+            session.commit();
+        }
+
+        assertEquals(3, administrationEntryCount(dataSource));
+    }
+
+    @Test
+    void persistsAndRetrievesMonitoringPortDataAgainstH2() throws Exception {
+        DataSource dataSource = new UnpooledDataSource(
+            "org.h2.Driver", "jdbc:h2:mem:monitoring;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+        executeSchema(dataSource);
+        Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
+            "test", new JdbcTransactionFactory(), dataSource));
+        MonitoringRepository repository = MyBatisMonitoringRepositoryRegistrar.create(configuration);
+
+        Instant occurredAt = Instant.parse("2026-07-22T01:02:03Z");
+        Instant receivedAt = Instant.parse("2026-07-22T01:02:04Z");
+        Map<String, String> attributes = new LinkedHashMap<String, String>();
+        attributes.put("client", "web");
+        attributes.put("tenant", "acme");
+        SecurityEvent event = SecurityEvent.builder()
+            .eventId("event-1")
+            .systemId("orders")
+            .eventType(SecurityEventType.LOGIN_FAILURE)
+            .occurredAt(occurredAt)
+            .receivedAt(receivedAt)
+            .userId("alice")
+            .accountType(AccountType.PERSON)
+            .roleIds(new LinkedHashSet<String>(Arrays.asList("operator", "auditor")))
+            .sourceIp("203.0.113.8")
+            .deviceIdHash("device-hash")
+            .sessionIdHash("session-hash")
+            .requestId("req-1")
+            .traceId("trace-1")
+            .action("LOGIN")
+            .result(SecurityEventResult.FAILURE)
+            .reasonCode("INVALID_PASSWORD")
+            .resourceType("account")
+            .resourceId("alice")
+            .orgScope("acme")
+            .dataCount(7L)
+            .latencyMs(12L)
+            .attributes(attributes)
+            .build();
+        repository.saveEvent(event);
+
+        List<SecurityEvent> events = repository.findEventsSince(occurredAt);
+        assertEquals(1, events.size());
+        SecurityEvent storedEvent = events.get(0);
+        assertEquals(event.getEventId(), storedEvent.getEventId());
+        assertEquals(event.getOccurredAt(), storedEvent.getOccurredAt());
+        assertEquals(event.getReceivedAt(), storedEvent.getReceivedAt());
+        assertEquals(event.getRoleIds(), storedEvent.getRoleIds());
+        assertEquals(event.getAttributes(), storedEvent.getAttributes());
+        assertEquals(event.getDataCount(), storedEvent.getDataCount());
+        assertEquals(event.getLatencyMs(), storedEvent.getLatencyMs());
+
+        SecurityAlert alert = new SecurityAlert(
+            "alert-1", "AUTH-01", RiskLevel.HIGH, "AUTH-01:alice", "alice", AlertStatus.NEW,
+            occurredAt, receivedAt, 1);
+        repository.saveAlert(alert);
+        repository.linkAlertEvent(alert.getAlertId(), event.getEventId());
+        assertEquals(1, alertEventLinkCount(dataSource, alert.getAlertId(), event.getEventId()));
+        SecurityAlert observedAlert = alert.observed(Instant.parse("2026-07-22T01:03:00Z"));
+        repository.saveAlert(observedAlert);
+        SecurityAlert storedAlert = repository.findOpenAlert("AUTH-01:alice").get();
+        assertEquals(alert.getAlertId(), storedAlert.getAlertId());
+        assertEquals(observedAlert.getEventCount(), storedAlert.getEventCount());
+        assertEquals(observedAlert.getLastSeen(), storedAlert.getLastSeen());
+
+        ControlCommand command = new ControlCommand(
+            "control-key", alert.getAlertId(), "alice", ControlActionType.LOCK,
+            Instant.parse("2026-07-22T02:00:00Z"));
+        ControlRecord control = new ControlRecord(command,
+            ControlExecution.succeeded(command.getIdempotencyKey()), receivedAt);
+        repository.saveControl(control);
+        ControlRecord storedControl = repository.findControl(command.getIdempotencyKey()).get();
+        assertEquals(ControlStatus.SUCCEEDED, storedControl.getExecution().getStatus());
+        assertEquals(command.getAction(), storedControl.getCommand().getAction());
+        assertEquals(command.getExpiresAt(), storedControl.getCommand().getExpiresAt());
+
+        repository.addWhitelist(new WhitelistEntry("AUTH-01", "alice", Instant.parse("2026-07-22T01:30:00Z")));
+        assertTrue(repository.isWhitelisted("AUTH-01", "alice", Instant.parse("2026-07-22T01:29:59Z")));
+        assertFalse(repository.isWhitelisted("AUTH-01", "alice", Instant.parse("2026-07-22T01:30:00Z")));
+    }
+
+    private void executeSchema(DataSource dataSource) throws Exception {
+        InputStream input = getClass().getResourceAsStream("/db/monitoring-schema.sql");
+        try (Connection connection = dataSource.getConnection();
+             InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+            ScriptRunner runner = new ScriptRunner(connection);
+            runner.setLogWriter(null);
+            runner.setErrorLogWriter(null);
+            runner.runScript(reader);
+        }
+    }
+
+    private int alertEventLinkCount(DataSource dataSource, String alertId, String eventId) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT COUNT(*) FROM alert_event_link WHERE alert_id = ? AND event_id = ?")) {
+            statement.setString(1, alertId);
+            statement.setString(2, eventId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getInt(1);
+            }
+        }
+    }
+
+    private int administrationEntryCount(DataSource dataSource) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT (SELECT COUNT(*) FROM security_rule) + (SELECT COUNT(*) FROM alert_disposition) "
+                     + "+ (SELECT COUNT(*) FROM security_whitelist)");
+             ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getInt(1);
+        }
+    }
+
+    private int eventCount(DataSource dataSource) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM security_event");
+             ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getInt(1);
+        }
+    }
+}

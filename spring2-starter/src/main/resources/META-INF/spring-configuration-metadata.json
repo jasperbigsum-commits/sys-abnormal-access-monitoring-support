@@ -1,0 +1,11 @@
+{
+  "groups": [
+    { "name": "abnormal.access.monitor", "type": "io.github.jasper.monitoring.spring2.autoconfigure.AbnormalAccessMonitorProperties" }
+  ],
+  "properties": [
+    { "name": "abnormal.access.monitor.system-id", "type": "java.lang.String", "defaultValue": "application" },
+    { "name": "abnormal.access.monitor.mode", "type": "io.github.jasper.monitoring.api.MonitoringMode", "defaultValue": "OBSERVE" },
+    { "name": "abnormal.access.monitor.frontend.enabled", "type": "java.lang.Boolean", "defaultValue": true },
+    { "name": "abnormal.access.monitor.trusted-proxies", "type": "java.util.List<java.lang.String>" }
+  ]
+}
