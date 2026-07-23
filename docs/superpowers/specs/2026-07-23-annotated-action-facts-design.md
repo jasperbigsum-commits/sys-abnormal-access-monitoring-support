@@ -17,7 +17,7 @@
 
 ## 方案选择
 
-不采用 SpEL/属性路径表达式：它把 Java 参数名、DTO 结构和安全语义变成运行时字符串，重构时容易静默失效。
+不采用通用 SpEL 或任意属性路径表达式：它们会把 Java 参数名、DTO 结构和安全语义变成不可控的运行时字符串，并可能开放方法调用或类型访问。参数绑定只允许下文定义的受限 Java Bean 路径语法。
 
 不采用注解指向静态反射方法：它没有依赖注入边界，难以测试，且会把业务对象和敏感数据处理藏在不可审计的反射调用中。
 
@@ -27,11 +27,18 @@
 
 ### 静态属性
 
-新增可重复使用的 `@MonitorActionAttribute`，目标为类型和方法。它包含 `key` 与 `value`，表示与动作编码稳定绑定的非敏感属性，例如固定的 `sensitivity=HIGH` 或 `high_privilege=true`。
+新增可重复使用的 `@MonitorActionAttribute`，目标为类型、方法和方法参数。它包含事实目标、属性名、静态值和相对属性路径；同一注解在声明位置不同，但规则明确且不能混用：
+
+- 类型或方法上只能填写静态 `value`，表示与动作编码稳定绑定的非敏感属性，例如固定的 `sensitivity=HIGH` 或 `high_privilege=true`；
+- 方法参数上只能填写 `path`，从已经由 Spring MVC 完成绑定的参数值提取动态事实；空路径表示参数本身。
+
+参数映射的目标仅限 `RESOURCE_ID`、`ORG_SCOPE` 和非敏感 `ATTRIBUTE`。`ATTRIBUTE` 目标必须显式给出属性名；它不能写入事件类别、动作编码、来源 IP、请求 ID、追踪 ID、身份、角色、会话、事件时间、数据量、最终结果或原因码。
+
+`path` 是受限 Java Bean 属性路径，而不是 SpEL。它只支持 Java Bean getter/字段、数组或 List 的非负下标，例如 `report.id`、`tenant.code`、`items[0].id`；不支持方法调用、`class`、静态成员、变量、表达式运算、Map 任意键访问或其他对象导航。路径解析失败、getter 抛出异常或结果为空时只忽略该项采集，不改变宿主调用。
 
 动作解析遵循既有优先级：方法上的 `@MonitorAction` 优先于类型上的注解；静态属性也只从最终选中的声明元素读取，不合并方法与类型的两个动作定义。这样不会让类型默认动作意外继承到具有独立方法动作的场景。
 
-`MonitorActionDefinition` 新增不可变静态属性集合，Builder 允许注册式入口提供同样的属性；`ActionEventRecorder.draft(...)` 在创建草稿时写入这些属性。规则标签仍保持 `monitor.rule-tag.*=true` 的专用语义，不与通用静态属性混用。
+`MonitorActionDefinition` 新增不可变静态属性集合，Builder 允许注册式入口提供同样的属性；`ActionEventRecorder.draft(...)` 在创建草稿时写入这些属性。规则标签仍保持 `monitor.rule-tag.*=true` 的专用语义，不与通用静态属性混用。运行时参数映射不能覆盖这些静态属性。
 
 ### 动态事实
 
@@ -43,6 +50,8 @@
 
 `@MonitorAction` 新增可选的 `enrichers` 类型数组。每个类型必须对应一个 Spring Bean，因此采集器可以使用宿主的业务服务，但 API 本身不依赖 Spring。采集器分别在调用前、正常返回后和抛出异常后接收快照；多个阶段和多个采集器的事实按确定顺序合并，后者覆盖同一动态字段。
 
+参数上的 `@MonitorActionAttribute` 在调用前先写入动态事实；后续 `MonitorActionEnricher` 可以用业务执行所得的规范值覆盖同一动态资源 ID、组织范围或属性。这样请求参数只作为补充证据，不能取代宿主授权、身份或实际业务结果。
+
 采集器不能写入事件类别、动作编码、来源 IP、请求 ID、追踪 ID、身份、角色、会话或事件时间。属性仍通过 `SecurityFieldSanitizer` 清洗；宿主不得输出密码、令牌、Cookie、原始请求/响应体或可逆账户标识。
 
 ## Spring MVC 执行模型
@@ -50,7 +59,7 @@
 保留现有注解拦截器，新增仅处理已声明 `enrichers` 的 MVC 控制器环绕组件。
 
 1. `preHandle` 解析最终动作定义，建立可信请求和身份上下文，并在 `HttpServletRequest` 中创建请求私有的动作事实容器。
-2. 环绕组件在控制器执行前后读取方法参数、返回值、异常和耗时，调用已配置的 `MonitorActionEnricher`，把 `MonitorActionFacts` 合并到该容器。
+2. 环绕组件在控制器执行前先读取参数上的 `@MonitorActionAttribute`，以受限 Java Bean 路径提取资源 ID、组织范围或已批准属性；随后在前后阶段调用已配置的 `MonitorActionEnricher`，把 `MonitorActionFacts` 合并到该容器。
 3. `afterCompletion` 读取容器，用 `ActionEventRecorder.draft(...)` 组装静态定义、可信上下文和动态事实，再记录单个事件。
 
 最终 HTTP 语义优先级如下：
@@ -70,7 +79,7 @@
 - 需补充：可自动记录动作，但内置规则须由 `MonitorActionEnricher` 或注册式埋点提供额外事实；
 - 手工入口：当前 MVC 注解链路不适用，应使用注册式草稿。
 
-矩阵覆盖认证、会话、授权、数据访问/导出、权限变更和安全配置变更。示例将演示：
+矩阵覆盖认证、会话、授权、数据访问/导出、权限变更和安全配置变更。每一行还要标示额外信息是固定动作属性、参数绑定路径、执行后采集器还是注册式草稿取得。示例将演示：
 
 - `auth:login-failure` 使用 `attempted_account_hash`、`account_status`；
 - `session:concurrent` 使用 `dataCount`、`different_networks`；
@@ -107,9 +116,9 @@
 
 ## 测试与兼容性
 
-- API 测试验证静态属性进入动作定义、动态事实字段边界和清洗行为；
+- API 测试验证静态属性进入动作定义、参数映射声明校验、动态事实字段边界和清洗行为；
 - Core 测试验证注册式与注解式定义均保留静态属性，以及匿名登录失败可通过 `attempted_account_hash` 触发 `AUTH-01`/`AUTH-02`；
-- Spring 2、Spring 3 各增加等价 MVC 集成测试，验证参数、返回值和业务结果被采集，HTTP 异常/拒绝覆盖采集器业务结果，采集器失败不影响宿主响应；
+- Spring 2、Spring 3 各增加等价 MVC 集成测试，验证标量参数、嵌套 Bean 路径、返回值和业务结果被采集，HTTP 异常/拒绝覆盖采集器业务结果，路径或采集器失败不影响宿主响应；
 - 接入指南的矩阵和示例作为宿主验收标准，明确异步与非 MVC 的手工入口。
 
 不修改持久化结构：补充事实继续写入现有事件属性和标准事件字段。
