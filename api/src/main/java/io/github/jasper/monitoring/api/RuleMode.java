@@ -1,13 +1,13 @@
 package io.github.jasper.monitoring.api;
 
-/** Per-rule operating mode, allowing deployments to phase in rule responses. */
+/** 单条规则的运行模式，用于按阶段启用规则响应。 */
 public enum RuleMode {
-    /** Do not evaluate the rule. */
+    /** 不评估该规则。 */
     DISABLED,
-    /** Evaluate and retain evidence without generating an alert or control. */
+    /** 评估并保留证据，但不生成告警或请求控制。 */
     OBSERVE,
-    /** Evaluate and generate alerts without requesting a control action. */
+    /** 评估并生成告警，但不请求控制动作。 */
     ALERT_ONLY,
-    /** Evaluate, alert, and request the rule's configured control action. */
+    /** 评估、告警并请求执行规则配置的控制动作。 */
     ENFORCE
 }

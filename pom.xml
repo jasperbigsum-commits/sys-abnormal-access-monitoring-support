@@ -17,6 +17,7 @@
         <module>core</module>
         <module>web-contract</module>
         <module>mybatis</module>
+        <module>integration-audit</module>
         <module>spring-support</module>
         <module>spring2-starter</module>
         <module>spring3-starter</module>
@@ -33,6 +34,7 @@
         <maven.plugin.api.version>3.8.6</maven.plugin.api.version>
         <maven.plugin.annotations.version>3.13.1</maven.plugin.annotations.version>
         <maven.javadoc.plugin.version>3.11.2</maven.javadoc.plugin.version>
+        <lombok.version>1.18.34</lombok.version>
     </properties>
 
     <dependencyManagement>
@@ -78,6 +80,12 @@
                 <artifactId>h2</artifactId>
                 <version>${h2.version}</version>
                 <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+                <scope>provided</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -5,10 +5,9 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * Authenticated identity resolved only by the host backend.
+ * 仅由宿主后端解析的已认证身份。
  *
- * <p>Values are copied and sanitized at construction time so integrations cannot subsequently
- * mutate the role set used by monitoring and authorization.</p>
+ * <p>构造时会复制并清洗值，避免集成方随后修改监测和授权所使用的角色集合。</p>
  */
 public final class IdentityContext {
     private final String userId;
@@ -16,12 +15,12 @@ public final class IdentityContext {
     private final Set<String> roleIds;
     private final String sessionIdHash;
     /**
-     * Creates an immutable identity snapshot.
+     * 创建不可变的身份快照。
      *
-     * @param userId host user identifier, when authenticated
-     * @param accountType principal class; defaults to {@link AccountType#ANONYMOUS}
-     * @param roleIds host role identifiers; may be empty
-     * @param sessionIdHash one-way session identifier, never a raw session token
+     * @param userId 已认证时由宿主系统提供的用户标识
+     * @param accountType 主体类型；缺省时为 {@link AccountType#ANONYMOUS}
+     * @param roleIds 宿主角色标识，可为空集合
+     * @param sessionIdHash 单向散列后的会话标识，绝不能传入原始会话令牌
      */
     public IdentityContext(String userId, AccountType accountType, Set<String> roleIds, String sessionIdHash) {
         this.userId = SecurityFieldSanitizer.text(userId, 128);
@@ -30,21 +29,21 @@ public final class IdentityContext {
         this.sessionIdHash = SecurityFieldSanitizer.text(sessionIdHash, 256);
     }
     /**
-     * Creates the standard identity for an unauthenticated request.
+     * 创建用于未认证请求的标准身份。
      *
-     * @return immutable anonymous identity with no roles or session identifier
+     * @return 不含角色和会话标识的不可变匿名身份
      */
     public static IdentityContext anonymous() { return new IdentityContext(null, AccountType.ANONYMOUS, Collections.<String>emptySet(), null); }
 
-    /** @return the sanitized host user identifier, or {@code null} when unauthenticated */
+    /** @return 已清洗的宿主用户标识；未认证时为 {@code null} */
     public String getUserId() { return userId; }
 
-    /** @return the class of authenticated principal */
+    /** @return 已认证主体的类型 */
     public AccountType getAccountType() { return accountType; }
 
-    /** @return immutable host role identifiers */
+    /** @return 不可变的宿主角色标识集合 */
     public Set<String> getRoleIds() { return roleIds; }
 
-    /** @return one-way session identifier, or {@code null} when unavailable */
+    /** @return 单向散列后的会话标识；不可用时为 {@code null} */
     public String getSessionIdHash() { return sessionIdHash; }
 }

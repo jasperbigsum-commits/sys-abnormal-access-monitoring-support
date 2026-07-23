@@ -1,16 +1,15 @@
 package io.github.jasper.monitoring.api;
 
 /**
- * Classifies the principal associated with a monitored request.
+ * 标识监测请求关联的主体类型。
  *
- * <p>The host application derives this value from its authentication system;
- * browser-provided values must never be used.</p>
+ * <p>该值必须由宿主系统的认证模块生成，绝不能采信浏览器上报的主体类型。</p>
  */
 public enum AccountType {
-    /** An authenticated human user. */
+    /** 已认证的自然人用户。 */
     PERSON,
-    /** A service, workload, or machine identity. */
+    /** 服务、任务负载或机器身份。 */
     SERVICE,
-    /** A request for which no authenticated principal is available. */
+    /** 无法获得已认证主体的请求。 */
     ANONYMOUS
 }

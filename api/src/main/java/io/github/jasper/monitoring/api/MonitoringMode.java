@@ -1,9 +1,9 @@
 package io.github.jasper.monitoring.api;
 
-/** Runtime posture for requested monitoring controls. */
+/** 监测与控制请求的运行策略。 */
 public enum MonitoringMode {
-    /** Collect evidence, evaluate rules, and create alerts without applying controls. */
+    /** 收集证据、评估规则并产生告警，但不执行控制动作。 */
     OBSERVE,
-    /** Apply requested controls through registered host control handlers. */
+    /** 通过已注册的宿主控制处理器执行请求的控制动作。 */
     ENFORCE
 }

@@ -1,5 +1,4 @@
 package io.github.jasper.monitoring.maven;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
@@ -29,6 +28,7 @@ final class StarterFilesGenerator {
 
         writeNew(output, "application-abnormal-access-monitoring.yml", configuration(safeSystemId), created, skipped);
         writeNew(output, "host-spi/HostMonitoringSpi.java", hostMonitoringSpi(safePackageName), created, skipped);
+        writeNew(output, "host-spi/HostMonitoringActions.java", hostMonitoringActions(safePackageName), created, skipped);
         writeNew(output, "host-spi/HostControlHandler.java", hostControlHandler(safePackageName), created, skipped);
         writeNew(output, "frontend-signal-v1.example.json", frontendSignal(), created, skipped);
         return new GenerationResult(created, skipped);
@@ -93,46 +93,67 @@ final class StarterFilesGenerator {
             + "      mode: OBSERVE\n"
             + "      frontend:\n"
             + "        enabled: true\n"
+            + "      instrumentation:\n"
+            + "        enabled: true\n"
+            + "      mdc:\n"
+            + "        enabled: true\n"
+            + "        trace-id-key: traceId\n"
             + "      trusted-proxies: []\n";
     }
 
     private static String hostMonitoringSpi(String packageName) {
         return "package " + packageName + ";\n\n"
             + "import io.github.jasper.monitoring.api.AuthorizationDecision;\n"
-            + "import io.github.jasper.monitoring.api.EventEnricher;\n"
             + "import io.github.jasper.monitoring.api.IdentityContext;\n"
             + "import io.github.jasper.monitoring.api.IdentityContextProvider;\n"
             + "import io.github.jasper.monitoring.api.MonitoringRequestContext;\n"
             + "import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;\n"
             + "import io.github.jasper.monitoring.api.ResourceScopeRequest;\n"
-            + "import io.github.jasper.monitoring.api.SecurityEventDraft;\n"
             + "import io.github.jasper.monitoring.api.TrustedProxyResolver;\n\n"
             + "/**\n"
-            + " * Host bridge template. Replace the conservative defaults with the application's\n"
-            + " * server-side authentication, resource authorization, and trusted proxy policy.\n"
+            + " * 宿主 SPI 模板。请用应用自身的服务端认证、资源授权和受信任代理策略替换安全默认值。\n"
             + " */\n"
             + "public final class HostMonitoringSpi implements IdentityContextProvider, ResourceScopeAuthorizer,\n"
-            + "    EventEnricher, TrustedProxyResolver {\n\n"
+            + "    TrustedProxyResolver {\n\n"
             + "    @Override\n"
             + "    public IdentityContext resolve(MonitoringRequestContext request) {\n"
-            + "        // TODO: Resolve identity only from the host's authenticated server-side context.\n"
+            + "        // TODO: 仅从宿主服务端已认证上下文解析身份。\n"
             + "        return IdentityContext.anonymous();\n"
             + "    }\n\n"
             + "    @Override\n"
             + "    public AuthorizationDecision authorize(IdentityContext identity, ResourceScopeRequest request) {\n"
-            + "        // TODO: Delegate to the host's resource-level authorization service.\n"
+            + "        // TODO: 委托宿主资源级授权服务。\n"
             + "        return AuthorizationDecision.denied(\"HOST_SCOPE_AUTHORIZATION_NOT_IMPLEMENTED\");\n"
             + "    }\n\n"
             + "    @Override\n"
-            + "    public SecurityEventDraft enrich(SecurityEventDraft draft, MonitoringRequestContext request,\n"
-            + "                                      IdentityContext identity) {\n"
-            + "        // TODO: Add only approved non-sensitive business attributes.\n"
-            + "        return draft;\n"
-            + "    }\n\n"
-            + "    @Override\n"
             + "    public String resolveClientIp(String directRemoteAddress, String forwardedForHeader) {\n"
-            + "        // TODO: Parse forwardedForHeader only after verifying a configured trusted proxy.\n"
+            + "        // TODO: 仅在已配置的受信任代理验证后解析 forwardedForHeader。\n"
             + "        return directRemoteAddress;\n"
+            + "    }\n"
+            + "}\n";
+    }
+
+    private static String hostMonitoringActions(String packageName) {
+        return "package " + packageName + ";\n\n"
+            + "import io.github.jasper.monitoring.api.MonitorActionDefinition;\n"
+            + "import io.github.jasper.monitoring.api.SecurityEventType;\n"
+            + "import io.github.jasper.monitoring.core.application.MonitoringActionRegistry;\n"
+            + "import org.springframework.context.annotation.Bean;\n"
+            + "import org.springframework.context.annotation.Configuration;\n\n"
+            + "/**\n"
+            + " * 注册非 MVC 方法调用埋点的统一静态动作定义。\n"
+            + " * 动态资源 ID、数量和原因码在 ActionEventRecorder.draft(...) 中补充。\n"
+            + " */\n"
+            + "@Configuration\n"
+            + "public class HostMonitoringActions {\n\n"
+            + "    @Bean\n"
+            + "    public MonitoringActionRegistry monitoringActionRegistry() {\n"
+            + "        return new MonitoringActionRegistry()\n"
+            + "            .register(MonitorActionDefinition.builder(\"report:export\")\n"
+            + "                .eventType(SecurityEventType.EXPORT)\n"
+            + "                .resourceType(\"report\")\n"
+            + "                .ruleTag(\"sensitive-data\")\n"
+            + "                .build());\n"
             + "    }\n"
             + "}\n";
     }
@@ -140,9 +161,9 @@ final class StarterFilesGenerator {
     private static String hostControlHandler(String packageName) {
         return "package " + packageName + ";\n\n"
             + "import io.github.jasper.monitoring.api.ControlActionType;\n"
-            + "import io.github.jasper.monitoring.core.ControlCommand;\n"
-            + "import io.github.jasper.monitoring.core.ControlExecution;\n"
-            + "import io.github.jasper.monitoring.core.ControlHandler;\n\n"
+            + "import io.github.jasper.monitoring.core.domain.ControlCommand;\n"
+            + "import io.github.jasper.monitoring.core.domain.ControlExecution;\n"
+            + "import io.github.jasper.monitoring.core.port.ControlHandler;\n\n"
             + "/**\n"
             + " * Conservative control adapter. Enable only the actions the host can execute idempotently.\n"
             + " */\n"

@@ -1,13 +1,13 @@
 package io.github.jasper.monitoring.api;
 
-/** Immutable audit record types for alert lifecycle decisions. */
+/** 告警生命周期决策对应的不可变审计记录类型。 */
 public enum DispositionType {
-    /** An operator acknowledged the alert. */
+    /** 操作人员确认已接手告警。 */
     ACKNOWLEDGED,
-    /** Investigation or remediation began. */
+    /** 已开始调查或处置。 */
     IN_PROGRESS,
-    /** The alert was resolved. */
+    /** 告警已处置完成。 */
     CLOSED,
-    /** The alert was classified as a false positive. */
+    /** 告警被认定为误报。 */
     FALSE_POSITIVE
 }

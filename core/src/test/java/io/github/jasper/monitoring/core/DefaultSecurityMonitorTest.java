@@ -1,9 +1,18 @@
 package io.github.jasper.monitoring.core;
 
+import io.github.jasper.monitoring.core.domain.WhitelistEntry;
+import io.github.jasper.monitoring.core.domain.ControlCommand;
+import io.github.jasper.monitoring.core.port.ControlHandler;
+import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
+import io.github.jasper.monitoring.core.infrastructure.memory.InMemoryMonitoringRepository;
+import io.github.jasper.monitoring.core.domain.rule.DefaultRuleCatalog;
+import io.github.jasper.monitoring.core.domain.ControlExecution;
+import io.github.jasper.monitoring.core.port.NotificationChannel;
+import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
+import io.github.jasper.monitoring.core.application.MonitoringOutcome;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.MonitoringMode;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
@@ -21,7 +30,7 @@ import org.junit.jupiter.api.Test;
 class DefaultSecurityMonitorTest {
 
     @Test
-    void raisesOneDeduplicatedAlertOnlyAfterMoreThanFiveLoginFailuresInFiveMinutes() {
+    void appendixBTc01RaisesOneDeduplicatedAlertAfterFiveLoginFailuresInFiveMinutes() {
         InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
         DefaultSecurityMonitor monitor = new DefaultSecurityMonitor(
             "orders",
@@ -32,14 +41,14 @@ class DefaultSecurityMonitorTest {
             ControlHandlerRegistry.empty(),
             NotificationChannel.noop());
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 4; i++) {
             monitor.record(loginFailure("alice", "req-" + i,
                 Instant.parse("2026-07-22T00:0" + i + ":00Z")));
         }
 
         assertEquals(0, repository.getAlerts().size());
 
-        MonitoringOutcome outcome = monitor.record(loginFailure("alice", "req-6", Instant.parse("2026-07-22T00:04:30Z")));
+        MonitoringOutcome outcome = monitor.record(loginFailure("alice", "req-5", Instant.parse("2026-07-22T00:04:00Z")));
 
         assertEquals(1, repository.getAlerts().size());
         assertEquals("AUTH-01", repository.getAlerts().get(0).getRuleId());
@@ -47,14 +56,14 @@ class DefaultSecurityMonitorTest {
         assertTrue(outcome.hasRisk(ControlActionType.REQUIRE_CAPTCHA));
         assertTrue(outcome.hasRisk(ControlActionType.RATE_LIMIT));
 
-        monitor.record(loginFailure("alice", "req-7", Instant.parse("2026-07-22T00:04:40Z")));
+        monitor.record(loginFailure("alice", "req-6", Instant.parse("2026-07-22T00:04:30Z")));
 
         assertEquals(1, repository.getAlerts().size());
         assertEquals(2, repository.getAlerts().get(0).getEventCount());
     }
 
     @Test
-    void enforcesLargeExportOnceForTheSameIdempotencyKey() {
+    void appendixBTc08EnforcesLargeExportOnceForTheSameIdempotencyKey() {
         AtomicInteger executions = new AtomicInteger();
         ControlHandler handler = new ControlHandler() {
             @Override
@@ -78,16 +87,7 @@ class DefaultSecurityMonitorTest {
             new ControlHandlerRegistry(Arrays.asList(handler)),
             NotificationChannel.noop());
 
-        SecurityEventDraft export = SecurityEventDraft.builder()
-            .eventType(SecurityEventType.EXPORT)
-            .action("EXPORT")
-            .result(SecurityEventResult.SUCCESS)
-            .sourceIp("203.0.113.9")
-            .requestId("export-1")
-            .userId("alice")
-            .dataCount(5000)
-            .occurredAt(Instant.parse("2026-07-22T00:00:00Z"))
-            .build();
+        SecurityEventDraft export = export("export-1", 5000, Instant.parse("2026-07-22T00:00:00Z"));
 
         assertTrue(monitor.record(export).hasRisk(ControlActionType.DENY));
         assertEquals(1, executions.get());
@@ -100,7 +100,7 @@ class DefaultSecurityMonitorTest {
     }
 
     @Test
-    void enforcesAThirtyMinuteIpRateLimitForMultiAccountFailures() {
+    void appendixBTc02EnforcesAThirtyMinuteIpRateLimitForMultiAccountFailures() {
         AtomicReference<ControlCommand> executed = new AtomicReference<ControlCommand>();
         ControlHandler handler = new ControlHandler() {
             @Override
@@ -129,7 +129,43 @@ class DefaultSecurityMonitorTest {
     }
 
     @Test
-    void ignoresExpiredWhitelistAndStillRaisesAlert() {
+    void appendixBTc09MatchesDailyCumulativeExportsWithoutAIndividuallyLargeExport() {
+        InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
+        DefaultSecurityMonitor monitor = new DefaultSecurityMonitor(
+            "orders", Clock.fixed(Instant.parse("2026-07-22T12:00:00Z"), ZoneOffset.UTC), repository,
+            DefaultRuleCatalog.initialRules(), MonitoringMode.OBSERVE,
+            ControlHandlerRegistry.empty(), NotificationChannel.noop());
+
+        monitor.record(export("export-1", 4000, Instant.parse("2026-07-22T08:00:00Z")));
+        monitor.record(export("export-2", 3000, Instant.parse("2026-07-22T09:00:00Z")));
+        MonitoringOutcome outcome = monitor.record(export("export-3", 3000, Instant.parse("2026-07-22T10:00:00Z")));
+
+        assertEquals(1, outcome.getMatches().size());
+        assertEquals("EXPT-02", outcome.getMatches().get(0).getRuleId());
+    }
+
+    @Test
+    void appendixBTc07RaisesAnAlertOnTheOneHundredAndTwentiethQueryInFiveMinutes() {
+        InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
+        DefaultSecurityMonitor monitor = new DefaultSecurityMonitor(
+            "orders", Clock.fixed(Instant.parse("2026-07-22T00:00:00Z"), ZoneOffset.UTC), repository,
+            DefaultRuleCatalog.initialRules(), MonitoringMode.OBSERVE,
+            ControlHandlerRegistry.empty(), NotificationChannel.noop());
+
+        for (int index = 0; index < 119; index++) {
+            monitor.record(query("query-" + index, Instant.parse("2026-07-22T00:00:00Z")));
+        }
+
+        assertEquals(0, repository.getAlerts().size());
+
+        MonitoringOutcome outcome = monitor.record(query("query-120", Instant.parse("2026-07-22T00:00:00Z")));
+
+        assertEquals("DATA-01", outcome.getMatches().get(0).getRuleId());
+        assertTrue(outcome.hasRisk(ControlActionType.RATE_LIMIT));
+    }
+
+    @Test
+    void appendixBTc12IgnoresExpiredWhitelistAndStillRaisesAlert() {
         InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
         repository.addWhitelist(new WhitelistEntry(
             "AUTH-03", "disabled-user", Instant.parse("2026-07-21T23:59:59Z")));
@@ -165,6 +201,31 @@ class DefaultSecurityMonitorTest {
             .sourceIp("203.0.113.8")
             .requestId(requestId)
             .userId(userId)
+            .occurredAt(occurredAt)
+            .build();
+    }
+
+    private SecurityEventDraft export(String requestId, long dataCount, Instant occurredAt) {
+        return SecurityEventDraft.builder()
+            .eventType(SecurityEventType.EXPORT)
+            .action("EXPORT")
+            .result(SecurityEventResult.SUCCESS)
+            .sourceIp("203.0.113.9")
+            .requestId(requestId)
+            .userId("alice")
+            .dataCount(dataCount)
+            .occurredAt(occurredAt)
+            .build();
+    }
+
+    private SecurityEventDraft query(String requestId, Instant occurredAt) {
+        return SecurityEventDraft.builder()
+            .eventType(SecurityEventType.QUERY)
+            .action("QUERY")
+            .result(SecurityEventResult.SUCCESS)
+            .sourceIp("203.0.113.9")
+            .requestId(requestId)
+            .userId("alice")
             .occurredAt(occurredAt)
             .build();
     }

@@ -7,11 +7,10 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Sanitizes values before they become searchable security evidence.
+ * 在字段成为可检索的安全证据前进行清洗。
  *
- * <p>This utility removes control characters, bounds field sizes, and rejects attribute keys
- * that suggest credential material. It is intentionally conservative: integrations should pass
- * only identifiers and operational metadata, never request bodies or secrets.</p>
+ * <p>本工具会移除控制字符、限制字段长度，并拒绝疑似携带凭据的属性键。其策略刻意保守：
+ * 集成方只能传入标识和运行元数据，绝不能传入请求体或密钥。</p>
  */
 public final class SecurityFieldSanitizer {
     private static final Set<String> FORBIDDEN_KEYWORDS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
@@ -21,11 +20,11 @@ public final class SecurityFieldSanitizer {
     }
 
     /**
-     * Normalizes whitespace and control characters, then truncates a value.
+     * 规范化空白字符和控制字符，然后截断文本。
      *
-     * @param value source text, possibly {@code null}
-     * @param maximumLength maximum number of characters retained
-     * @return sanitized text, or {@code null} when {@code value} is {@code null}
+     * @param value 原始文本，可为 {@code null}
+     * @param maximumLength 允许保留的最大字符数
+     * @return 清洗后的文本；当 {@code value} 为 {@code null} 时返回 {@code null}
      */
     public static String text(String value, int maximumLength) {
         if (value == null) {
@@ -55,10 +54,10 @@ public final class SecurityFieldSanitizer {
     }
 
     /**
-     * Verifies that an attribute key is non-empty and does not identify credential material.
+     * 校验属性键非空，且不指向凭据类信息。
      *
-     * @param key attribute key to validate
-     * @throws IllegalArgumentException if the key is blank or contains a forbidden keyword
+     * @param key 待校验的属性键
+     * @throws IllegalArgumentException 当属性键为空或包含禁止关键字时抛出
      */
     public static void requireSafeAttributeKey(String key) {
         String normalized = text(key, 128);

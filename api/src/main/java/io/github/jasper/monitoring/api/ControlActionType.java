@@ -1,23 +1,23 @@
 package io.github.jasper.monitoring.api;
 
 /**
- * A response the monitoring component can request from a host-provided control handler.
+ * 监测组件可请求宿主控制处理器执行的响应动作。
  */
 public enum ControlActionType {
-    /** Retain evidence without changing request handling. */
+    /** 仅保留证据，不改变请求处理结果。 */
     RECORD,
-    /** Require a challenge before the next sensitive action. */
+    /** 在下一次敏感操作前要求完成挑战校验。 */
     REQUIRE_CAPTCHA,
-    /** Temporarily restrict request throughput. */
+    /** 临时限制请求频率。 */
     RATE_LIMIT,
-    /** Lock an account or principal according to host policy. */
+    /** 按宿主策略锁定账号或主体。 */
     LOCK,
-    /** Invalidate one or more active sessions. */
+    /** 使一个或多个活跃会话失效。 */
     REVOKE_SESSION,
-    /** Require a stronger authentication step. */
+    /** 要求完成更强的身份验证步骤。 */
     REQUIRE_MFA,
-    /** Deny the relevant request or access scope. */
+    /** 拒绝关联请求或资源范围访问。 */
     DENY,
-    /** Require a host-defined approval workflow. */
+    /** 要求经过宿主定义的审批流程。 */
     REQUIRE_APPROVAL
 }

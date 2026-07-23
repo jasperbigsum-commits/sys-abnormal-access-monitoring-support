@@ -1,19 +1,18 @@
 package io.github.jasper.monitoring.api;
 
 /**
- * Optional host extension for adding approved, non-sensitive event fields.
+ * 为安全事件补充经批准的非敏感字段的可选宿主扩展点。
  *
- * <p>Implementations must preserve the supplied event's security meaning and must not add
- * credentials, cookies, tokens, or raw sensitive payloads.</p>
+ * <p>实现必须保持原事件的安全语义，不得加入凭据、浏览器会话数据（Cookie）、令牌或原始敏感载荷。</p>
  */
 public interface EventEnricher {
     /**
-     * Adds host-approved context to an event before monitoring.
+     * 在监测前为事件补充宿主系统批准的上下文。
      *
-     * @param draft the sanitized draft created by the integration adapter
-     * @param request trusted request facts
-     * @param identity identity resolved by the host backend
-     * @return the draft to persist and evaluate; never {@code null}
+     * @param draft 集成适配器创建且已清洗的事件草稿
+     * @param request 可信请求事实
+     * @param identity 由宿主后端解析的身份
+     * @return 需持久化和评估的事件草稿，不能为 {@code null}
      */
     SecurityEventDraft enrich(SecurityEventDraft draft, MonitoringRequestContext request, IdentityContext identity);
 }

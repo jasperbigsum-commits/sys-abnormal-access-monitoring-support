@@ -9,11 +9,10 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Immutable, sanitized event supplied by a host integration for monitoring.
+ * 宿主系统集成方向监测组件提供的、不可变且已清洗的安全事件草稿。
  *
- * <p>The monitor assigns persistence identifiers and evaluates the draft using trusted server
- * facts. Do not place credentials, raw session IDs, cookies, request bodies, or other sensitive
- * payloads in this model; use one-way hashes and stable reason codes instead.</p>
+ * <p>监测组件会分配持久化标识，并根据可信服务端事实评估该草稿。此模型中不得存放凭据、
+ * 原始会话标识、浏览器会话数据（Cookie）、请求体或其他敏感载荷；应使用单向散列值和稳定原因码替代。</p>
  */
 public final class SecurityEventDraft {
     private final SecurityEventType eventType;
@@ -59,57 +58,57 @@ public final class SecurityEventDraft {
     }
 
     /**
-     * Starts a new event draft.
+     * 创建新的事件草稿。
      *
-     * @return builder that validates and sanitizes values when {@link Builder#build()} is called
+     * @return 在调用 {@link Builder#build()} 时校验并清洗字段的构建器（Builder）
      */
     public static Builder builder() {
         return new Builder();
     }
 
-    /** @return normalized security activity category */
+    /** @return 标准化安全活动类别 */
     public SecurityEventType getEventType() { return eventType; }
-    /** @return sanitized operation name */
+    /** @return 已清洗的操作名称 */
     public String getAction() { return action; }
-    /** @return final server-side operation outcome */
+    /** @return 最终服务端操作结果 */
     public SecurityEventResult getResult() { return result; }
-    /** @return trusted client address */
+    /** @return 可信客户端网络地址 */
     public String getSourceIp() { return sourceIp; }
-    /** @return request correlation identifier */
+    /** @return 请求关联标识 */
     public String getRequestId() { return requestId; }
-    /** @return distributed tracing identifier, or {@code null} when unavailable */
+    /** @return 分布式追踪标识；不可用时为 {@code null} */
     public String getTraceId() { return traceId; }
-    /** @return server-resolved user identifier, or {@code null} when anonymous */
+    /** @return 由服务端解析的用户标识；匿名时为 {@code null} */
     public String getUserId() { return userId; }
-    /** @return account class associated with the event */
+    /** @return 与事件关联的账号类型 */
     public AccountType getAccountType() { return accountType; }
-    /** @return immutable host role identifiers */
+    /** @return 不可变的宿主角色标识集合 */
     public Set<String> getRoleIds() { return roleIds; }
-    /** @return one-way session identifier, or {@code null} when unavailable */
+    /** @return 单向散列后的会话标识；不可用时为 {@code null} */
     public String getSessionIdHash() { return sessionIdHash; }
-    /** @return one-way device identifier, or {@code null} when unavailable */
+    /** @return 单向散列后的设备标识；不可用时为 {@code null} */
     public String getDeviceIdHash() { return deviceIdHash; }
-    /** @return logical resource category, or {@code null} when unavailable */
+    /** @return 逻辑资源类别；不可用时为 {@code null} */
     public String getResourceType() { return resourceType; }
-    /** @return resource identifier, or {@code null} when unavailable */
+    /** @return 资源标识；不可用时为 {@code null} */
     public String getResourceId() { return resourceId; }
-    /** @return tenant, organization, or data-domain boundary, or {@code null} when unavailable */
+    /** @return 租户、组织或数据域边界；不可用时为 {@code null} */
     public String getOrgScope() { return orgScope; }
-    /** @return number of affected records, when known */
+    /** @return 已知时提供的受影响记录数 */
     public long getDataCount() { return dataCount; }
-    /** @return measured operation latency in milliseconds, when known */
+    /** @return 已知时提供的实测操作耗时，单位为毫秒 */
     public long getLatencyMs() { return latencyMs; }
-    /** @return server-observed event time */
+    /** @return 服务端观测到的事件时间 */
     public Instant getOccurredAt() { return occurredAt; }
-    /** @return stable, non-sensitive reason code, or {@code null} when unavailable */
+    /** @return 稳定、非敏感的原因码；不可用时为 {@code null} */
     public String getReasonCode() { return reasonCode; }
-    /** @return immutable, sanitized non-sensitive extension attributes */
+    /** @return 不可变且已清洗的非敏感扩展属性 */
     public Map<String, String> getAttributes() { return attributes; }
     /**
-     * Gets one non-sensitive extension attribute.
+     * 获取一个非敏感扩展属性。
      *
-     * @param key attribute name
-     * @return sanitized attribute value, or {@code null} when absent
+     * @param key 属性名称
+     * @return 已清洗的属性值；不存在时为 {@code null}
      */
     public String getAttribute(String key) { return attributes.get(key); }
 
@@ -163,7 +162,7 @@ public final class SecurityEventDraft {
         return Collections.unmodifiableMap(sanitized);
     }
 
-    /** Builder for {@link SecurityEventDraft}. */
+    /** {@link SecurityEventDraft} 的构建器（Builder）。 */
     public static final class Builder {
         private SecurityEventType eventType;
         private String action;
@@ -186,158 +185,158 @@ public final class SecurityEventDraft {
         private Map<String, String> attributes = new LinkedHashMap<String, String>();
 
         /**
-         * Sets the normalized security activity category.
+         * 设置标准化安全活动类别。
          *
-         * @param value normalized security activity category
-         * @return this builder
+         * @param value 标准化安全活动类别
+         * @return 当前构建器
          */
         public Builder eventType(SecurityEventType value) { this.eventType = value; return this; }
         /**
-         * Sets the server operation name.
+         * 设置服务端操作名称。
          *
-         * @param value server operation name
-         * @return this builder
+         * @param value 服务端操作名称
+         * @return 当前构建器
          */
         public Builder action(String value) { this.action = value; return this; }
         /**
-         * Sets the final server-side operation outcome.
+         * 设置最终服务端操作结果。
          *
-         * @param value final server-side operation outcome
-         * @return this builder
+         * @param value 最终服务端操作结果
+         * @return 当前构建器
          */
         public Builder result(SecurityEventResult value) { this.result = value; return this; }
         /**
-         * Sets the trusted client IP address.
+         * 设置可信客户端网络地址。
          *
-         * @param value trusted client IP address
-         * @return this builder
+         * @param value 可信客户端网络地址（IP）
+         * @return 当前构建器
          */
         public Builder sourceIp(String value) { this.sourceIp = value; return this; }
         /**
-         * Sets the request correlation identifier.
+         * 设置请求关联标识。
          *
-         * @param value request correlation identifier
-         * @return this builder
+         * @param value 请求关联标识
+         * @return 当前构建器
          */
         public Builder requestId(String value) { this.requestId = value; return this; }
         /**
-         * Sets the distributed tracing identifier.
+         * 设置分布式追踪标识。
          *
-         * @param value distributed tracing identifier
-         * @return this builder
+         * @param value 分布式追踪标识
+         * @return 当前构建器
          */
         public Builder traceId(String value) { this.traceId = value; return this; }
         /**
-         * Sets the server-resolved user identifier.
+         * 设置由服务端解析的用户标识。
          *
-         * @param value server-resolved user identifier
-         * @return this builder
+         * @param value 由服务端解析的用户标识
+         * @return 当前构建器
          */
         public Builder userId(String value) { this.userId = value; return this; }
         /**
-         * Sets the principal class.
+         * 设置主体类型。
          *
-         * @param value principal class
-         * @return this builder
+         * @param value 主体类型
+         * @return 当前构建器
          */
         public Builder accountType(AccountType value) { this.accountType = value; return this; }
         /**
-         * Adds one host role identifier.
+         * 添加一个宿主角色标识。
          *
-         * @param value one host role identifier to add
-         * @return this builder
+         * @param value 要添加的宿主角色标识
+         * @return 当前构建器
          */
         public Builder roleId(String value) { if (value != null) { this.roleIds.add(value); } return this; }
         /**
-         * Replaces role identifiers with a defensive copy.
+         * 使用防御性副本替换角色标识集合。
          *
-         * @param value host role identifiers; copied by this builder
-         * @return this builder
+         * @param value 宿主角色标识；构建器会复制该集合
+         * @return 当前构建器
          */
         public Builder roleIds(Set<String> value) { this.roleIds = value == null ? new LinkedHashSet<String>() : new LinkedHashSet<String>(value); return this; }
         /**
-         * Sets a one-way session identifier.
+         * 设置单向散列后的会话标识。
          *
-         * @param value one-way session identifier
-         * @return this builder
+         * @param value 单向散列后的会话标识
+         * @return 当前构建器
          */
         public Builder sessionIdHash(String value) { this.sessionIdHash = value; return this; }
         /**
-         * Sets a one-way device identifier.
+         * 设置单向散列后的设备标识。
          *
-         * @param value one-way device identifier
-         * @return this builder
+         * @param value 单向散列后的设备标识
+         * @return 当前构建器
          */
         public Builder deviceIdHash(String value) { this.deviceIdHash = value; return this; }
         /**
-         * Sets the logical resource category.
+         * 设置逻辑资源类别。
          *
-         * @param value logical resource category
-         * @return this builder
+         * @param value 逻辑资源类别
+         * @return 当前构建器
          */
         public Builder resourceType(String value) { this.resourceType = value; return this; }
         /**
-         * Sets the host resource identifier.
+         * 设置宿主资源标识。
          *
-         * @param value host resource identifier
-         * @return this builder
+         * @param value 宿主资源标识
+         * @return 当前构建器
          */
         public Builder resourceId(String value) { this.resourceId = value; return this; }
         /**
-         * Sets the tenant, organization, or data-domain boundary.
+         * 设置租户、组织或数据域边界。
          *
-         * @param value tenant, organization, or data-domain boundary
-         * @return this builder
+         * @param value 租户、组织或数据域边界
+         * @return 当前构建器
          */
         public Builder orgScope(String value) { this.orgScope = value; return this; }
         /**
-         * Sets the affected record count.
+         * 设置受影响记录数。
          *
-         * @param value affected record count; must not be negative
-         * @return this builder
+         * @param value 受影响记录数，不能为负数
+         * @return 当前构建器
          */
         public Builder dataCount(long value) { this.dataCount = value; return this; }
         /**
-         * Sets the measured latency.
+         * 设置实测操作耗时。
          *
-         * @param value measured latency in milliseconds; must not be negative
-         * @return this builder
+         * @param value 实测操作耗时，单位为毫秒，不能为负数
+         * @return 当前构建器
          */
         public Builder latencyMs(long value) { this.latencyMs = value; return this; }
         /**
-         * Sets the server-observed event time.
+         * 设置服务端观测到的事件时间。
          *
-         * @param value server-observed event time
-         * @return this builder
+         * @param value 服务端观测到的事件时间
+         * @return 当前构建器
          */
         public Builder occurredAt(Instant value) { this.occurredAt = value; return this; }
         /**
-         * Sets a stable, non-sensitive reason code.
+         * 设置稳定、非敏感的原因码。
          *
-         * @param value stable, non-sensitive reason code
-         * @return this builder
+         * @param value 稳定、非敏感的原因码
+         * @return 当前构建器
          */
         public Builder reasonCode(String value) { this.reasonCode = value; return this; }
         /**
-         * Adds an approved, non-sensitive attribute.
+         * 添加经批准的非敏感属性。
          *
-         * @param key attribute key; keys naming credential material are rejected during build
-         * @param value attribute value
-         * @return this builder
+         * @param key 属性键；构建时会拒绝指向凭据类信息的键
+         * @param value 属性值
+         * @return 当前构建器
          */
         public Builder attribute(String key, String value) { this.attributes.put(key, value); return this; }
         /**
-         * Replaces extension attributes with a copied map.
+         * 使用复制后的映射替换扩展属性。
          *
-         * @param value non-sensitive attributes, or {@code null} for an empty map
-         * @return this builder
+         * @param value 非敏感属性；传入 {@code null} 时使用空映射
+         * @return 当前构建器
          */
         public Builder attributes(Map<String, String> value) { this.attributes = value == null ? new LinkedHashMap<String, String>() : new LinkedHashMap<String, String>(value); return this; }
         /**
-         * Validates required fields and returns an immutable sanitized draft.
+         * 校验必需字段并返回不可变、已清洗的事件草稿。
          *
-         * @return monitoring-ready event draft
-         * @throws IllegalArgumentException if required fields are missing, counts are negative, or attributes are unsafe
+         * @return 可直接交给监测组件处理的事件草稿
+         * @throws IllegalArgumentException 当缺少必需字段、数量为负数或属性不安全时抛出
          */
         public SecurityEventDraft build() { return new SecurityEventDraft(this); }
     }

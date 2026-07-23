@@ -1,11 +1,11 @@
 package io.github.jasper.monitoring.api;
 
-/** Final server-side outcome of the action represented by a security event. */
+/** 安全事件所表示操作的最终服务端结果。 */
 public enum SecurityEventResult {
-    /** The action completed successfully. */
+    /** 操作已成功完成。 */
     SUCCESS,
-    /** The action failed before completion. */
+    /** 操作在完成前失败。 */
     FAILURE,
-    /** The action was rejected by authorization or a security control. */
+    /** 操作被授权决策或安全控制拒绝。 */
     DENIED
 }

@@ -2,8 +2,8 @@ package io.github.jasper.monitoring.mybatis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import io.github.jasper.monitoring.api.AccountType;
 import io.github.jasper.monitoring.api.AlertStatus;
 import io.github.jasper.monitoring.api.ControlActionType;
@@ -11,16 +11,18 @@ import io.github.jasper.monitoring.api.ControlStatus;
 import io.github.jasper.monitoring.api.DispositionType;
 import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.api.RuleMode;
+import io.github.jasper.monitoring.api.RuleSource;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
-import io.github.jasper.monitoring.core.ControlCommand;
-import io.github.jasper.monitoring.core.ControlExecution;
-import io.github.jasper.monitoring.core.ControlRecord;
-import io.github.jasper.monitoring.core.AlertDisposition;
-import io.github.jasper.monitoring.core.MonitoringRepository;
-import io.github.jasper.monitoring.core.SecurityAlert;
-import io.github.jasper.monitoring.core.SecurityEvent;
-import io.github.jasper.monitoring.core.WhitelistEntry;
+import io.github.jasper.monitoring.core.domain.ControlCommand;
+import io.github.jasper.monitoring.core.domain.ControlExecution;
+import io.github.jasper.monitoring.core.domain.ControlRecord;
+import io.github.jasper.monitoring.core.domain.AlertDisposition;
+import io.github.jasper.monitoring.core.port.MonitoringRepository;
+import io.github.jasper.monitoring.core.domain.SecurityAlert;
+import io.github.jasper.monitoring.core.domain.SecurityEvent;
+import io.github.jasper.monitoring.core.domain.WhitelistEntry;
+import io.github.jasper.monitoring.mybatis.po.PersistedRuleDefinition;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -46,9 +48,38 @@ import org.junit.jupiter.api.Test;
 class MyBatisMonitoringRepositoryTest {
 
     @Test
+    void declaresMySqlSchemaConventionsAndChineseTableComments() throws Exception {
+        String schema = readSchema();
+
+        assertTrue(schema.contains("ENGINE=InnoDB"));
+        assertTrue(schema.contains("DEFAULT CHARSET=utf8mb4"));
+        assertTrue(schema.contains("COMMENT='安全事件明细表'"));
+        assertTrue(schema.contains("rule_definition LONGTEXT NOT NULL"));
+    }
+
+    @Test
+    void rollsBackAllMonitoringWritesWhenTransactionWorkFails() throws Exception {
+        DataSource dataSource = new UnpooledDataSource(
+            "org.h2.Driver", "jdbc:h2:mem:monitoring-rollback;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        executeSchema(dataSource);
+        Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
+            "test", new JdbcTransactionFactory(), dataSource));
+        MonitoringRepository repository = MyBatisMonitoringRepositoryRegistrar.create(configuration);
+        Instant now = Instant.parse("2026-07-22T01:00:00Z");
+
+        assertThrows(IllegalStateException.class, () -> repository.inTransaction(() -> {
+            repository.saveAlert(new SecurityAlert("alert-rollback", "AUTH-01", RiskLevel.HIGH,
+                "AUTH-01:alice", "alice", AlertStatus.NEW, now, now, 1));
+            throw new IllegalStateException("simulated failure");
+        }));
+
+        assertFalse(repository.findAlert("alert-rollback").isPresent());
+    }
+
+    @Test
     void retrievesAlertsAndAppendsDispositionHistoryWithoutChangingEvents() throws Exception {
         DataSource dataSource = new UnpooledDataSource(
-            "org.h2.Driver", "jdbc:h2:mem:monitoring-lifecycle;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+            "org.h2.Driver", "jdbc:h2:mem:monitoring-lifecycle;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         executeSchema(dataSource);
         Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
             "test", new JdbcTransactionFactory(), dataSource));
@@ -89,7 +120,7 @@ class MyBatisMonitoringRepositoryTest {
     @Test
     void registersAdministrationMapperForRuleVersionsAndDispositionHistory() throws Exception {
         DataSource dataSource = new UnpooledDataSource(
-            "org.h2.Driver", "jdbc:h2:mem:monitoring-admin;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+            "org.h2.Driver", "jdbc:h2:mem:monitoring-admin;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         executeSchema(dataSource);
         Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
             "test", new JdbcTransactionFactory(), dataSource));
@@ -100,6 +131,15 @@ class MyBatisMonitoringRepositoryTest {
             MonitoringAdministrationMapper mapper = session.getMapper(MonitoringAdministrationMapper.class);
             mapper.insertRule("AUTH-01", 1, "Login failures", "count failures", RiskLevel.HIGH, RuleMode.ENFORCE,
                 true, Instant.parse("2026-07-22T01:00:00Z"), "security-admin");
+            mapper.insertRule("AUTH-01", 2, "Login failures v2", "count failures >= 6", RiskLevel.HIGH,
+                RuleMode.ALERT_ONLY, false, Instant.parse("2026-07-22T01:02:00Z"), "security-admin");
+            List<PersistedRuleDefinition> versions = mapper.findRuleVersions();
+            assertEquals(2, versions.size());
+            assertEquals(2, versions.get(0).getRuleVersion());
+            assertEquals(RuleSource.PERSISTED, versions.get(0).getSource());
+            assertTrue(versions.get(0).isMutable());
+            assertFalse(versions.get(0).isEnabled());
+            assertEquals(1, mapper.setRuleEnabled("AUTH-01", 2, true));
             mapper.appendAlertDisposition("disposition-1", "alert-1", DispositionType.ACKNOWLEDGED, "security-admin",
                 "Investigating", "ticket-42", Instant.parse("2026-07-22T01:05:00Z"));
             mapper.insertWhitelist("AUTH-01", "alice", "Approved test window", "security-admin",
@@ -107,13 +147,18 @@ class MyBatisMonitoringRepositoryTest {
             session.commit();
         }
 
-        assertEquals(3, administrationEntryCount(dataSource));
+        assertEquals(4, administrationEntryCount(dataSource));
+        try (SqlSession session = factory.openSession()) {
+            PersistedRuleDefinition current = session.getMapper(MonitoringAdministrationMapper.class)
+                .findRuleVersions().get(0);
+            assertTrue(current.isEnabled());
+        }
     }
 
     @Test
-    void persistsAndRetrievesMonitoringPortDataAgainstH2() throws Exception {
+    void persistsAndRetrievesMonitoringPortDataAgainstMySqlCompatibleH2() throws Exception {
         DataSource dataSource = new UnpooledDataSource(
-            "org.h2.Driver", "jdbc:h2:mem:monitoring;MODE=PostgreSQL;DB_CLOSE_DELAY=-1", "sa", "");
+            "org.h2.Driver", "jdbc:h2:mem:monitoring;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         executeSchema(dataSource);
         Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
             "test", new JdbcTransactionFactory(), dataSource));
@@ -198,6 +243,19 @@ class MyBatisMonitoringRepositoryTest {
             runner.setLogWriter(null);
             runner.setErrorLogWriter(null);
             runner.runScript(reader);
+        }
+    }
+
+    private String readSchema() throws Exception {
+        InputStream input = getClass().getResourceAsStream("/db/monitoring-schema.sql");
+        try (InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+            StringBuilder schema = new StringBuilder();
+            char[] buffer = new char[1024];
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                schema.append(buffer, 0, read);
+            }
+            return schema.toString();
         }
     }
 

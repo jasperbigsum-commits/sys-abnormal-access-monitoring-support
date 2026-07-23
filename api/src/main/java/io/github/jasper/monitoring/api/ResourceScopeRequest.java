@@ -1,10 +1,9 @@
 package io.github.jasper.monitoring.api;
 
 /**
- * Immutable resource facts passed to a host {@link ResourceScopeAuthorizer}.
+ * 传递给宿主 {@link ResourceScopeAuthorizer} 的不可变资源事实。
  *
- * <p>The request context identifies the operation; resource fields identify the target being
- * authorized. All optional resource fields are sanitized.</p>
+ * <p>请求上下文用于标识操作，资源字段用于标识待授权目标；所有可选资源字段都会经过清洗。</p>
  */
 public final class ResourceScopeRequest {
     private final MonitoringRequestContext request;
@@ -12,12 +11,12 @@ public final class ResourceScopeRequest {
     private final String resourceId;
     private final String orgScope;
     /**
-     * Creates a resource-scope authorization request.
+     * 创建资源范围授权请求。
      *
-     * @param request trusted request context
-     * @param resourceType logical resource category, such as {@code REPORT}
-     * @param resourceId host resource identifier, when applicable
-     * @param orgScope tenant, organization, or data-domain boundary, when applicable
+     * @param request 可信请求上下文
+     * @param resourceType 逻辑资源类别，例如 {@code REPORT}
+     * @param resourceId 适用时提供的宿主资源标识
+     * @param orgScope 适用时提供的租户、组织或数据域边界
      */
     public ResourceScopeRequest(MonitoringRequestContext request, String resourceType, String resourceId, String orgScope) {
         this.request = request;
@@ -25,12 +24,12 @@ public final class ResourceScopeRequest {
         this.resourceId = SecurityFieldSanitizer.text(resourceId, 256);
         this.orgScope = SecurityFieldSanitizer.text(orgScope, 256);
     }
-    /** @return context for the operation being authorized */
+    /** @return 正在授权的操作对应的请求上下文 */
     public MonitoringRequestContext getRequest() { return request; }
-    /** @return sanitized resource category, or {@code null} when unavailable */
+    /** @return 已清洗的资源类别；不可用时为 {@code null} */
     public String getResourceType() { return resourceType; }
-    /** @return sanitized resource identifier, or {@code null} when unavailable */
+    /** @return 已清洗的资源标识；不可用时为 {@code null} */
     public String getResourceId() { return resourceId; }
-    /** @return sanitized organization or data-domain boundary, or {@code null} when unavailable */
+    /** @return 已清洗的组织或数据域边界；不可用时为 {@code null} */
     public String getOrgScope() { return orgScope; }
 }

@@ -5,10 +5,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Servlet-independent, sanitized request facts collected by a framework adapter.
+ * 由框架适配器采集且已清洗的、不依赖具体请求容器的请求事实。
  *
- * <p>Only trusted headers should be included. Identity, authorization, and source-address
- * decisions remain server-side responsibilities.</p>
+ * <p>仅应包含可信请求头；身份、授权和源地址决策始终由服务端负责。</p>
  */
 public final class MonitoringRequestContext {
     private final String method;
@@ -25,32 +24,32 @@ public final class MonitoringRequestContext {
         traceId = SecurityFieldSanitizer.text(builder.traceId, 128);
         trustedHeaders = Collections.unmodifiableMap(new LinkedHashMap<String, String>(builder.trustedHeaders));
     }
-    /** @return a builder for an immutable request-context snapshot */
+    /** @return 用于创建不可变请求上下文快照的构建器（Builder） */
     public static Builder builder() { return new Builder(); }
 
-    /** @return normalized HTTP method */
+    /** @return 已规范化的请求方法（HTTP method） */
     public String getMethod() { return method; }
 
-    /** @return normalized request path */
+    /** @return 已规范化的请求路径 */
     public String getPath() { return path; }
 
-    /** @return trusted client IP address resolved by the adapter */
+    /** @return 由适配器解析的可信客户端网络地址（IP） */
     public String getSourceIp() { return sourceIp; }
 
-    /** @return request correlation identifier */
+    /** @return 请求关联标识 */
     public String getRequestId() { return requestId; }
 
-    /** @return distributed-tracing identifier, or {@code null} when unavailable */
+    /** @return 分布式追踪标识；不可用时为 {@code null} */
     public String getTraceId() { return traceId; }
 
-    /** @return immutable, host-approved headers used for correlation */
+    /** @return 用于关联的、宿主系统批准的不可变请求头集合 */
     public Map<String, String> getTrustedHeaders() { return trustedHeaders; }
     private static String required(String value, String field, int length) {
         String sanitized = SecurityFieldSanitizer.text(value, length);
         if (sanitized == null || sanitized.isEmpty()) { throw new IllegalArgumentException(field + " is required"); }
         return sanitized;
     }
-    /** Builder for {@link MonitoringRequestContext}. */
+    /** {@link MonitoringRequestContext} 的构建器（Builder）。 */
     public static final class Builder {
         private String method;
         private String path;
@@ -59,47 +58,47 @@ public final class MonitoringRequestContext {
         private String traceId;
         private final Map<String, String> trustedHeaders = new LinkedHashMap<String, String>();
         /**
-         * Sets the HTTP method.
+         * 设置请求方法。
          *
-         * @param value HTTP method
-         * @return this builder
+         * @param value 请求方法（HTTP method）
+         * @return 当前构建器
          */
         public Builder method(String value) { method = value; return this; }
         /**
-         * Sets the request path.
+         * 设置请求路径。
          *
-         * @param value request path
-         * @return this builder
+         * @param value 请求路径
+         * @return 当前构建器
          */
         public Builder path(String value) { path = value; return this; }
         /**
-         * Sets the trusted client IP address.
+         * 设置可信客户端网络地址。
          *
-         * @param value trusted client IP address
-         * @return this builder
+         * @param value 可信客户端网络地址（IP）
+         * @return 当前构建器
          */
         public Builder sourceIp(String value) { sourceIp = value; return this; }
         /**
-         * Sets the request correlation identifier.
+         * 设置请求关联标识。
          *
-         * @param value request correlation identifier
-         * @return this builder
+         * @param value 请求关联标识
+         * @return 当前构建器
          */
         public Builder requestId(String value) { requestId = value; return this; }
         /**
-         * Sets the tracing identifier.
+         * 设置分布式追踪标识。
          *
-         * @param value tracing identifier, when available
-         * @return this builder
+         * @param value 分布式追踪标识，可用时提供
+         * @return 当前构建器
          */
         public Builder traceId(String value) { traceId = value; return this; }
 
         /**
-         * Adds a host-approved header for correlation.
+         * 添加宿主系统批准的关联请求头。
          *
-         * @param key non-sensitive header name
-         * @param value sanitized header value
-         * @return this builder
+         * @param key 非敏感请求头名称
+         * @param value 已清洗的请求头值
+         * @return 当前构建器
          */
         public Builder trustedHeader(String key, String value) {
             SecurityFieldSanitizer.requireSafeAttributeKey(key);
@@ -107,10 +106,10 @@ public final class MonitoringRequestContext {
             return this;
         }
         /**
-         * Builds an immutable context after validating required request facts.
+         * 校验必需请求事实后构建不可变上下文。
          *
-         * @return immutable request context
-         * @throws IllegalArgumentException if required facts are missing or unsafe
+         * @return 不可变请求上下文
+         * @throws IllegalArgumentException 当缺少必需事实或存在不安全字段时抛出
          */
         public MonitoringRequestContext build() { return new MonitoringRequestContext(this); }
     }

@@ -8,15 +8,16 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Resolves forwarded client addresses only when the direct peer is explicitly trusted.
- * This prevents an untrusted client from spoofing {@code X-Forwarded-For} directly.
+ * 仅在直连对端被显式信任时解析转发客户端地址。
+ *
+ * <p>这可阻止未受信任客户端直接伪造 {@code X-Forwarded-For}。可信地址可以是 IP 字面量或 CIDR
+ * 网段；配置格式错误的条目会被忽略，绝不会被当作可信代理。</p>
  */
 public final class ConfiguredTrustedProxyResolver implements TrustedProxyResolver {
     private final List<TrustedAddress> trustedAddresses;
 
     /**
-     * @param trustedProxies literal IP addresses or CIDR ranges for trusted reverse proxies;
-     *                       malformed entries are ignored rather than trusted
+     * @param trustedProxies 可信反向代理的 IP 字面量或 CIDR 网段；格式错误的条目会被忽略
      */
     public ConfiguredTrustedProxyResolver(List<String> trustedProxies) {
         List<TrustedAddress> values = new ArrayList<TrustedAddress>();
@@ -32,12 +33,11 @@ public final class ConfiguredTrustedProxyResolver implements TrustedProxyResolve
     }
 
     /**
-     * Selects the first syntactically valid client address from the forwarding header only when the direct peer
-     * matches the configured trusted set.
+     * 仅当直连对端命中可信集合时，才从转发头选择第一个语法合法的客户端地址。
      *
-     * @param directRemoteAddress direct socket peer address supplied by the server
-     * @param forwardedForHeader optional forwarded-client header
-     * @return a forwarded client address for a trusted proxy, otherwise the direct peer address
+     * @param directRemoteAddress 服务器提供的直连套接字对端地址
+     * @param forwardedForHeader 可选的转发客户端地址请求头
+     * @return 可信代理转发的客户端地址；否则返回直连对端地址
      */
     @Override
     public String resolveClientIp(String directRemoteAddress, String forwardedForHeader) {

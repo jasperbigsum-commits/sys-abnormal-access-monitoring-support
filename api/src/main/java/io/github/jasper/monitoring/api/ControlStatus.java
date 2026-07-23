@@ -1,11 +1,11 @@
 package io.github.jasper.monitoring.api;
 
-/** Outcome reported after the host attempts a requested control action. */
+/** 宿主系统尝试执行控制动作后上报的结果。 */
 public enum ControlStatus {
-    /** The action was applied successfully. */
+    /** 控制动作已成功执行。 */
     SUCCEEDED,
-    /** The action could not be applied; the failure must remain auditable. */
+    /** 控制动作执行失败；失败信息必须保留审计记录。 */
     FAILED,
-    /** The action was intentionally not applied, for example due to deduplication. */
+    /** 控制动作被有意跳过，例如因幂等去重。 */
     SKIPPED
 }

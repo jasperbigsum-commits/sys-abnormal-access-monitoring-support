@@ -21,7 +21,12 @@
       "properties": {
         "feature": {"type": "string"}, "interaction": {"type": "string"},
         "page_type": {"type": "string"}, "network_type": {"type": "string"},
-        "ui_version": {"type": "string"}, "resource_class": {"type": "string"},
+        "ui_version": {
+          "type": "string"
+        },
+        "resource_class": {
+          "type": "string"
+        },
         "outcome_hint": {"type": "string"}
       }
     }

@@ -1,39 +1,57 @@
 package io.github.jasper.monitoring.spring2.autoconfigure;
 
+import io.github.jasper.monitoring.core.domain.RuleMatch;
 import static org.assertj.core.api.Assertions.assertThat;
-
+import io.github.jasper.monitoring.api.AccountType;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.AuthorizationDecision;
+import io.github.jasper.monitoring.api.ControlTrigger;
 import io.github.jasper.monitoring.api.IdentityContext;
+import io.github.jasper.monitoring.api.IdentityContextProvider;
+import io.github.jasper.monitoring.api.MonitorAction;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
-import io.github.jasper.monitoring.core.DefaultSecurityMonitor;
-import io.github.jasper.monitoring.core.AlertLifecycleService;
-import io.github.jasper.monitoring.core.ControlCommand;
-import io.github.jasper.monitoring.core.ControlExecution;
-import io.github.jasper.monitoring.core.ControlHandler;
-import io.github.jasper.monitoring.core.InMemoryMonitoringRepository;
-import io.github.jasper.monitoring.core.MonitoringOutcome;
-import io.github.jasper.monitoring.core.MonitoringRepository;
-import io.github.jasper.monitoring.core.ResourceAccessGuard;
+import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
+import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
+import io.github.jasper.monitoring.core.application.AlertLifecycleService;
+import io.github.jasper.monitoring.core.domain.ControlCommand;
+import io.github.jasper.monitoring.core.domain.ControlExecution;
+import io.github.jasper.monitoring.core.port.ControlHandler;
+import io.github.jasper.monitoring.core.infrastructure.memory.InMemoryMonitoringRepository;
+import io.github.jasper.monitoring.core.application.rule.InternalRuleContributor;
+import io.github.jasper.monitoring.core.application.rule.InternalRuleRegistry;
+import io.github.jasper.monitoring.core.application.MonitoringOutcome;
+import io.github.jasper.monitoring.core.port.MonitoringRepository;
+import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
+import io.github.jasper.monitoring.core.domain.SecurityEvent;
+import io.github.jasper.monitoring.core.application.SecurityMonitor;
 import java.time.Instant;
-import javax.servlet.http.HttpServletRequest;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Optional;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.method.HandlerMethod;
+import org.slf4j.MDC;
 
 class AbnormalAccessMonitorAutoConfigurationTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+        .withConfiguration(AutoConfigurations.of(autoConfiguration()));
+    private final WebApplicationContextRunner webContextRunner = new WebApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(autoConfiguration()));
 
     @Test
@@ -49,6 +67,18 @@ class AbnormalAccessMonitorAutoConfigurationTest {
 
                 assertThat(outcome.getEvent().getSystemId()).isEqualTo("orders");
                 assertThat(outcome.getControls()).isEmpty();
+            });
+    }
+
+    @Test
+    void freezesHostContributedInternalRulesBeforeCreatingTheMonitor() {
+        contextRunner.withUserConfiguration(InternalRuleConfiguration.class)
+            .run(context -> {
+                InternalRuleRegistry registry = context.getBean(InternalRuleRegistry.class);
+
+                assertThat(registry.isFrozen()).isTrue();
+                assertThat(registry.entries()).extracting(entry -> entry.getRuleId()).contains("HOST-01");
+                assertThat(registry.entries()).allMatch(entry -> !entry.isMutable());
             });
     }
 
@@ -92,10 +122,20 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     }
 
     @Test
-    void collectsTrustedRequestMetadataUnlessFrontendCollectionIsDisabled() throws Exception {
-        contextRunner.withPropertyValues("abnormal.access.monitor.trusted-proxies=10.0.0.0/8")
+    void createsCoreMonitoringWithoutSpringWebMvc() {
+        webContextRunner.withClassLoader(new FilteredClassLoader("org.springframework.web.servlet"))
             .run(context -> {
-                HandlerInterceptor interceptor = context.getBean(HandlerInterceptor.class);
+                assertThat(context).hasSingleBean(DefaultSecurityMonitor.class);
+                assertThat(context.containsBean("abnormalAccessRequestMetadataInterceptor")).isFalse();
+                assertThat(context.containsBean("abnormalAccessAnnotatedMonitoringInterceptor")).isFalse();
+            });
+    }
+
+    @Test
+    void collectsTrustedRequestMetadataAndKeepsInstrumentationIndependentFromFrontendCollection() throws Exception {
+        webContextRunner.withPropertyValues("abnormal.access.monitor.trusted-proxies=10.0.0.0/8")
+            .run(context -> {
+                RequestMetadataInterceptor interceptor = context.getBean(RequestMetadataInterceptor.class);
                 MockHttpServletRequest request = new MockHttpServletRequest("GET", "/customers/42");
                 request.setRemoteAddr("10.10.10.10");
                 request.addHeader("X-Forwarded-For", "198.51.100.20");
@@ -109,8 +149,134 @@ class AbnormalAccessMonitorAutoConfigurationTest {
                 assertThat(requestContext.getRequestId()).isEqualTo("request-42");
             });
 
-        contextRunner.withPropertyValues("abnormal.access.monitor.frontend.enabled=false")
-            .run(context -> assertThat(context.getBeansOfType(HandlerInterceptor.class)).isEmpty());
+        webContextRunner.withPropertyValues("abnormal.access.monitor.frontend.enabled=false")
+            .run(context -> {
+                assertThat(context).hasSingleBean(RequestMetadataInterceptor.class);
+                assertThat(context).hasSingleBean(AnnotatedMonitoringInterceptor.class);
+            });
+
+        webContextRunner.withPropertyValues("abnormal.access.monitor.instrumentation.enabled=false")
+            .run(context -> {
+                assertThat(context).hasSingleBean(RequestMetadataInterceptor.class);
+                assertThat(context.getBeansOfType(AnnotatedMonitoringInterceptor.class)).isEmpty();
+            });
+    }
+
+    @Test
+    void doesNotBlockRequestsWhenMetadataResolutionFails() throws Exception {
+        RequestMetadataInterceptor interceptor = new RequestMetadataInterceptor(
+            (directAddress, forwardedFor) -> { throw new IllegalStateException("resolver failure"); },
+            request -> IdentityContext.anonymous());
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/reports/export");
+
+        assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object())).isTrue();
+        assertThat(request.getAttribute(RequestMetadataInterceptor.REQUEST_CONTEXT_ATTRIBUTE)).isNull();
+        assertThat(request.getAttribute(RequestMetadataInterceptor.IDENTITY_CONTEXT_ATTRIBUTE)).isNull();
+    }
+
+    @Test
+    void usesOneTraceIdForMdcAndMonitoringContextThenRestoresThePriorMdcValue() throws Exception {
+        MDC.put("traceId", "upstream-trace");
+        try {
+            webContextRunner.run(context -> {
+                RequestMetadataInterceptor interceptor = context.getBean(RequestMetadataInterceptor.class);
+                MockHttpServletRequest request = new MockHttpServletRequest("GET", "/reports/export");
+                request.addHeader("X-Trace-Id", "monitor-trace");
+                MockHttpServletResponse response = new MockHttpServletResponse();
+
+                interceptor.preHandle(request, response, new Object());
+
+                MonitoringRequestContext requestContext = (MonitoringRequestContext) request.getAttribute(
+                    RequestMetadataInterceptor.REQUEST_CONTEXT_ATTRIBUTE);
+                assertThat(requestContext.getTraceId()).isEqualTo("monitor-trace");
+                assertThat(MDC.get("traceId")).isEqualTo("monitor-trace");
+
+                interceptor.afterCompletion(request, response, new Object(), null);
+                assertThat(MDC.get("traceId")).isEqualTo("upstream-trace");
+            });
+        } finally {
+            MDC.remove("traceId");
+        }
+    }
+
+    @Test
+    void recordsAnnotatedHandlerOutcomesUsingTrustedMetadataAndMethodOverride() throws Exception {
+        webContextRunner.withUserConfiguration(IdentityConfiguration.class)
+            .withPropertyValues("abnormal.access.monitor.frontend.enabled=false")
+            .run(context -> {
+                AnnotatedMonitoringInterceptor interceptor = context.getBean(AnnotatedMonitoringInterceptor.class);
+                HandlerMethod handler = new HandlerMethod(new AnnotatedController(),
+                    AnnotatedController.class.getMethod("export"));
+
+                MockHttpServletRequest successRequest = new MockHttpServletRequest("GET", "/reports/export");
+                successRequest.setRemoteAddr("198.51.100.7");
+                successRequest.addHeader("X-Request-Id", "success-1");
+                MockHttpServletResponse successResponse = new MockHttpServletResponse();
+                interceptor.preHandle(successRequest, successResponse, handler);
+                interceptor.afterCompletion(successRequest, successResponse, handler, null);
+
+                MockHttpServletRequest deniedRequest = new MockHttpServletRequest("GET", "/reports/export");
+                deniedRequest.addHeader("X-Request-Id", "denied-1");
+                MockHttpServletResponse deniedResponse = new MockHttpServletResponse();
+                deniedResponse.setStatus(403);
+                interceptor.preHandle(deniedRequest, deniedResponse, handler);
+                interceptor.afterCompletion(deniedRequest, deniedResponse, handler, null);
+
+                MockHttpServletRequest resolvedDeniedRequest = new MockHttpServletRequest("GET", "/reports/export");
+                resolvedDeniedRequest.addHeader("X-Request-Id", "resolved-denied-1");
+                MockHttpServletResponse resolvedDeniedResponse = new MockHttpServletResponse();
+                resolvedDeniedResponse.setStatus(403);
+                interceptor.preHandle(resolvedDeniedRequest, resolvedDeniedResponse, handler);
+                interceptor.afterCompletion(resolvedDeniedRequest, resolvedDeniedResponse, handler,
+                    new SecurityException("resolved access denial"));
+
+                MockHttpServletRequest failureRequest = new MockHttpServletRequest("GET", "/reports/export");
+                failureRequest.addHeader("X-Request-Id", "failure-1");
+                MockHttpServletResponse failureResponse = new MockHttpServletResponse();
+                failureResponse.setStatus(500);
+                interceptor.preHandle(failureRequest, failureResponse, handler);
+                interceptor.afterCompletion(failureRequest, failureResponse, handler,
+                    new IllegalStateException("do not persist this message"));
+
+                List<SecurityEvent> events = ((InMemoryMonitoringRepository) context.getBean(MonitoringRepository.class)).getEvents();
+                assertThat(events).hasSize(4);
+                assertThat(events.get(0).getAction()).isEqualTo("export-report");
+                assertThat(events.get(0).getEventType()).isEqualTo(SecurityEventType.EXPORT);
+                assertThat(events.get(0).getResourceType()).isEqualTo("report");
+                assertThat(events.get(0).getUserId()).isEqualTo("alice");
+                assertThat(events.get(0).getSourceIp()).isEqualTo("198.51.100.7");
+                assertThat(events.get(0).getResult()).isEqualTo(SecurityEventResult.SUCCESS);
+                assertThat(events.get(1).getResult()).isEqualTo(SecurityEventResult.DENIED);
+                assertThat(events.get(1).getReasonCode()).isEqualTo("HTTP_403");
+                assertThat(events.get(2).getResult()).isEqualTo(SecurityEventResult.DENIED);
+                assertThat(events.get(2).getReasonCode()).isEqualTo("HTTP_403");
+                assertThat(events.get(3).getResult()).isEqualTo(SecurityEventResult.FAILURE);
+                assertThat(events.get(3).getReasonCode()).isEqualTo("HANDLER_EXCEPTION");
+            });
+    }
+
+    @Test
+    void discoversAnnotatedControlTriggerForEnforceMode() {
+        AnnotatedTriggerTarget.reset();
+        contextRunner.withUserConfiguration(AnnotatedTriggerConfiguration.class)
+            .withPropertyValues("abnormal.access.monitor.mode=ENFORCE")
+            .run(context -> {
+                assertThat(AnnotatedTriggerTarget.isCreated()).isFalse();
+                MonitoringOutcome outcome = context.getBean(DefaultSecurityMonitor.class).record(disabledLoginFailure());
+                AnnotatedTriggerTarget target = context.getBean(AnnotatedTriggerTarget.class);
+
+                assertThat(outcome.getControls()).hasSize(1);
+                assertThat(AnnotatedTriggerTarget.isCreated()).isTrue();
+                assertThat(target.getMonitor()).isSameAs(context.getBean(SecurityMonitor.class));
+                assertThat(target.getLastCommand()).isNotNull();
+                assertThat(target.getLastCommand().getAction()).isEqualTo(ControlActionType.DENY);
+            });
+    }
+
+    @Test
+    void rejectsDuplicateAnnotatedControlTriggers() {
+        contextRunner.withUserConfiguration(DuplicateAnnotatedTriggerConfiguration.class)
+            .run(context -> assertThat(context).hasFailed());
     }
 
     private static Class<?> autoConfiguration() {
@@ -156,6 +322,100 @@ class AbnormalAccessMonitorAutoConfigurationTest {
                     return ControlExecution.succeeded(command.getIdempotencyKey());
                 }
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class IdentityConfiguration {
+        @Bean
+        IdentityContextProvider identityContextProvider() {
+            return request -> new IdentityContext("alice", AccountType.PERSON, Collections.singleton("REPORTING"), "session-hash");
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class InternalRuleConfiguration {
+        @Bean
+        InternalRuleContributor hostRuleContributor() {
+            return registrar -> registrar.register(new DetectionRule() {
+                @Override
+                public String getRuleId() {
+                    return "HOST-01";
+                }
+
+                @Override
+                public Optional<io.github.jasper.monitoring.core.domain.RuleMatch> evaluate(SecurityEvent event,
+                                                                                      List<SecurityEvent> history) {
+                    return Optional.empty();
+                }
+            });
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class AnnotatedTriggerConfiguration {
+        @Bean
+        @Lazy
+        AnnotatedTriggerTarget annotatedTriggerTarget(SecurityMonitor monitor) {
+            return new AnnotatedTriggerTarget(monitor);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class DuplicateAnnotatedTriggerConfiguration {
+        @Bean
+        DuplicateAnnotatedTriggerTarget firstAnnotatedTriggerTarget() {
+            return new DuplicateAnnotatedTriggerTarget();
+        }
+
+        @Bean
+        DuplicateAnnotatedTriggerTarget secondAnnotatedTriggerTarget() {
+            return new DuplicateAnnotatedTriggerTarget();
+        }
+    }
+
+    @MonitorAction(eventType = SecurityEventType.QUERY, action = "type-default")
+    public static class AnnotatedController {
+        @MonitorAction(eventType = SecurityEventType.EXPORT, action = "export-report", resourceType = "report")
+        public void export() {
+        }
+    }
+
+    public static class AnnotatedTriggerTarget {
+        private static final AtomicBoolean CREATED = new AtomicBoolean();
+        private final SecurityMonitor monitor;
+        private ControlCommand lastCommand;
+
+        public AnnotatedTriggerTarget(SecurityMonitor monitor) {
+            CREATED.set(true);
+            this.monitor = monitor;
+        }
+
+        static void reset() {
+            CREATED.set(false);
+        }
+
+        static boolean isCreated() {
+            return CREATED.get();
+        }
+
+        @ControlTrigger(ControlActionType.DENY)
+        public void deny(ControlCommand command) {
+            lastCommand = command;
+        }
+
+        ControlCommand getLastCommand() {
+            return lastCommand;
+        }
+
+        SecurityMonitor getMonitor() {
+            return monitor;
+        }
+    }
+
+    public static class DuplicateAnnotatedTriggerTarget {
+        @ControlTrigger(ControlActionType.DENY)
+        public void deny(ControlCommand command) {
         }
     }
 }

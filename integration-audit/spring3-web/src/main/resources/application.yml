@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:audit-spring3;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+abnormal:
+  access:
+    monitor:
+      system-id: audit-spring3-web # 本审计示例的稳定系统标识
+      mode: ENFORCE # 演示规则命中后调用 @ControlTrigger 方法
+      frontend:
+        enabled: false # 不接收浏览器补充信号；服务端埋点仍生效
+      instrumentation:
+        enabled: true # 自动拦截 MVC 方法上的 @MonitorAction
+      trusted-proxies: [] # 本地直连，不信任 X-Forwarded-For

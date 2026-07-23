@@ -1,8 +1,11 @@
 package io.github.jasper.monitoring.core;
 
+import io.github.jasper.monitoring.core.application.AlertLifecycleService;
+import io.github.jasper.monitoring.core.domain.SecurityAlert;
+import io.github.jasper.monitoring.core.infrastructure.memory.InMemoryMonitoringRepository;
+import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-
 import io.github.jasper.monitoring.api.AlertStatus;
 import io.github.jasper.monitoring.api.DispositionType;
 import io.github.jasper.monitoring.api.RiskLevel;
@@ -17,6 +20,19 @@ import org.junit.jupiter.api.Test;
 class AlertLifecycleServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-07-22T01:10:00Z");
+
+    @Test
+    void rollsBackInMemoryChangesWhenTransactionWorkFails() {
+        InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
+
+        assertThrows(IllegalStateException.class, () -> repository.inTransaction(() -> {
+            repository.saveAlert(new SecurityAlert("alert-rollback", "AUTH-01", RiskLevel.HIGH,
+                "AUTH-01:alice", "alice", AlertStatus.NEW, NOW, NOW, 1));
+            throw new IllegalStateException("simulated failure");
+        }));
+
+        assertEquals(0, repository.getAlerts().size());
+    }
 
     @Test
     void acknowledgesAndClosesWithAppendOnlyHistoryWhilePreservingOriginalEvents() {

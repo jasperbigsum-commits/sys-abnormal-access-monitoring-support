@@ -1,16 +1,16 @@
 package io.github.jasper.monitoring.api;
 
 /**
- * Required host-side bridge to its established authentication subsystem.
+ * 连接宿主既有认证子系统的必需适配点。
  *
- * <p>This component is the authoritative source of the principal used for monitoring.</p>
+ * <p>该组件是监测所用主体信息的权威来源。</p>
  */
 public interface IdentityContextProvider {
     /**
-     * Resolves the identity for a request using trusted server-side authentication state.
+     * 使用可信的服务端认证状态解析请求身份。
      *
-     * @param request sanitized request facts supplied by the framework adapter
-     * @return the resolved identity, or {@link IdentityContext#anonymous()} when no identity exists
+     * @param request 框架适配器提供且已清洗的请求事实
+     * @return 解析后的身份；无身份时返回 {@link IdentityContext#anonymous()}
      */
     IdentityContext resolve(MonitoringRequestContext request);
 }

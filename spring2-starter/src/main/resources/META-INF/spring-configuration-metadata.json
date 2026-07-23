@@ -3,9 +3,12 @@
     { "name": "abnormal.access.monitor", "type": "io.github.jasper.monitoring.spring2.autoconfigure.AbnormalAccessMonitorProperties" }
   ],
   "properties": [
-    { "name": "abnormal.access.monitor.system-id", "type": "java.lang.String", "defaultValue": "application" },
-    { "name": "abnormal.access.monitor.mode", "type": "io.github.jasper.monitoring.api.MonitoringMode", "defaultValue": "OBSERVE" },
-    { "name": "abnormal.access.monitor.frontend.enabled", "type": "java.lang.Boolean", "defaultValue": true },
-    { "name": "abnormal.access.monitor.trusted-proxies", "type": "java.util.List<java.lang.String>" }
+    { "name": "abnormal.access.monitor.system-id", "type": "java.lang.String", "defaultValue": "application", "description": "写入每条审计事件的系统标识；同一部署实例保持稳定。" },
+    { "name": "abnormal.access.monitor.mode", "type": "io.github.jasper.monitoring.api.MonitoringMode", "defaultValue": "OBSERVE", "description": "OBSERVE 只记录告警；ENFORCE 还调用已注册的控制方法。" },
+    { "name": "abnormal.access.monitor.frontend.enabled", "type": "java.lang.Boolean", "defaultValue": true, "description": "是否接收前端补充信号；不影响服务端 @MonitorAction 审计。" },
+    { "name": "abnormal.access.monitor.instrumentation.enabled", "type": "java.lang.Boolean", "defaultValue": true, "description": "是否自动记录 MVC 方法上的 @MonitorAction。" },
+    { "name": "abnormal.access.monitor.mdc.enabled", "type": "java.lang.Boolean", "defaultValue": true, "description": "是否将审计 traceId 写入日志 MDC。" },
+    { "name": "abnormal.access.monitor.mdc.trace-id-key", "type": "java.lang.String", "defaultValue": "traceId", "description": "日志格式读取追踪标识时使用的 MDC 键。" },
+    { "name": "abnormal.access.monitor.trusted-proxies", "type": "java.util.List<java.lang.String>", "description": "可解析转发 IP 头的反向代理地址或 CIDR；留空表示不信任转发头。" }
   ]
 }

@@ -1,14 +1,20 @@
 package io.github.jasper.monitoring.mybatis;
 
+import io.github.jasper.monitoring.mybatis.po.SecurityEventPo;
+import io.github.jasper.monitoring.mybatis.po.SecurityEventAttributePo;
+import io.github.jasper.monitoring.mybatis.po.SecurityAlertPo;
+import io.github.jasper.monitoring.mybatis.po.ControlActionPo;
+import io.github.jasper.monitoring.mybatis.po.AlertDispositionPo;
 import io.github.jasper.monitoring.api.ControlStatus;
-import io.github.jasper.monitoring.core.AlertDisposition;
-import io.github.jasper.monitoring.core.ControlCommand;
-import io.github.jasper.monitoring.core.ControlExecution;
-import io.github.jasper.monitoring.core.ControlRecord;
-import io.github.jasper.monitoring.core.MonitoringRepository;
-import io.github.jasper.monitoring.core.SecurityAlert;
-import io.github.jasper.monitoring.core.SecurityEvent;
-import io.github.jasper.monitoring.core.WhitelistEntry;
+import io.github.jasper.monitoring.core.domain.AlertDisposition;
+import io.github.jasper.monitoring.core.domain.ControlCommand;
+import io.github.jasper.monitoring.core.domain.ControlExecution;
+import io.github.jasper.monitoring.core.domain.ControlRecord;
+import io.github.jasper.monitoring.core.port.MonitoringRepository;
+import io.github.jasper.monitoring.core.port.TransactionWork;
+import io.github.jasper.monitoring.core.domain.SecurityAlert;
+import io.github.jasper.monitoring.core.domain.SecurityEvent;
+import io.github.jasper.monitoring.core.domain.WhitelistEntry;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -18,15 +24,19 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import org.apache.ibatis.session.SqlSession;
+import java.util.function.Function;
 import org.apache.ibatis.session.SqlSessionFactory;
+import org.apache.ibatis.session.SqlSessionManager;
 
 /**
  * Production {@link MonitoringRepository} backed by parameterized MyBatis statements.
- * Each write opens a transaction, commits on success, and rolls back when mapper work fails.
+ *
+ * <p>{@link SqlSessionManager} owns the session lifecycle. A repository transaction uses one
+ * managed MyBatis session; nested repository calls join it instead of opening independent
+ * sessions.</p>
  */
 public final class MyBatisMonitoringRepository implements MonitoringRepository {
-    private final SqlSessionFactory sqlSessionFactory;
+    private final SqlSessionManager sessionManager;
 
     /**
      * Creates a repository and registers its mapper and timestamp handler with the supplied factory.
@@ -34,84 +44,85 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
      * @param sqlSessionFactory configured factory connected to a database migrated with {@code monitoring-schema.sql}
      */
     public MyBatisMonitoringRepository(SqlSessionFactory sqlSessionFactory) {
-        this.sqlSessionFactory = Objects.requireNonNull(sqlSessionFactory, "sqlSessionFactory");
+        Objects.requireNonNull(sqlSessionFactory, "sqlSessionFactory");
         MyBatisMonitoringRepositoryRegistrar.register(sqlSessionFactory);
+        this.sessionManager = SqlSessionManager.newInstance(sqlSessionFactory);
+    }
+
+    @Override
+    public <T> T inTransaction(TransactionWork<T> work) {
+        Objects.requireNonNull(work, "work");
+        if (sessionManager.isManagedSessionStarted()) {
+            return work.execute();
+        }
+        sessionManager.startManagedSession(false);
+        try {
+            T result = work.execute();
+            sessionManager.commit();
+            return result;
+        } catch (RuntimeException exception) {
+            sessionManager.rollback();
+            throw exception;
+        } finally {
+            sessionManager.close();
+        }
     }
 
     @Override
     public void saveEvent(final SecurityEvent event) {
         Objects.requireNonNull(event, "event");
-        write(new MapperWork<Void>() {
-            @Override
-            public Void execute(MonitoringSqlMapper mapper) {
-                mapper.insertEvent(toRow(event));
-                for (String roleId : event.getRoleIds()) {
-                    mapper.insertEventRole(event.getEventId(), roleId);
-                }
-                for (Map.Entry<String, String> attribute : event.getAttributes().entrySet()) {
-                    mapper.insertEventAttribute(event.getEventId(), attribute.getKey(), attribute.getValue());
-                }
-                return null;
+        write(mapper -> {
+            mapper.insertEvent(toRow(event));
+            for (String roleId : event.getRoleIds()) {
+                mapper.insertEventRole(event.getEventId(), roleId);
             }
+            for (Map.Entry<String, String> attribute : event.getAttributes().entrySet()) {
+                mapper.insertEventAttribute(event.getEventId(), attribute.getKey(), attribute.getValue());
+            }
+            return null;
         });
     }
 
     @Override
     public List<SecurityEvent> findEventsSince(final Instant since) {
         Objects.requireNonNull(since, "since");
-        return read(new MapperWork<List<SecurityEvent>>() {
-            @Override
-            public List<SecurityEvent> execute(MonitoringSqlMapper mapper) {
-                List<SecurityEvent> events = new ArrayList<SecurityEvent>();
-                for (MonitoringSqlMapper.EventRow row : mapper.findEventsSince(since)) {
-                    Set<String> roleIds = new LinkedHashSet<String>(mapper.findEventRoles(row.getEventId()));
-                    Map<String, String> attributes = new LinkedHashMap<String, String>();
-                    for (MonitoringSqlMapper.EventAttributeRow attribute : mapper.findEventAttributes(row.getEventId())) {
-                        attributes.put(attribute.getAttributeKey(), attribute.getAttributeValue());
-                    }
-                    events.add(toEvent(row, roleIds, attributes));
+        return read(mapper -> {
+            List<SecurityEvent> events = new ArrayList<SecurityEvent>();
+            for (SecurityEventPo row : mapper.findEventsSince(since)) {
+                Set<String> roleIds = new LinkedHashSet<String>(mapper.findEventRoles(row.getEventId()));
+                Map<String, String> attributes = new LinkedHashMap<String, String>();
+                for (SecurityEventAttributePo attribute : mapper.findEventAttributes(row.getEventId())) {
+                    attributes.put(attribute.getAttributeKey(), attribute.getAttributeValue());
                 }
-                return events;
+                events.add(toEvent(row, roleIds, attributes));
             }
+            return events;
         });
     }
 
     @Override
     public Optional<SecurityAlert> findOpenAlert(final String fingerprint) {
         Objects.requireNonNull(fingerprint, "fingerprint");
-        MonitoringSqlMapper.AlertRow row = read(new MapperWork<MonitoringSqlMapper.AlertRow>() {
-            @Override
-            public MonitoringSqlMapper.AlertRow execute(MonitoringSqlMapper mapper) {
-                return mapper.findOpenAlert(fingerprint);
-            }
-        });
+        SecurityAlertPo row = read(mapper -> mapper.findOpenAlert(fingerprint));
         return row == null ? Optional.<SecurityAlert>empty() : Optional.of(toAlert(row));
     }
 
     @Override
     public Optional<SecurityAlert> findAlert(final String alertId) {
         Objects.requireNonNull(alertId, "alertId");
-        MonitoringSqlMapper.AlertRow row = read(new MapperWork<MonitoringSqlMapper.AlertRow>() {
-            @Override
-            public MonitoringSqlMapper.AlertRow execute(MonitoringSqlMapper mapper) {
-                return mapper.findAlert(alertId);
-            }
-        });
+        SecurityAlertPo row = read(mapper -> mapper.findAlert(alertId));
         return row == null ? Optional.<SecurityAlert>empty() : Optional.of(toAlert(row));
     }
 
     @Override
     public void saveAlert(final SecurityAlert alert) {
         Objects.requireNonNull(alert, "alert");
-        final MonitoringSqlMapper.AlertRow row = toRow(alert);
-        write(new MapperWork<Void>() {
-            @Override
-            public Void execute(MonitoringSqlMapper mapper) {
-                if (mapper.updateAlert(row) == 0) {
-                    mapper.insertAlert(row);
-                }
-                return null;
+        final SecurityAlertPo row = toRow(alert);
+        write(mapper -> {
+            if (mapper.updateAlert(row) == 0) {
+                mapper.insertAlert(row);
             }
+            return null;
         });
     }
 
@@ -119,69 +130,52 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
     public void linkAlertEvent(final String alertId, final String eventId) {
         Objects.requireNonNull(alertId, "alertId");
         Objects.requireNonNull(eventId, "eventId");
-        write(new MapperWork<Void>() {
-            @Override
-            public Void execute(MonitoringSqlMapper mapper) {
-                if (mapper.countAlertEventLink(alertId, eventId) == 0) {
-                    mapper.insertAlertEventLink(alertId, eventId);
-                }
-                return null;
+        write(mapper -> {
+            if (mapper.countAlertEventLink(alertId, eventId) == 0) {
+                mapper.insertAlertEventLink(alertId, eventId);
             }
+            return null;
         });
     }
 
     @Override
     public void appendAlertDisposition(final AlertDisposition disposition) {
         Objects.requireNonNull(disposition, "disposition");
-        final MonitoringSqlMapper.DispositionRow row = toRow(disposition);
-        write(new MapperWork<Void>() {
-            @Override
-            public Void execute(MonitoringSqlMapper mapper) {
-                mapper.insertAlertDisposition(row);
-                return null;
-            }
+        final AlertDispositionPo row = toRow(disposition);
+        write(mapper -> {
+            mapper.insertAlertDisposition(row);
+            return null;
         });
     }
 
     @Override
     public List<AlertDisposition> findAlertDispositions(final String alertId) {
         Objects.requireNonNull(alertId, "alertId");
-        return read(new MapperWork<List<AlertDisposition>>() {
-            @Override
-            public List<AlertDisposition> execute(MonitoringSqlMapper mapper) {
-                List<AlertDisposition> dispositions = new ArrayList<AlertDisposition>();
-                for (MonitoringSqlMapper.DispositionRow row : mapper.findAlertDispositions(alertId)) {
-                    dispositions.add(toDisposition(row));
-                }
-                return dispositions;
+        return read(mapper -> {
+            List<AlertDisposition> dispositions = new ArrayList<AlertDisposition>();
+            for (AlertDispositionPo row : mapper.findAlertDispositions(alertId)) {
+                dispositions.add(toDisposition(row));
             }
+            return dispositions;
         });
     }
 
     @Override
     public Optional<ControlRecord> findControl(final String idempotencyKey) {
         Objects.requireNonNull(idempotencyKey, "idempotencyKey");
-        MonitoringSqlMapper.ControlRow row = read(new MapperWork<MonitoringSqlMapper.ControlRow>() {
-            @Override
-            public MonitoringSqlMapper.ControlRow execute(MonitoringSqlMapper mapper) {
-                return mapper.findControl(idempotencyKey);
-            }
-        });
+        ControlActionPo row = read(mapper -> mapper.findControl(idempotencyKey));
         return row == null ? Optional.<ControlRecord>empty() : Optional.of(toControlRecord(row));
     }
 
     @Override
     public void saveControl(final ControlRecord record) {
         Objects.requireNonNull(record, "record");
-        final MonitoringSqlMapper.ControlRow row = toRow(record);
-        write(new MapperWork<Void>() {
-            @Override
-            public Void execute(MonitoringSqlMapper mapper) {
-                if (mapper.updateControl(row) == 0) {
-                    mapper.insertControl(row);
-                }
-                return null;
+        final ControlActionPo row = toRow(record);
+        write(mapper -> {
+            if (mapper.updateControl(row) == 0) {
+                mapper.insertControl(row);
             }
+            return null;
         });
     }
 
@@ -190,12 +184,7 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
         Objects.requireNonNull(ruleId, "ruleId");
         Objects.requireNonNull(subject, "subject");
         Objects.requireNonNull(at, "at");
-        return read(new MapperWork<Integer>() {
-            @Override
-            public Integer execute(MonitoringSqlMapper mapper) {
-                return Integer.valueOf(mapper.countActiveWhitelist(ruleId, subject, at));
-            }
-        }).intValue() > 0;
+        return read(mapper -> Integer.valueOf(mapper.countActiveWhitelist(ruleId, subject, at))).intValue() > 0;
     }
 
     @Override
@@ -204,37 +193,36 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
         if (entry.getExpiresAt() == null) {
             throw new IllegalArgumentException("Whitelist entries must have an expiry time");
         }
-        write(new MapperWork<Void>() {
-            @Override
-            public Void execute(MonitoringSqlMapper mapper) {
-                if (mapper.countWhitelist(entry.getRuleId(), entry.getSubject(), entry.getExpiresAt()) == 0) {
-                    mapper.insertWhitelist(entry.getRuleId(), entry.getSubject(), entry.getExpiresAt());
-                }
-                return null;
+        write(mapper -> {
+            if (mapper.countWhitelist(entry.getRuleId(), entry.getSubject(), entry.getExpiresAt()) == 0) {
+                mapper.insertWhitelist(entry.getRuleId(), entry.getSubject(), entry.getExpiresAt());
             }
+            return null;
         });
     }
 
-    private <T> T read(MapperWork<T> work) {
-        try (SqlSession session = sqlSessionFactory.openSession()) {
-            return work.execute(session.getMapper(MonitoringSqlMapper.class));
+    private <T> T read(Function<MonitoringSqlMapper, T> work) {
+        if (sessionManager.isManagedSessionStarted()) {
+            return work.apply(mapper());
+        }
+        sessionManager.startManagedSession(true);
+        try {
+            return work.apply(mapper());
+        } finally {
+            sessionManager.close();
         }
     }
 
-    private void write(MapperWork<Void> work) {
-        try (SqlSession session = sqlSessionFactory.openSession(false)) {
-            try {
-                work.execute(session.getMapper(MonitoringSqlMapper.class));
-                session.commit();
-            } catch (RuntimeException exception) {
-                session.rollback();
-                throw exception;
-            }
-        }
+    private void write(Function<MonitoringSqlMapper, Void> work) {
+        inTransaction(() -> work.apply(mapper()));
     }
 
-    private static MonitoringSqlMapper.EventRow toRow(SecurityEvent event) {
-        MonitoringSqlMapper.EventRow row = new MonitoringSqlMapper.EventRow();
+    private MonitoringSqlMapper mapper() {
+        return sessionManager.getMapper(MonitoringSqlMapper.class);
+    }
+
+    private static SecurityEventPo toRow(SecurityEvent event) {
+        SecurityEventPo row = new SecurityEventPo();
         row.setEventId(event.getEventId());
         row.setSystemId(event.getSystemId());
         row.setEventType(event.getEventType());
@@ -258,7 +246,7 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
         return row;
     }
 
-    private static SecurityEvent toEvent(MonitoringSqlMapper.EventRow row, Set<String> roleIds,
+    private static SecurityEvent toEvent(SecurityEventPo row, Set<String> roleIds,
                                          Map<String, String> attributes) {
         return SecurityEvent.builder()
             .eventId(row.getEventId())
@@ -286,8 +274,8 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
             .build();
     }
 
-    private static MonitoringSqlMapper.AlertRow toRow(SecurityAlert alert) {
-        MonitoringSqlMapper.AlertRow row = new MonitoringSqlMapper.AlertRow();
+    private static SecurityAlertPo toRow(SecurityAlert alert) {
+        SecurityAlertPo row = new SecurityAlertPo();
         row.setAlertId(alert.getAlertId());
         row.setRuleId(alert.getRuleId());
         row.setRiskLevel(alert.getRiskLevel());
@@ -300,13 +288,13 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
         return row;
     }
 
-    private static SecurityAlert toAlert(MonitoringSqlMapper.AlertRow row) {
+    private static SecurityAlert toAlert(SecurityAlertPo row) {
         return new SecurityAlert(row.getAlertId(), row.getRuleId(), row.getRiskLevel(), row.getFingerprint(),
             row.getSubject(), row.getStatus(), row.getFirstSeen(), row.getLastSeen(), row.getEventCount());
     }
 
-    private static MonitoringSqlMapper.DispositionRow toRow(AlertDisposition disposition) {
-        MonitoringSqlMapper.DispositionRow row = new MonitoringSqlMapper.DispositionRow();
+    private static AlertDispositionPo toRow(AlertDisposition disposition) {
+        AlertDispositionPo row = new AlertDispositionPo();
         row.setDispositionId(disposition.getDispositionId());
         row.setAlertId(disposition.getAlertId());
         row.setDispositionType(disposition.getDispositionType());
@@ -317,15 +305,15 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
         return row;
     }
 
-    private static AlertDisposition toDisposition(MonitoringSqlMapper.DispositionRow row) {
+    private static AlertDisposition toDisposition(AlertDispositionPo row) {
         return new AlertDisposition(row.getDispositionId(), row.getAlertId(), row.getDispositionType(),
             row.getOperatorId(), row.getCommentText(), row.getEvidenceSummary(), row.getCreatedAt());
     }
 
-    private static MonitoringSqlMapper.ControlRow toRow(ControlRecord record) {
+    private static ControlActionPo toRow(ControlRecord record) {
         ControlCommand command = record.getCommand();
         ControlExecution execution = record.getExecution();
-        MonitoringSqlMapper.ControlRow row = new MonitoringSqlMapper.ControlRow();
+        ControlActionPo row = new ControlActionPo();
         row.setControlId(execution.getControlId());
         row.setIdempotencyKey(command.getIdempotencyKey());
         row.setAlertId(command.getAlertId());
@@ -338,7 +326,7 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
         return row;
     }
 
-    private static ControlRecord toControlRecord(MonitoringSqlMapper.ControlRow row) {
+    private static ControlRecord toControlRecord(ControlActionPo row) {
         ControlCommand command = new ControlCommand(row.getIdempotencyKey(), row.getAlertId(), row.getSubject(),
             row.getAction(), row.getExpiresAt());
         ControlExecution execution;
@@ -352,9 +340,5 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
             throw new IllegalStateException("Unknown persisted control status: " + row.getStatus());
         }
         return new ControlRecord(command, execution, row.getExecutedAt());
-    }
-
-    private interface MapperWork<T> {
-        T execute(MonitoringSqlMapper mapper);
     }
 }

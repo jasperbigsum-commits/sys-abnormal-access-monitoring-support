@@ -1,9 +1,9 @@
 package io.github.jasper.monitoring.api;
 
 /**
- * Immutable result of the host application's resource-scope authorization check.
+ * 宿主系统资源范围授权检查的不可变结果。
  *
- * <p>A denial may include a stable reason code suitable for security events and audit records.</p>
+ * <p>拒绝结果可携带稳定且非敏感的原因码，供安全事件和审计记录引用。</p>
  */
 public final class AuthorizationDecision {
     private final boolean allowed;
@@ -13,23 +13,23 @@ public final class AuthorizationDecision {
         this.reasonCode = SecurityFieldSanitizer.text(reasonCode, 128);
     }
     /**
-     * Creates an allow decision without a denial reason.
+     * 创建允许访问的决策，不包含拒绝原因。
      *
-     * @return an allowed decision
+     * @return 允许访问的决策
      */
     public static AuthorizationDecision allowed() { return new AuthorizationDecision(true, null); }
 
     /**
-     * Creates a deny decision.
+     * 创建拒绝访问的决策。
      *
-     * @param reasonCode a non-sensitive, stable code explaining the denial
-     * @return a denied decision
+     * @param reasonCode 说明拒绝原因的稳定、非敏感代码
+     * @return 拒绝访问的决策
      */
     public static AuthorizationDecision denied(String reasonCode) { return new AuthorizationDecision(false, reasonCode); }
 
-    /** @return whether the host allows access to the requested resource scope */
+    /** @return 宿主系统是否允许访问目标资源范围 */
     public boolean isAllowed() { return allowed; }
 
-    /** @return the sanitized denial reason, or {@code null} for an allow decision */
+    /** @return 已清洗的拒绝原因码；允许访问时为 {@code null} */
     public String getReasonCode() { return reasonCode; }
 }

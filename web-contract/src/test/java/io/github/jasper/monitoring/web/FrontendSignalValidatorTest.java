@@ -1,7 +1,6 @@
 package io.github.jasper.monitoring.web;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
-
 import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;

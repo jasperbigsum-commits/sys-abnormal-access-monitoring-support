@@ -1,10 +1,8 @@
 package io.github.jasper.monitoring.maven;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
@@ -25,19 +23,25 @@ class StarterFilesGeneratorTest {
         StarterFilesGenerator.GenerationResult result = StarterFilesGenerator.generate(
             outputDirectory, "com.example.orders.monitoring", "orders-service");
 
-        assertEquals(4, result.getCreatedFiles().size());
+        assertEquals(5, result.getCreatedFiles().size());
         assertTrue(result.getSkippedFiles().isEmpty());
         String yaml = read(outputDirectory.resolve("application-abnormal-access-monitoring.yml"));
         assertTrue(yaml.contains("abnormal:\n  access:\n    monitor:"));
         assertTrue(yaml.contains("mode: OBSERVE"));
         assertTrue(yaml.contains("system-id: orders-service"));
+        assertTrue(yaml.contains("trace-id-key: traceId"));
         assertFalse(yaml.toLowerCase().contains("password"));
 
         String hostSpi = read(outputDirectory.resolve("host-spi/HostMonitoringSpi.java"));
         assertTrue(hostSpi.contains("package com.example.orders.monitoring;"));
         assertTrue(hostSpi.contains("IdentityContextProvider, ResourceScopeAuthorizer"));
-        assertTrue(hostSpi.contains("EventEnricher, TrustedProxyResolver"));
+        assertTrue(hostSpi.contains("TrustedProxyResolver"));
+        assertFalse(hostSpi.contains("EventEnricher"));
         assertTrue(hostSpi.contains("HOST_SCOPE_AUTHORIZATION_NOT_IMPLEMENTED"));
+
+        String actions = read(outputDirectory.resolve("host-spi/HostMonitoringActions.java"));
+        assertTrue(actions.contains("MonitoringActionRegistry"));
+        assertTrue(actions.contains("report:export"));
 
         String controlHandler = read(outputDirectory.resolve("host-spi/HostControlHandler.java"));
         assertTrue(controlHandler.contains("implements ControlHandler"));
@@ -60,7 +64,7 @@ class StarterFilesGeneratorTest {
 
         assertEquals("keep-this-value\n", read(configuration));
         assertTrue(result.getSkippedFiles().contains(configuration));
-        assertEquals(3, result.getCreatedFiles().size());
+        assertEquals(4, result.getCreatedFiles().size());
     }
 
     @Test
@@ -83,6 +87,7 @@ class StarterFilesGeneratorTest {
 
         assertTrue(Files.exists(outputDirectory.resolve("application-abnormal-access-monitoring.yml")));
         assertTrue(Files.exists(outputDirectory.resolve("host-spi/HostMonitoringSpi.java")));
+        assertTrue(Files.exists(outputDirectory.resolve("host-spi/HostMonitoringActions.java")));
     }
 
     private static String read(Path file) throws IOException {
