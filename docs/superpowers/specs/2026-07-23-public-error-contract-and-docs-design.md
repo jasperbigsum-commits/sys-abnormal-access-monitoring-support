@@ -51,6 +51,8 @@ meaning are not renamed or reused.
 | `MON-102` | `CONFLICTING_ACTION_DEFINITION` | Make every registration for the action identical. |
 | `MON-103` | `RULE_REGISTRY_FROZEN` | Register rules before monitor construction. |
 | `MON-104` | `DUPLICATE_CONTROL_BINDING` | Keep one host control binding for each action. |
+| `MON-105` | `INVALID_CONTROL_TRIGGER` | Correct the annotated method visibility, parameter, return type, or action. |
+| `MON-106` | `DUPLICATE_INTERNAL_RULE_ID` | Keep one internal rule implementation for each rule ID. |
 | `MON-201` | `ALERT_NOT_FOUND` | Refresh the alert identifier; do not retry unchanged. |
 | `MON-202` | `INVALID_ALERT_TRANSITION` | Reload alert state and select a permitted transition. |
 | `MON-301` | `ENFORCEMENT_HANDLER_REQUIRED` | Add and validate a host `ControlHandler` before `ENFORCE`. |
