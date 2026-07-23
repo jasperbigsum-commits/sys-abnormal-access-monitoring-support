@@ -60,7 +60,7 @@ abnormal:
 
 必须实现并注册 `IdentityContextProvider`、`ResourceScopeAuthorizer` 和 `TrustedProxyResolver`；可选实现 `EventEnricher`。业务资源访问通过 `ResourceAccessGuard` 调用宿主授权器，组件只记录允许或拒绝结果，绝不把拒绝变为允许。未配置资源授权器时默认拒绝。
 
-生产环境配置数据源和 `SqlSessionFactory` 后自动使用 `MyBatisMonitoringRepository`；没有它时会回退内存仓储，仅适用于本地开发或测试。组件不自动建表，也不发布业务端点。前端信号必须由宿主端点完成认证、限流和 JSON 校验后，再传入 `FrontendSignalRecorder`。
+生产环境配置数据源和 `SqlSessionFactory` 后自动使用 `MyBatisMonitoringRepository`；没有它时会回退内存仓储，仅适用于本地开发或测试。组件不自动建表，也不发布业务端点。前端补充信息由宿主后端 API 接收；组件统一 `FrontendSignal` v1 请求语义和 `FrontendSignalRecorder` 记录入口，不规定 URL、认证方式或响应 JSON。宿主必须完成认证、请求体大小限制、限流、Schema 校验和可信上下文构建；字段映射、安全顺序及 HTTP 状态语义见 [前端补充信息统一接入](docs/集成指南.md#6-前端补充信息统一接入)。
 
 不要写入密码、令牌、Cookie、密钥、未经批准的请求体或响应体。用户、角色、源 IP、会话和最终授权结论均由服务端建立；前端数据只能作为补充证据。
 
@@ -79,7 +79,7 @@ mvn io.github.jasperbigsum-commits:sys-abnormal-access-monitoring-maven-plugin:$
 
 ## 文档与验证
 
-- [集成指南](docs/集成指南.md)：依赖、SPI、MyBatis、前端契约和插件参数。
+- [集成指南：前端补充信息统一接入](docs/集成指南.md#6-前端补充信息统一接入)：统一请求契约、宿主适配、安全校验和响应边界；另含依赖、SPI、MyBatis 和插件参数说明。
 - [架构与运维说明](docs/架构与运维说明.md)：运行时边界、上线步骤、迁移和巡检。
 - [Javadoc 生成说明](docs/Javadoc生成说明.md)：发布 Javadoc JAR 和聚合 HTML 的命令。
 - 前端契约：`web-contract/src/main/resources/frontend-signal.schema.json`。
