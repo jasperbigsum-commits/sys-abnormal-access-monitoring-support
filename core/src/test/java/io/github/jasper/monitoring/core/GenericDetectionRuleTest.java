@@ -82,6 +82,45 @@ class GenericDetectionRuleTest {
             Collections.<String, String>emptyMap()), Collections.<SecurityEvent>emptyList()).isPresent());
     }
 
+    @Test
+    void dataCountAggregationIgnoresUnknownCandidatesButCountsExplicitZero() {
+        WindowAggregateRule rule = dataCountRule(1);
+        SecurityEvent unknown = event(SecurityEventType.QUERY, "alice", null, null, NOW,
+            Collections.<String, String>emptyMap());
+        SecurityEvent explicitZero = dataCountEvent(0L, NOW);
+
+        assertFalse(rule.evaluate(unknown, Collections.singletonList(unknown)).isPresent());
+        assertTrue(rule.evaluate(explicitZero, Collections.singletonList(explicitZero)).isPresent());
+    }
+
+    @Test
+    void dataCountAggregationSaturatesKnownValuesInsteadOfOverflowing() {
+        WindowAggregateRule rule = dataCountRule(Long.MAX_VALUE);
+        SecurityEvent prior = dataCountEvent(1L, NOW.minusSeconds(1));
+        SecurityEvent current = dataCountEvent(Long.MAX_VALUE, NOW);
+
+        assertTrue(rule.evaluate(current, Arrays.asList(prior, current)).isPresent());
+    }
+
+    private static WindowAggregateRule dataCountRule(long threshold) {
+        return new WindowAggregateRule("DATA-03",
+            event -> event.getEventType() == SecurityEventType.QUERY,
+            event -> event.getEventType() == SecurityEventType.QUERY,
+            Duration.ofMinutes(5), threshold, WindowAggregateRule.Scope.USER,
+            WindowAggregateRule.Aggregation.DATA_COUNT, RiskLevel.MEDIUM,
+            Collections.singletonList(ControlActionType.REQUIRE_MFA), "data count");
+    }
+
+    private static SecurityEvent dataCountEvent(long dataCount, Instant occurredAt) {
+        return SecurityEvent.builder()
+            .eventType(SecurityEventType.QUERY)
+            .userId("alice")
+            .sourceIp("203.0.113.8")
+            .occurredAt(occurredAt)
+            .dataCount(dataCount)
+            .build();
+    }
+
     private SecurityEvent event(SecurityEventType type, String userId, String sessionId, String resourceId, Instant occurredAt,
                                 Map<String, String> attributes) {
         return SecurityEvent.builder()

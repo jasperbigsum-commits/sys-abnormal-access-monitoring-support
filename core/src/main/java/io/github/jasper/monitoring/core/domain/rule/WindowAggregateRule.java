@@ -102,10 +102,18 @@ public final class WindowAggregateRule extends AbstractDetectionRule {
         long total = 0;
         for (SecurityEvent candidateEvent : history) {
             if (included(event, candidateEvent)) {
-                total += aggregation == Aggregation.DATA_COUNT ? Math.max(1, candidateEvent.getDataCount()) : 1;
+                if (aggregation == Aggregation.DATA_COUNT && !candidateEvent.hasDataCount()) {
+                    continue;
+                }
+                long value = aggregation == Aggregation.DATA_COUNT ? Math.max(1, candidateEvent.getDataCount()) : 1;
+                total = addSaturated(total, value);
             }
         }
         return total;
+    }
+
+    private static long addSaturated(long total, long value) {
+        return Long.MAX_VALUE - total < value ? Long.MAX_VALUE : total + value;
     }
 
     private boolean included(SecurityEvent event, SecurityEvent candidateEvent) {

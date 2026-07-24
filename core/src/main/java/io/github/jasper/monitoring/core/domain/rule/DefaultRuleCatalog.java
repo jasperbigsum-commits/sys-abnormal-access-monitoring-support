@@ -62,8 +62,8 @@ public final class DefaultRuleCatalog {
                 WindowAggregateRule.Aggregation.DISTINCT_RESOURCE_COUNT, RiskLevel.HIGH,
                 actions(ControlActionType.DENY, ControlActionType.REQUIRE_APPROVAL), "large range access"),
             new WindowAggregateRule("DATA-03", event -> truthy(event.getAttribute("sensitive"))
-                && "false".equalsIgnoreCase(event.getAttribute("work_hours")), event -> truthy(event.getAttribute("sensitive"))
-                && "false".equalsIgnoreCase(event.getAttribute("work_hours")), Duration.ofHours(24), 50,
+                && falsy(event.getAttribute("work_hours")), event -> truthy(event.getAttribute("sensitive"))
+                && falsy(event.getAttribute("work_hours")), Duration.ofHours(24), 50,
                 WindowAggregateRule.Scope.USER, WindowAggregateRule.Aggregation.DATA_COUNT, RiskLevel.MEDIUM,
                 actions(ControlActionType.REQUIRE_MFA), "sensitive access outside work hours"),
             new EventConditionRule("EXPT-01", event -> event.getEventType() == SecurityEventType.EXPORT
@@ -145,7 +145,8 @@ public final class DefaultRuleCatalog {
                     if (!candidate.getOccurredAt().isBefore(start)
                         && !candidate.getOccurredAt().isAfter(event.getOccurredAt())
                         && sameScope(event, candidate, WindowAggregateRule.Scope.USER)
-                        && candidate.getEventType() == SecurityEventType.EXPORT) { total += candidate.getDataCount(); }
+                        && candidate.getEventType() == SecurityEventType.EXPORT
+                        && candidate.hasDataCount()) { total = addSaturated(total, candidate.getDataCount()); }
                 }
                 return total >= 10000 || atLeast(event.getAttribute("baseline_ratio"), 3.0d)
                     ? match(event)
@@ -159,6 +160,20 @@ public final class DefaultRuleCatalog {
         return leftSession != null ? leftSession.equals(right.getSessionIdHash()) : left.subject().equals(right.subject());
     }
     private static List<ControlActionType> actions(ControlActionType... values) { return Arrays.asList(values); }
-    private static boolean truthy(String value) { return "true".equalsIgnoreCase(value) || "1".equals(value); }
-    private static boolean atLeast(String value, double threshold) { try { return value != null && Double.parseDouble(value) >= threshold; } catch (NumberFormatException ignored) { return false; } }
+    private static boolean truthy(String value) { return "true".equals(value); }
+    private static boolean falsy(String value) { return "false".equals(value); }
+    private static boolean atLeast(String value, double threshold) {
+        if (value == null) {
+            return false;
+        }
+        try {
+            double parsed = Double.parseDouble(value);
+            return !Double.isNaN(parsed) && !Double.isInfinite(parsed) && parsed >= threshold;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
+    }
+    private static long addSaturated(long total, long value) {
+        return Long.MAX_VALUE - total < value ? Long.MAX_VALUE : total + value;
+    }
 }

@@ -14,6 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.EventFactSource;
+import io.github.jasper.monitoring.api.EventInputIssue;
+import io.github.jasper.monitoring.api.EventInputValidation;
 import io.github.jasper.monitoring.api.MonitoringMode;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
 import io.github.jasper.monitoring.api.SecurityEventResult;
@@ -207,6 +210,57 @@ class DefaultSecurityMonitorTest {
 
         assertFalse(monitor.record(disabledLogin).getAlerts().isEmpty());
         assertEquals("AUTH-03", repository.getAlerts().get(0).getRuleId());
+    }
+
+    @Test
+    void persistsAnIncompleteExportWithoutCreatingExportMatchesOrControls() {
+        InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
+        DefaultSecurityMonitor monitor = new DefaultSecurityMonitor(
+            "orders", Clock.fixed(Instant.parse("2026-07-22T00:00:00Z"), ZoneOffset.UTC), repository,
+            DefaultRuleCatalog.initialRules(), MonitoringMode.OBSERVE,
+            ControlHandlerRegistry.empty(), NotificationChannel.noop());
+        SecurityEventDraft missingDataCount = SecurityEventDraft.builder()
+            .eventType(SecurityEventType.EXPORT)
+            .action("EXPORT")
+            .result(SecurityEventResult.SUCCESS)
+            .sourceIp("203.0.113.9")
+            .requestId("export-without-count")
+            .userId("alice")
+            .attribute("sensitivity", "HIGH")
+            .occurredAt(Instant.parse("2026-07-22T00:00:00Z"))
+            .build();
+
+        MonitoringOutcome outcome = monitor.record(missingDataCount);
+
+        assertEquals("INCOMPLETE", outcome.getEvent().getInputStatus().name());
+        assertTrue(outcome.getMatches().isEmpty());
+        assertTrue(outcome.getControls().isEmpty());
+        assertEquals(1, repository.getEvents().size());
+    }
+
+    @Test
+    void isolatesInputIssueReporterFailureAfterTheEventTransaction() {
+        AtomicInteger reports = new AtomicInteger();
+        InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
+        DefaultSecurityMonitor monitor = new DefaultSecurityMonitor(
+            "orders", Clock.fixed(Instant.parse("2026-07-22T00:00:00Z"), ZoneOffset.UTC), repository,
+            DefaultRuleCatalog.initialRules(), MonitoringMode.OBSERVE,
+            ControlHandlerRegistry.empty(), NotificationChannel.noop(),
+            (draft, enabledRuleIds) -> EventInputValidation.incomplete(
+                Arrays.asList(EventInputIssue.missing("EXPT-01", "dataCount", EventFactSource.SERVER_COMPUTED)),
+                Arrays.asList("EXPT-01")),
+            (draft, validation) -> {
+                assertEquals(1, repository.getEvents().size());
+                reports.incrementAndGet();
+                throw new IllegalStateException("reporter unavailable");
+            });
+
+        MonitoringOutcome outcome = monitor.record(export("reporter-failure", 10,
+            Instant.parse("2026-07-22T00:00:00Z")));
+
+        assertEquals("INCOMPLETE", outcome.getEvent().getInputStatus().name());
+        assertEquals(1, reports.get());
+        assertEquals(1, repository.getEvents().size());
     }
 
     private SecurityEventDraft loginFailure(String userId, String requestId, Instant occurredAt) {

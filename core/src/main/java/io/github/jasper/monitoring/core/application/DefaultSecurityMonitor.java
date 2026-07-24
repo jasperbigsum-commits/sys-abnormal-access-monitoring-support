@@ -20,15 +20,22 @@ import io.github.jasper.monitoring.core.domain.RuleMatch;
 
 import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
 import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.EventInputValidation;
+import io.github.jasper.monitoring.api.MonitoringEventPolicy;
+import io.github.jasper.monitoring.api.MonitoringInputIssueReporter;
 import io.github.jasper.monitoring.api.MonitoringMode;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
+import io.github.jasper.monitoring.core.application.quality.DefaultMonitoringEventPolicy;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -46,6 +53,9 @@ public final class DefaultSecurityMonitor implements SecurityMonitor {
     private final DefaultAlertService alertService;
     private final DefaultControlService controlService;
     private final NotificationChannel notificationChannel;
+    private final MonitoringEventPolicy eventPolicy;
+    private final MonitoringInputIssueReporter inputIssueReporter;
+    private final Set<String> enabledRuleIds;
 
     /**
      * 创建默认监测器。
@@ -61,11 +71,34 @@ public final class DefaultSecurityMonitor implements SecurityMonitor {
      */
     public DefaultSecurityMonitor(String systemId, Clock clock, MonitoringRepository repository, List<DetectionRule> rules,
                                   MonitoringMode mode, ControlHandlerRegistry handlers, NotificationChannel notifications) {
+        this(systemId, clock, repository, rules, mode, handlers, notifications,
+            new DefaultMonitoringEventPolicy(), MonitoringInputIssueReporter.noop());
+    }
+
+    /**
+     * 创建可替换规则输入策略与诊断报告器的默认监测器。
+     *
+     * <p>报告器仅接收稳定诊断，并在监测事务提交后尽力执行；它无法影响规则、告警或控制结果。</p>
+     *
+     * @param systemId 写入全部事件的稳定系统标识
+     * @param clock 服务端时间来源
+     * @param repository 监测状态的持久化端口
+     * @param rules 每条事件均会评估的确定性规则
+     * @param mode 仅观察模式或执行宿主控制动作的模式
+     * @param handlers 宿主控制动作实现；执行模式下必须至少支持一种可执行动作
+     * @param notifications 尽力而为的告警通知通道
+     * @param eventPolicy 规则资格校验策略
+     * @param inputIssueReporter 已提交事件的输入质量诊断报告器
+     */
+    public DefaultSecurityMonitor(String systemId, Clock clock, MonitoringRepository repository, List<DetectionRule> rules,
+                                  MonitoringMode mode, ControlHandlerRegistry handlers, NotificationChannel notifications,
+                                  MonitoringEventPolicy eventPolicy, MonitoringInputIssueReporter inputIssueReporter) {
         if (systemId == null || systemId.trim().isEmpty()) { throw new IllegalArgumentException("systemId is required"); }
         this.systemId = systemId;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.repository = Objects.requireNonNull(repository, "repository");
         this.rules = new ArrayList<DetectionRule>(rules);
+        this.enabledRuleIds = enabledRuleIds(this.rules);
         this.mode = Objects.requireNonNull(mode, "mode");
         if (this.mode == MonitoringMode.ENFORCE && handlers.isEmpty()) {
             throw new IllegalStateException("ENFORCE mode requires at least one host ControlHandler");
@@ -73,6 +106,8 @@ public final class DefaultSecurityMonitor implements SecurityMonitor {
         this.alertService = new DefaultAlertService(repository, clock);
         this.controlService = new DefaultControlService(repository, handlers, clock);
         this.notificationChannel = Objects.requireNonNull(notifications, "notifications");
+        this.eventPolicy = Objects.requireNonNull(eventPolicy, "eventPolicy");
+        this.inputIssueReporter = Objects.requireNonNull(inputIssueReporter, "inputIssueReporter");
     }
 
     /**
@@ -86,20 +121,25 @@ public final class DefaultSecurityMonitor implements SecurityMonitor {
      */
     @Override
     public MonitoringOutcome record(SecurityEventDraft draft) {
-        SecurityEvent event = SecurityEvent.from(draft, systemId, UUID.randomUUID().toString(), Instant.now(clock));
-        PersistenceResult persistence = repository.inTransaction(() -> persist(event));
+        EventInputValidation validation = eventPolicy.validate(draft, enabledRuleIds);
+        SecurityEvent event = SecurityEvent.from(draft, systemId, UUID.randomUUID().toString(), Instant.now(clock), validation);
+        PersistenceResult persistence = repository.inTransaction(() -> persist(event, validation));
+        reportInputIssues(draft, validation);
         notifyAlerts(persistence.alerts);
         List<ControlExecution> controls = executeControls(persistence.matches, persistence.alerts);
         return new MonitoringOutcome(event, persistence.matches, persistence.alerts, controls);
     }
 
-    private PersistenceResult persist(SecurityEvent event) {
+    private PersistenceResult persist(SecurityEvent event, EventInputValidation validation) {
         repository.saveEvent(event);
         List<SecurityEvent> history = canonicalHistory(event, repository.findEventsSince(
             event.getOccurredAt().minus(Duration.ofDays(1))));
         List<RuleMatch> matches = new ArrayList<RuleMatch>();
         List<SecurityAlert> alerts = new ArrayList<SecurityAlert>();
         for (DetectionRule rule : rules) {
+            if (validation.getIneligibleRuleIds().contains(rule.getRuleId())) {
+                continue;
+            }
             Optional<RuleMatch> match = rule.evaluate(event, history);
             if (!match.isPresent()) { continue; }
             RuleMatch value = match.get();
@@ -109,6 +149,25 @@ public final class DefaultSecurityMonitor implements SecurityMonitor {
             alerts.add(alert);
         }
         return new PersistenceResult(matches, alerts);
+    }
+
+    private void reportInputIssues(SecurityEventDraft draft, EventInputValidation validation) {
+        if (validation.getIssues().isEmpty()) {
+            return;
+        }
+        try {
+            inputIssueReporter.report(draft, validation);
+        } catch (RuntimeException ignored) {
+            // The event transaction has committed; input diagnostics are deliberately best effort.
+        }
+    }
+
+    private static Set<String> enabledRuleIds(List<DetectionRule> rules) {
+        Set<String> ruleIds = new LinkedHashSet<String>();
+        for (DetectionRule rule : rules) {
+            ruleIds.add(rule.getRuleId());
+        }
+        return Collections.unmodifiableSet(ruleIds);
     }
 
     /**

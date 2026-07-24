@@ -11,6 +11,7 @@ import io.github.jasper.monitoring.api.SecurityEventType;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -83,6 +84,25 @@ class DefaultRuleCatalogAuthenticationTest {
         assertFalse(rule("AUTH-02").evaluate(history.get(9), history).isPresent());
     }
 
+    @Test
+    void catalogRequiresStrictLowercaseBooleanLiterals() {
+        SecurityEvent canonical = concurrentSession("true");
+        SecurityEvent upperCase = concurrentSession("TRUE");
+        SecurityEvent numeric = concurrentSession("1");
+
+        assertTrue(rule("SESS-01").evaluate(canonical, Collections.singletonList(canonical)).isPresent());
+        assertFalse(rule("SESS-01").evaluate(upperCase, Collections.singletonList(upperCase)).isPresent());
+        assertFalse(rule("SESS-01").evaluate(numeric, Collections.singletonList(numeric)).isPresent());
+    }
+
+    @Test
+    void exportTwoSaturatesKnownDailyCountsInsteadOfOverflowing() {
+        SecurityEvent earlier = export(Long.MAX_VALUE, NOW);
+        SecurityEvent current = export(1L, NOW);
+
+        assertTrue(rule("EXPT-02").evaluate(current, Arrays.asList(earlier, current)).isPresent());
+    }
+
     private static DetectionRule rule(String ruleId) {
         for (DetectionRule rule : DefaultRuleCatalog.initialRules()) {
             if (ruleId.equals(rule.getRuleId())) {
@@ -107,6 +127,26 @@ class DefaultRuleCatalogAuthenticationTest {
             .sourceIp(SOURCE_IP)
             .attributes(attemptedAccountHash == null ? Collections.<String, String>emptyMap()
                 : Collections.singletonMap("attempted_account_hash", attemptedAccountHash))
+            .build();
+    }
+
+    private static SecurityEvent concurrentSession(String differentNetworks) {
+        return SecurityEvent.builder()
+            .eventType(SecurityEventType.SESSION_CONCURRENT)
+            .occurredAt(NOW)
+            .sourceIp(SOURCE_IP)
+            .dataCount(3L)
+            .attributes(Collections.singletonMap("different_networks", differentNetworks))
+            .build();
+    }
+
+    private static SecurityEvent export(long dataCount, Instant occurredAt) {
+        return SecurityEvent.builder()
+            .eventType(SecurityEventType.EXPORT)
+            .occurredAt(occurredAt)
+            .sourceIp(SOURCE_IP)
+            .userId("alice")
+            .dataCount(dataCount)
             .build();
     }
 }
