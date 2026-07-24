@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class SecurityEventDraftTest {
@@ -38,6 +40,15 @@ class SecurityEventDraftTest {
             .attribute("sensitivity", "HIGH")
             .attribute("sensitivity", "LOW")
             .build());
+    }
+
+    @Test
+    void rejectsMapAttributeKeysThatDuplicateAfterCaseNormalization() {
+        Map<String, String> attributes = new LinkedHashMap<String, String>();
+        attributes.put("Sensitivity", "HIGH");
+        attributes.put("sensitivity", "LOW");
+
+        assertThrows(IllegalArgumentException.class, () -> requiredDraft().attributes(attributes).build());
     }
 
     @Test
