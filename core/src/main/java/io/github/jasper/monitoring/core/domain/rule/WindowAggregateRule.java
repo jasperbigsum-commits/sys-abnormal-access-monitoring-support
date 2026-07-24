@@ -27,7 +27,7 @@ public final class WindowAggregateRule extends AbstractDetectionRule {
     public enum Aggregation {
         /** 统计匹配事件数量。 */
         EVENT_COUNT,
-        /** 统计匹配事件中非空资源标识的去重数量。 */
+        /** 统计匹配事件中非空白资源标识的去重数量。 */
         DISTINCT_RESOURCE_COUNT,
         /** 累加事件数据量；零值按一个观测项计算。 */
         DATA_COUNT
@@ -92,7 +92,7 @@ public final class WindowAggregateRule extends AbstractDetectionRule {
         if (aggregation == Aggregation.DISTINCT_RESOURCE_COUNT) {
             Set<String> resources = new HashSet<String>();
             for (SecurityEvent candidateEvent : history) {
-                if (included(event, candidateEvent) && candidateEvent.getResourceId() != null) {
+                if (included(event, candidateEvent) && hasText(candidateEvent.getResourceId())) {
                     resources.add(candidateEvent.getResourceId());
                 }
             }
@@ -114,6 +114,19 @@ public final class WindowAggregateRule extends AbstractDetectionRule {
 
     private static long addSaturated(long total, long value) {
         return Long.MAX_VALUE - total < value ? Long.MAX_VALUE : total + value;
+    }
+
+    private static boolean hasText(String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (!Character.isWhitespace(character) && !Character.isSpaceChar(character)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean included(SecurityEvent event, SecurityEvent candidateEvent) {

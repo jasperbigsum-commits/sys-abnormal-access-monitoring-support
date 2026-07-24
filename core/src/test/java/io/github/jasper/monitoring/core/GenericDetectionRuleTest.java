@@ -102,6 +102,24 @@ class GenericDetectionRuleTest {
         assertTrue(rule.evaluate(current, Arrays.asList(prior, current)).isPresent());
     }
 
+    @Test
+    void distinctResourceAggregationIgnoresBlankAndWhitespaceResourceIds() {
+        WindowAggregateRule rule = new WindowAggregateRule("DATA-02",
+            event -> event.getEventType() == SecurityEventType.QUERY,
+            event -> event.getEventType() == SecurityEventType.QUERY,
+            Duration.ofMinutes(5), 2, WindowAggregateRule.Scope.USER,
+            WindowAggregateRule.Aggregation.DISTINCT_RESOURCE_COUNT, RiskLevel.HIGH,
+            Collections.singletonList(ControlActionType.DENY), "distinct resources");
+        SecurityEvent current = event(SecurityEventType.QUERY, "alice", null, "resource-1", NOW,
+            Collections.<String, String>emptyMap());
+        SecurityEvent blank = event(SecurityEventType.QUERY, "alice", null, "", NOW,
+            Collections.<String, String>emptyMap());
+        SecurityEvent whitespace = event(SecurityEventType.QUERY, "alice", null, "   ", NOW,
+            Collections.<String, String>emptyMap());
+
+        assertFalse(rule.evaluate(current, Arrays.asList(current, blank, whitespace)).isPresent());
+    }
+
     private static WindowAggregateRule dataCountRule(long threshold) {
         return new WindowAggregateRule("DATA-03",
             event -> event.getEventType() == SecurityEventType.QUERY,
