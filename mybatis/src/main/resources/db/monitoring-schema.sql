@@ -25,7 +25,8 @@ CREATE TABLE security_event (
     PRIMARY KEY (event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件明细表';
 
--- Existing deployments: ALTER TABLE additions for data_count_known, latency_ms_known, and input_status use NOT NULL DEFAULT 0, 0, and 'UNKNOWN' before creating the issue table, so historical events remain unknown rather than inferred.
+-- Existing deployments: explicitly include and renumber db/upgrade/monitoring-event-input-quality-v2.sql in the host migration plan.
+-- It uses defaults 0, 0, and 'UNKNOWN' so historical events remain unknown; fresh installations use this complete baseline.
 
 CREATE INDEX idx_security_event_occurred_at ON security_event (occurred_at);
 CREATE INDEX idx_security_event_subject_at ON security_event (user_id, source_ip, occurred_at);

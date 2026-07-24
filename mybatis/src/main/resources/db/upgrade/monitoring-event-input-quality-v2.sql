@@ -1,4 +1,5 @@
--- Apply once through the host application's versioned database migration tool.
+-- Host-controlled upgrade: explicitly include and renumber this script in the host migration plan.
+-- Do not place this script in a default migration discovery directory.
 ALTER TABLE security_event
     ADD COLUMN data_count_known TINYINT(1) NOT NULL DEFAULT 0 COMMENT '数据量是否由宿主明确提供';
 

@@ -2,6 +2,8 @@ package io.github.jasper.monitoring.mybatis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.AccountType;
@@ -59,6 +61,12 @@ class MyBatisMonitoringRepositoryTest {
         assertTrue(schema.contains("DEFAULT CHARSET=utf8mb4"));
         assertTrue(schema.contains("COMMENT='安全事件明细表'"));
         assertTrue(schema.contains("rule_definition LONGTEXT NOT NULL"));
+    }
+
+    @Test
+    void exposesInputQualityUpgradeOnlyThroughExplicitHostResource() {
+        assertNull(getClass().getResource("/db/migration/V2__event_input_quality.sql"));
+        assertNotNull(getClass().getResource("/db/upgrade/monitoring-event-input-quality-v2.sql"));
     }
 
     @Test
@@ -323,7 +331,7 @@ class MyBatisMonitoringRepositoryTest {
         Instant legacyOccurredAt = Instant.parse("2026-07-24T04:02:03Z");
         insertLegacyEvent(dataSource, legacyOccurredAt);
 
-        executeMigration(dataSource);
+        executeHostControlledUpgrade(dataSource);
 
         Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
             "test", new JdbcTransactionFactory(), dataSource));
@@ -389,8 +397,8 @@ class MyBatisMonitoringRepositoryTest {
         executeSqlResource(dataSource, "/db/monitoring-schema.sql");
     }
 
-    private void executeMigration(DataSource dataSource) throws Exception {
-        executeSqlResource(dataSource, "/db/migration/V2__event_input_quality.sql");
+    private void executeHostControlledUpgrade(DataSource dataSource) throws Exception {
+        executeSqlResource(dataSource, "/db/upgrade/monitoring-event-input-quality-v2.sql");
     }
 
     private void executeSqlResource(DataSource dataSource, String resourcePath) throws Exception {
