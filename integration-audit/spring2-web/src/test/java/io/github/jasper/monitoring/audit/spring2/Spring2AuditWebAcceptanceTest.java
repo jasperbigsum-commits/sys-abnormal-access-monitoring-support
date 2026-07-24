@@ -5,24 +5,32 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
 import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.port.MonitoringRepository;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.ApplicationContext;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class Spring2AuditWebAcceptanceTest {
+    private static final long SERVER_REPORTED_ROW_COUNT = 37L;
+
     @LocalServerPort
     private int port;
 
@@ -81,6 +89,38 @@ class Spring2AuditWebAcceptanceTest {
         assertEquals(SecurityEventType.QUERY, latestEvent("audit:annotated-query").getEventType());
     }
 
+    @Test
+    void recordsAnnotatedExportFactsFromNestedRequestBindingAndReturnValue() {
+        ResponseEntity<String> response = restTemplate.postForEntity(url("/audit/annotated-export"),
+            exportRequest("audit-export-2026", "org-a", 5000), String.class);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        SecurityEvent event = latestEvent("audit:annotated-export");
+        assertEquals(SecurityEventType.EXPORT, event.getEventType());
+        assertEquals(SecurityEventResult.SUCCESS, event.getResult());
+        assertEquals("report", event.getResourceType());
+        assertEquals("audit-export-2026", event.getResourceId());
+        assertEquals("org-a", event.getOrgScope());
+        assertEquals(SERVER_REPORTED_ROW_COUNT, event.getDataCount());
+        assertEquals("HIGH", event.getAttribute("sensitivity"));
+        assertEquals("true", event.getAttribute("monitor.rule-tag.sensitive-data"));
+        assertEquals("EXPORT_COMPLETED", event.getReasonCode());
+    }
+
+    @Test
+    void letsForbiddenHttpStatusOverrideAnEnricherSuccess() {
+        ResponseEntity<String> response = restTemplate.postForEntity(url("/audit/annotated-export-denied"),
+            exportRequest("denied-report", "org-denied", 12), String.class);
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        SecurityEvent event = latestEvent("audit:annotated-export-denied");
+        assertEquals(SecurityEventResult.DENIED, event.getResult());
+        assertEquals("HTTP_403", event.getReasonCode());
+        assertEquals("denied-report", event.getResourceId());
+        assertEquals("org-denied", event.getOrgScope());
+        assertEquals(SERVER_REPORTED_ROW_COUNT, event.getDataCount());
+    }
+
     private String url(String path) {
         return "http://localhost:" + port + path;
     }
@@ -90,5 +130,19 @@ class Spring2AuditWebAcceptanceTest {
             .filter(event -> action.equals(event.getAction()))
             .reduce((first, second) -> second)
             .orElseThrow(() -> new AssertionError("Expected audited action: " + action));
+    }
+
+    private HttpEntity<Map<String, Object>> exportRequest(String reportId, String tenantCode, int rows) {
+        Map<String, Object> report = new LinkedHashMap<String, Object>();
+        report.put("id", reportId);
+        Map<String, Object> tenant = new LinkedHashMap<String, Object>();
+        tenant.put("code", tenantCode);
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("report", report);
+        body.put("tenant", tenant);
+        body.put("rows", rows);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return new HttpEntity<Map<String, Object>>(body, headers);
     }
 }

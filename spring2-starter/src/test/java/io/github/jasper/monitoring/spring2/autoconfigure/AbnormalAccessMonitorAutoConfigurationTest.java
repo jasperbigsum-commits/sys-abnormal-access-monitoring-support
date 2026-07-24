@@ -15,6 +15,7 @@ import io.github.jasper.monitoring.api.SecurityEventDraft;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
+import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
 import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
 import io.github.jasper.monitoring.core.application.AlertLifecycleService;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
@@ -40,12 +41,14 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.boot.test.context.FilteredClassLoader;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.AsyncHandlerInterceptor;
 import org.slf4j.MDC;
 
 class AbnormalAccessMonitorAutoConfigurationTest {
@@ -119,6 +122,22 @@ class AbnormalAccessMonitorAutoConfigurationTest {
                 "abnormal.access.monitor.mode=ENFORCE")
             .run(context -> assertThat(context.getBean(DefaultSecurityMonitor.class).record(disabledLoginFailure()).getControls())
                 .hasSize(1));
+    }
+
+    @Test
+    void registersDefaultTriggersAfterHostControlHandlers() {
+        contextRunner.withUserConfiguration(ControlHandlerConfiguration.class)
+            .run(context -> {
+                ControlHandlerRegistry registry = context.getBean(ControlHandlerRegistry.class);
+
+                assertThat(registry.find(ControlActionType.DENY).get())
+                    .isSameAs(context.getBean(ControlHandler.class));
+                ControlExecution fallback = registry.find(ControlActionType.RATE_LIMIT).get().execute(
+                    new ControlCommand("alert-1:RATE_LIMIT", "alert-1", "ip:203.0.113.8",
+                        ControlActionType.RATE_LIMIT, Instant.parse("2026-07-24T00:00:00Z")));
+                assertThat(fallback.getStatus().name()).isEqualTo("SKIPPED");
+                assertThat(fallback.getFailureReason()).isEqualTo("DEFAULT_TRIGGER_REQUIRES_HOST_HANDLER:RATE_LIMIT");
+            });
     }
 
     @Test
@@ -200,6 +219,65 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     }
 
     @Test
+    void restoresAndRebindsMdcAcrossAsyncDispatches() throws Exception {
+        MDC.put("traceId", "upstream-initial");
+        try {
+            webContextRunner.run(context -> {
+                RequestMetadataInterceptor interceptor = context.getBean(RequestMetadataInterceptor.class);
+                assertThat(interceptor).isInstanceOf(AsyncHandlerInterceptor.class);
+                AsyncHandlerInterceptor asyncInterceptor = (AsyncHandlerInterceptor) (Object) interceptor;
+                MockHttpServletRequest request = new MockHttpServletRequest("GET", "/reports/async");
+                request.addHeader("X-Trace-Id", "monitor-trace");
+                MockHttpServletResponse response = new MockHttpServletResponse();
+                Object handler = new Object();
+
+                interceptor.preHandle(request, response, handler);
+                Object requestContext = request.getAttribute(RequestMetadataInterceptor.REQUEST_CONTEXT_ATTRIBUTE);
+                Object identityContext = request.getAttribute(RequestMetadataInterceptor.IDENTITY_CONTEXT_ATTRIBUTE);
+                assertThat(MDC.get("traceId")).isEqualTo("monitor-trace");
+
+                asyncInterceptor.afterConcurrentHandlingStarted(request, response, handler);
+                assertThat(MDC.get("traceId")).isEqualTo("upstream-initial");
+
+                MDC.put("traceId", "upstream-dispatch");
+                interceptor.preHandle(request, response, handler);
+                assertThat(request.getAttribute(RequestMetadataInterceptor.REQUEST_CONTEXT_ATTRIBUTE))
+                    .isSameAs(requestContext);
+                assertThat(request.getAttribute(RequestMetadataInterceptor.IDENTITY_CONTEXT_ATTRIBUTE))
+                    .isSameAs(identityContext);
+                assertThat(MDC.get("traceId")).isEqualTo("monitor-trace");
+
+                interceptor.afterCompletion(request, response, handler, null);
+                assertThat(MDC.get("traceId")).isEqualTo("upstream-dispatch");
+            });
+        } finally {
+            MDC.remove("traceId");
+        }
+    }
+
+    @Test
+    void usesJdkProxyForAFinalInterfaceBasedAnnotatedBean() {
+        webContextRunner.withUserConfiguration(FinalActionConfiguration.class)
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                FinalAction action = context.getBean(FinalAction.class);
+                assertThat(AopUtils.isJdkDynamicProxy(action)).isTrue();
+                assertThat(action.invoke()).isEqualTo("final-action");
+            });
+    }
+
+    @Test
+    void doesNotProxyAnUnannotatedFinalController() {
+        webContextRunner.withUserConfiguration(UnannotatedFinalControllerConfiguration.class)
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                UnannotatedFinalController controller = context.getBean(UnannotatedFinalController.class);
+                assertThat(AopUtils.isAopProxy(controller)).isFalse();
+                assertThat(controller.invoke()).isEqualTo("unannotated-final-controller");
+            });
+    }
+
+    @Test
     void recordsAnnotatedHandlerOutcomesUsingTrustedMetadataAndMethodOverride() throws Exception {
         webContextRunner.withUserConfiguration(IdentityConfiguration.class)
             .withPropertyValues("abnormal.access.monitor.frontend.enabled=false")
@@ -248,8 +326,8 @@ class AbnormalAccessMonitorAutoConfigurationTest {
                 assertThat(events.get(0).getResult()).isEqualTo(SecurityEventResult.SUCCESS);
                 assertThat(events.get(1).getResult()).isEqualTo(SecurityEventResult.DENIED);
                 assertThat(events.get(1).getReasonCode()).isEqualTo("HTTP_403");
-                assertThat(events.get(2).getResult()).isEqualTo(SecurityEventResult.DENIED);
-                assertThat(events.get(2).getReasonCode()).isEqualTo("HTTP_403");
+                assertThat(events.get(2).getResult()).isEqualTo(SecurityEventResult.FAILURE);
+                assertThat(events.get(2).getReasonCode()).isEqualTo("HANDLER_EXCEPTION");
                 assertThat(events.get(3).getResult()).isEqualTo(SecurityEventResult.FAILURE);
                 assertThat(events.get(3).getReasonCode()).isEqualTo("HANDLER_EXCEPTION");
             });
@@ -330,6 +408,22 @@ class AbnormalAccessMonitorAutoConfigurationTest {
         @Bean
         IdentityContextProvider identityContextProvider() {
             return request -> new IdentityContext("alice", AccountType.PERSON, Collections.singleton("REPORTING"), "session-hash");
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class FinalActionConfiguration {
+        @Bean
+        FinalAction finalAction() {
+            return new FinalActionImplementation();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class UnannotatedFinalControllerConfiguration {
+        @Bean
+        UnannotatedFinalController unannotatedFinalController() {
+            return new UnannotatedFinalController();
         }
     }
 
@@ -416,6 +510,26 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     public static class DuplicateAnnotatedTriggerTarget {
         @ControlTrigger(ControlActionType.DENY)
         public void deny(ControlCommand command) {
+        }
+    }
+
+    interface FinalAction {
+        @MonitorAction(action = "final-interface-action")
+        String invoke();
+    }
+
+    static final class FinalActionImplementation implements FinalAction {
+        @Override
+        @MonitorAction(action = "final-implementation-action")
+        public String invoke() {
+            return "final-action";
+        }
+    }
+
+    @org.springframework.stereotype.Controller
+    static final class UnannotatedFinalController {
+        String invoke() {
+            return "unannotated-final-controller";
         }
     }
 }

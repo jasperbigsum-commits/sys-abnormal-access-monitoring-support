@@ -7,20 +7,37 @@ import io.github.jasper.monitoring.api.ControlActionType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
  * 按控制动作类型解析宿主控制处理器。
  *
- * <p>处理器列表顺序即优先级；当多个处理器支持同一动作时，仅使用第一个。</p>
+ * <p>宿主处理器始终优先于默认回退处理器；同一层内按列表顺序选择第一个支持动作的处理器。</p>
  */
 public final class ControlHandlerRegistry {
-    private final List<ControlHandler> handlers;
+    private final List<ControlHandler> hostHandlers;
+    private final List<ControlHandler> defaultHandlers;
+
     /**
      * @param handlers 已排序的宿主控制处理器；构造时会防御性复制列表
      */
     public ControlHandlerRegistry(List<ControlHandler> handlers) {
-        this.handlers = Collections.unmodifiableList(new ArrayList<ControlHandler>(handlers));
+        this(handlers, Collections.<ControlHandler>emptyList());
+    }
+
+    /**
+     * 创建具有宿主优先级和默认回退层的注册表。
+     *
+     * <p>同一动作先从 {@code hostHandlers} 解析；仅当宿主未声明该动作时，才会使用
+     * {@code defaultHandlers}。默认处理器不会使 {@link #isEmpty()} 返回 {@code false}。</p>
+     *
+     * @param hostHandlers 已排序的宿主控制处理器
+     * @param defaultHandlers 已排序的框架默认回退处理器
+     */
+    public ControlHandlerRegistry(List<ControlHandler> hostHandlers, List<ControlHandler> defaultHandlers) {
+        this.hostHandlers = immutableCopy(hostHandlers, "hostHandlers");
+        this.defaultHandlers = immutableCopy(defaultHandlers, "defaultHandlers");
     }
     /** @return 不含处理器的注册表，仅适用于观察模式 */
     public static ControlHandlerRegistry empty() { return new ControlHandlerRegistry(Collections.<ControlHandler>emptyList()); }
@@ -29,10 +46,8 @@ public final class ControlHandlerRegistry {
      * @return 支持该动作的第一个已配置处理器；不存在时为空
      */
     public Optional<ControlHandler> find(ControlActionType action) {
-        for (ControlHandler handler : handlers) {
-            if (handler.supports(action)) { return Optional.of(handler); }
-        }
-        return Optional.empty();
+        Optional<ControlHandler> host = find(hostHandlers, action);
+        return host.isPresent() ? host : find(defaultHandlers, action);
     }
     /**
      * @param action 待判断的控制动作
@@ -41,13 +56,30 @@ public final class ControlHandlerRegistry {
     public boolean supports(ControlActionType action) { return find(action).isPresent(); }
     /** @return 是否没有任何已配置处理器支持可执行的控制动作 */
     public boolean isEmpty() {
-        for (ControlHandler handler : handlers) {
+        for (ControlHandler handler : hostHandlers) {
+            if (handler.isFallback()) {
+                continue;
+            }
             for (ControlActionType action : ControlActionType.values()) {
-                if (action != ControlActionType.RECORD && handler.supports(action)) {
+                if (action.requiresHostHandler() && handler.supports(action)) {
                     return false;
                 }
             }
         }
         return true;
+    }
+
+    private static Optional<ControlHandler> find(List<ControlHandler> handlers, ControlActionType action) {
+        for (ControlHandler handler : handlers) {
+            if (handler.supports(action)) {
+                return Optional.of(handler);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static List<ControlHandler> immutableCopy(List<ControlHandler> handlers, String name) {
+        Objects.requireNonNull(handlers, name);
+        return Collections.unmodifiableList(new ArrayList<ControlHandler>(handlers));
     }
 }

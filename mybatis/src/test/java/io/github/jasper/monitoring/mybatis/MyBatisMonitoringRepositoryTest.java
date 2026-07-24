@@ -230,6 +230,16 @@ class MyBatisMonitoringRepositoryTest {
         assertEquals(command.getAction(), storedControl.getCommand().getAction());
         assertEquals(command.getExpiresAt(), storedControl.getCommand().getExpiresAt());
 
+        ControlCommand fallbackCommand = new ControlCommand(
+            "fallback-key", alert.getAlertId(), "alice", ControlActionType.RATE_LIMIT,
+            Instant.parse("2026-07-22T02:00:00Z"));
+        repository.saveControl(new ControlRecord(fallbackCommand,
+            ControlExecution.fallbackSkipped(fallbackCommand.getIdempotencyKey(), fallbackCommand.getAction()), receivedAt));
+        ControlRecord storedFallback = repository.findControl(fallbackCommand.getIdempotencyKey()).get();
+        assertTrue(storedFallback.getExecution().isDefaultFallback());
+        assertEquals("DEFAULT_TRIGGER_REQUIRES_HOST_HANDLER:RATE_LIMIT",
+            storedFallback.getExecution().getFailureReason());
+
         repository.addWhitelist(new WhitelistEntry("AUTH-01", "alice", Instant.parse("2026-07-22T01:30:00Z")));
         assertTrue(repository.isWhitelisted("AUTH-01", "alice", Instant.parse("2026-07-22T01:29:59Z")));
         assertFalse(repository.isWhitelisted("AUTH-01", "alice", Instant.parse("2026-07-22T01:30:00Z")));

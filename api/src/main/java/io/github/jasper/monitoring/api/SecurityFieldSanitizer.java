@@ -3,7 +3,6 @@ package io.github.jasper.monitoring.api;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -64,11 +63,22 @@ public final class SecurityFieldSanitizer {
         if (normalized == null || normalized.isEmpty()) {
             throw new IllegalArgumentException("Event attribute key is required");
         }
-        String lowerCase = normalized.toLowerCase(Locale.ROOT);
+        String comparable = lettersAndDigits(normalized);
         for (String keyword : FORBIDDEN_KEYWORDS) {
-            if (lowerCase.contains(keyword)) {
+            if (comparable.contains(lettersAndDigits(keyword))) {
                 throw new IllegalArgumentException("Event attributes must not contain credential material: " + normalized);
             }
         }
+    }
+
+    private static String lettersAndDigits(String value) {
+        StringBuilder normalized = new StringBuilder(value.length());
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (Character.isLetterOrDigit(character)) {
+                normalized.append(Character.toLowerCase(character));
+            }
+        }
+        return normalized.toString();
     }
 }

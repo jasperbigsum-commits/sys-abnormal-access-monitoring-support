@@ -329,16 +329,12 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
     private static ControlRecord toControlRecord(ControlActionPo row) {
         ControlCommand command = new ControlCommand(row.getIdempotencyKey(), row.getAlertId(), row.getSubject(),
             row.getAction(), row.getExpiresAt());
-        ControlExecution execution;
-        if (row.getStatus() == ControlStatus.SUCCEEDED) {
-            execution = ControlExecution.succeeded(row.getIdempotencyKey());
-        } else if (row.getStatus() == ControlStatus.FAILED) {
-            execution = ControlExecution.failed(row.getIdempotencyKey(), row.getFailureReason());
-        } else if (row.getStatus() == ControlStatus.SKIPPED) {
-            execution = ControlExecution.skipped(row.getIdempotencyKey(), row.getFailureReason());
-        } else {
+        if (row.getStatus() != ControlStatus.SUCCEEDED && row.getStatus() != ControlStatus.FAILED
+            && row.getStatus() != ControlStatus.SKIPPED) {
             throw new IllegalStateException("Unknown persisted control status: " + row.getStatus());
         }
+        ControlExecution execution = ControlExecution.restored(row.getControlId(), row.getIdempotencyKey(),
+            row.getStatus(), row.getFailureReason());
         return new ControlRecord(command, execution, row.getExecutedAt());
     }
 }

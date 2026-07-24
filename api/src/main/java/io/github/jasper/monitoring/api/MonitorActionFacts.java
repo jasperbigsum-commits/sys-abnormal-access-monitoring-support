@@ -117,13 +117,13 @@ public final class MonitorActionFacts {
 
         /** @param value affected data count; must not be negative */
         public Builder dataCount(long value) {
-            this.dataCount = Long.valueOf(value);
+            this.dataCount = value;
             return this;
         }
 
         /** @param value action latency in milliseconds; must not be negative */
         public Builder latencyMs(long value) {
-            this.latencyMs = Long.valueOf(value);
+            this.latencyMs = value;
             return this;
         }
 

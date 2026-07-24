@@ -14,6 +14,18 @@ import io.github.jasper.monitoring.api.ControlActionType;
  */
 public interface ControlHandler {
     /**
+     * 判断当前处理器是否只是框架提供的安全回退。
+     *
+     * <p>回退处理器仅用于为未接入的动作留下可审计结果，不代表宿主具备实际控制能力，
+     * 因此不会使 {@code ENFORCE} 模式通过启动校验。</p>
+     *
+     * @return 当前处理器仅为回退时为 {@code true}
+     */
+    default boolean isFallback() {
+        return false;
+    }
+
+    /**
      * 判断当前处理器是否能执行指定动作。
      *
      * @param action 控制动作类型

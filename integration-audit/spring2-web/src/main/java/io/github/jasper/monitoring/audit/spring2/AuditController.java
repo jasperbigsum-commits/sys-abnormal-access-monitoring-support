@@ -2,8 +2,11 @@ package io.github.jasper.monitoring.audit.spring2;
 
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitorAction;
+import io.github.jasper.monitoring.api.MonitorActionAttribute;
+import io.github.jasper.monitoring.api.MonitorActionAttributeTarget;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.SecurityEventResult;
+import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.core.application.ActionEventRecorder;
 import io.github.jasper.monitoring.core.application.MonitoringOutcome;
 import java.util.LinkedHashMap;
@@ -12,7 +15,10 @@ import javax.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 /** 通过 HTTP 触发注册式埋点的最小业务控制器。 */
 @RestController
@@ -20,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuditController {
     private static final String REQUEST_CONTEXT_ATTRIBUTE = "io.github.jasper.monitoring.request-context";
     private static final String IDENTITY_CONTEXT_ATTRIBUTE = "io.github.jasper.monitoring.identity-context";
+    // This integration fixture must not echo a client-controlled requested row count.
+    private static final long SERVER_REPORTED_ROW_COUNT = 37L;
     private final ActionEventRecorder recorder;
 
     /** @param recorder Starter 自动装配的动作记录器 */
@@ -64,6 +72,34 @@ public class AuditController {
     public Map<String, Object> annotatedQuery() {
         Map<String, Object> response = new LinkedHashMap<String, Object>();
         response.put("status", "ok");
+        return response;
+    }
+
+    @PostMapping("/annotated-export")
+    @MonitorAction(action = "audit:annotated-export", eventType = SecurityEventType.EXPORT,
+        resourceType = "report", ruleTags = {"sensitive-data"}, enrichers = AuditExportFacts.class)
+    @MonitorActionAttribute(name = "sensitivity", value = "HIGH")
+    public Map<String, Object> annotatedExport(
+        @MonitorActionAttribute(target = MonitorActionAttributeTarget.RESOURCE_ID, path = "report.id")
+        @MonitorActionAttribute(target = MonitorActionAttributeTarget.ORG_SCOPE, path = "tenant.code")
+        @RequestBody AuditExportRequest request) {
+        return exportResponse(SERVER_REPORTED_ROW_COUNT);
+    }
+
+    @PostMapping("/annotated-export-denied")
+    @MonitorAction(action = "audit:annotated-export-denied", eventType = SecurityEventType.EXPORT,
+        resourceType = "report", ruleTags = {"sensitive-data"}, enrichers = AuditExportFacts.class)
+    @MonitorActionAttribute(name = "sensitivity", value = "HIGH")
+    public ResponseEntity<Map<String, Object>> annotatedExportDenied(
+        @MonitorActionAttribute(target = MonitorActionAttributeTarget.RESOURCE_ID, path = "report.id")
+        @MonitorActionAttribute(target = MonitorActionAttributeTarget.ORG_SCOPE, path = "tenant.code")
+        @RequestBody AuditExportRequest request) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(exportResponse(SERVER_REPORTED_ROW_COUNT));
+    }
+
+    private static Map<String, Object> exportResponse(long rowCount) {
+        Map<String, Object> response = new LinkedHashMap<String, Object>();
+        response.put("rowCount", Long.valueOf(rowCount));
         return response;
     }
 

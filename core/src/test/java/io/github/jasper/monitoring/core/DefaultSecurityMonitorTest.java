@@ -145,6 +145,22 @@ class DefaultSecurityMonitorTest {
     }
 
     @Test
+    void dailyCumulativeExportDoesNotCountLaterOutOfOrderEvents() {
+        InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
+        DefaultSecurityMonitor monitor = new DefaultSecurityMonitor(
+            "orders", Clock.fixed(Instant.parse("2026-07-22T12:00:00Z"), ZoneOffset.UTC), repository,
+            DefaultRuleCatalog.initialRules(), MonitoringMode.OBSERVE,
+            ControlHandlerRegistry.empty(), NotificationChannel.noop());
+
+        monitor.record(export("export-before", 3000, Instant.parse("2026-07-22T08:00:00Z")));
+        monitor.record(export("export-after", 4000, Instant.parse("2026-07-22T11:00:00Z")));
+        MonitoringOutcome outcome = monitor.record(
+            export("export-current", 3000, Instant.parse("2026-07-22T10:00:00Z")));
+
+        assertTrue(outcome.getMatches().isEmpty());
+    }
+
+    @Test
     void appendixBTc07RaisesAnAlertOnTheOneHundredAndTwentiethQueryInFiveMinutes() {
         InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
         DefaultSecurityMonitor monitor = new DefaultSecurityMonitor(

@@ -41,11 +41,11 @@ public final class DefaultControlService {
      * @return 已持久化的执行结果
      */
     public ControlExecution execute(ControlCommand command) {
+        Optional<ControlHandler> handler = handlers.find(command.getAction());
         Optional<ControlRecord> existing = repository.findControl(command.getIdempotencyKey());
-        if (existing.isPresent()) {
+        if (existing.isPresent() && !shouldRetryDefaultFallback(existing.get(), command, handler)) {
             return existing.get().getExecution().replay();
         }
-        Optional<ControlHandler> handler = handlers.find(command.getAction());
         ControlExecution execution;
         if (!handler.isPresent()) {
             execution = ControlExecution.failed(command.getIdempotencyKey(), "No control handler for " + command.getAction());
@@ -61,5 +61,12 @@ public final class DefaultControlService {
         }
         repository.saveControl(new ControlRecord(command, execution, Instant.now(clock)));
         return execution;
+    }
+
+    private static boolean shouldRetryDefaultFallback(ControlRecord existing, ControlCommand command,
+                                                      Optional<ControlHandler> handler) {
+        return existing.getCommand().getAction() == command.getAction()
+            && handler.isPresent() && !handler.get().isFallback()
+            && existing.getExecution().isDefaultFallback();
     }
 }

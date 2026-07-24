@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.AsyncHandlerInterceptor;
 
 /**
  * 建立 Servlet 请求的可信上下文，并在可用时统一监测事件与日志 MDC 的追踪标识。
@@ -18,7 +18,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * <p>该拦截器不依赖宿主认证实现。身份、来源 IP 和请求标识均由服务端适配器建立；MDC 仅用于日志关联，
  * 关闭请求时会恢复原线程上下文，避免线程复用串链。</p>
  */
-public final class RequestMetadataInterceptor implements HandlerInterceptor {
+public final class RequestMetadataInterceptor implements AsyncHandlerInterceptor {
     /** Servlet 请求属性：可信、不可变的监测请求上下文。 */
     public static final String REQUEST_CONTEXT_ATTRIBUTE = "io.github.jasper.monitoring.request-context";
     /** Servlet 请求属性：由宿主身份提供器建立的身份上下文。 */
@@ -66,6 +66,12 @@ public final class RequestMetadataInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler,
                                 Exception exception) {
+        clearMdcScope(request, "request-metadata");
+    }
+
+    @Override
+    public void afterConcurrentHandlingStarted(HttpServletRequest request, HttpServletResponse response,
+                                               Object handler) {
         clearMdcScope(request, "request-metadata");
     }
 

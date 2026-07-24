@@ -107,7 +107,7 @@
                     <version>3.2.5</version>
                     <configuration>
                         <useModulePath>false</useModulePath>
-                        <argLine>-Dfile.encoding=UTF-8</argLine>
+                        <argLine>-Dfile.encoding=UTF-8 -Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
                     </configuration>
                 </plugin>
                 <plugin>

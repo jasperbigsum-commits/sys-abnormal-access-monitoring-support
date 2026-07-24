@@ -9,6 +9,7 @@ import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
 import io.github.jasper.monitoring.core.application.ActionEventRecorder;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
+import io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger;
 import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
 import io.github.jasper.monitoring.core.domain.rule.DefaultRuleCatalog;
@@ -45,6 +46,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
 
 /**
  * Spring Boot 3 ({@code jakarta.servlet}) auto-configuration for the monitoring component.
@@ -103,7 +105,7 @@ public class AbnormalAccessMonitorAutoConfiguration {
             }
             values.add(handler);
         }
-        return new ControlHandlerRegistry(values);
+        return new ControlHandlerRegistry(values, DefaultControlActionTrigger.defaults());
     }
 
     @Bean
@@ -196,6 +198,19 @@ public class AbnormalAccessMonitorAutoConfiguration {
     public ActionEventRecorder abnormalAccessActionEventRecorder(SecurityMonitor monitor,
                                                                   MonitoringActionRegistry actions) {
         return new ActionEventRecorder(monitor, Clock.systemUTC(), actions);
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    @ConditionalOnClass(name = {"org.springframework.web.servlet.HandlerInterceptor", "org.aspectj.lang.annotation.Aspect"})
+    @ConditionalOnProperty(prefix = "abnormal.access.monitor.instrumentation", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @EnableAspectJAutoProxy
+    static class MvcInstrumentationConfiguration {
+        @Bean("abnormalAccessAnnotatedActionMonitoringAspect")
+        @ConditionalOnMissingBean(AnnotatedActionMonitoringAspect.class)
+        AnnotatedActionMonitoringAspect abnormalAccessAnnotatedActionMonitoringAspect(ListableBeanFactory beanFactory) {
+            return new AnnotatedActionMonitoringAspect(beanFactory);
+        }
     }
 
     @Configuration(proxyBeanMethods = false)

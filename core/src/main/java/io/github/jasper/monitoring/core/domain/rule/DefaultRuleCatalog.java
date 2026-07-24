@@ -142,7 +142,9 @@ public final class DefaultRuleCatalog {
                 long total = 0;
                 Instant start = event.getOccurredAt().atZone(ZoneOffset.UTC).truncatedTo(ChronoUnit.DAYS).toInstant();
                 for (SecurityEvent candidate : history) {
-                    if (!candidate.getOccurredAt().isBefore(start) && sameScope(event, candidate, WindowAggregateRule.Scope.USER)
+                    if (!candidate.getOccurredAt().isBefore(start)
+                        && !candidate.getOccurredAt().isAfter(event.getOccurredAt())
+                        && sameScope(event, candidate, WindowAggregateRule.Scope.USER)
                         && candidate.getEventType() == SecurityEventType.EXPORT) { total += candidate.getDataCount(); }
                 }
                 return total >= 10000 || atLeast(event.getAttribute("baseline_ratio"), 3.0d)
