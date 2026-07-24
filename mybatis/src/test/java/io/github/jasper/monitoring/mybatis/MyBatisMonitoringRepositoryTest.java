@@ -193,7 +193,7 @@ class MyBatisMonitoringRepositoryTest {
             .resourceType("account")
             .resourceId("alice")
             .orgScope("acme")
-            .dataCount(7L)
+            .dataCount(0L)
             .latencyMs(12L)
             .attributes(attributes)
             .build();
@@ -207,8 +207,10 @@ class MyBatisMonitoringRepositoryTest {
         assertEquals(event.getReceivedAt(), storedEvent.getReceivedAt());
         assertEquals(event.getRoleIds(), storedEvent.getRoleIds());
         assertEquals(event.getAttributes(), storedEvent.getAttributes());
-        assertEquals(event.getDataCount(), storedEvent.getDataCount());
-        assertEquals(event.getLatencyMs(), storedEvent.getLatencyMs());
+        assertEquals(0L, storedEvent.getDataCount());
+        assertEquals(12L, storedEvent.getLatencyMs());
+        assertTrue(storedEvent.hasDataCount());
+        assertTrue(storedEvent.hasLatencyMs());
 
         SecurityAlert alert = new SecurityAlert(
             "alert-1", "AUTH-01", RiskLevel.HIGH, "AUTH-01:alice", "alice", AlertStatus.NEW,
@@ -250,7 +252,7 @@ class MyBatisMonitoringRepositoryTest {
     }
 
     @Test
-    void persistsInputQualityMetadataWithoutChangingRolesOrAttributes() throws Exception {
+    void persistsOrderedInputQualityMetadataWithoutChangingRolesOrAttributes() throws Exception {
         DataSource dataSource = new UnpooledDataSource(
             "org.h2.Driver", "jdbc:h2:mem:monitoring-input-quality;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         executeSchema(dataSource);
@@ -258,8 +260,10 @@ class MyBatisMonitoringRepositoryTest {
             "test", new JdbcTransactionFactory(), dataSource));
         MonitoringRepository repository = MyBatisMonitoringRepositoryRegistrar.create(configuration);
         Instant occurredAt = Instant.parse("2026-07-24T01:02:03Z");
-        EventInputIssue issue = EventInputIssue.of("EXPT-01", "dataCount", EventInputIssueCode.MISSING_DATA_COUNT,
+        EventInputIssue firstIssue = EventInputIssue.of("EXPT-02", "resourceId", EventInputIssueCode.MISSING_RESOURCE_ID,
             EventFactSource.SERVER_COMPUTED);
+        EventInputIssue secondIssue = EventInputIssue.of("AUTH-01", "reasonCode", EventInputIssueCode.MISSING_REASON_CODE,
+            EventFactSource.METHOD_PARAMETER);
         Map<String, String> attributes = new LinkedHashMap<String, String>();
         attributes.put("channel", "api");
         SecurityEvent event = SecurityEvent.builder()
@@ -276,7 +280,7 @@ class MyBatisMonitoringRepositoryTest {
             .action("EXPORT")
             .result(SecurityEventResult.SUCCESS)
             .inputStatus(EventInputStatus.INCOMPLETE)
-            .inputIssues(Arrays.asList(issue))
+            .inputIssues(Arrays.asList(firstIssue, secondIssue))
             .attributes(attributes)
             .build();
 
@@ -286,7 +290,7 @@ class MyBatisMonitoringRepositoryTest {
         assertEquals(EventInputStatus.INCOMPLETE, storedEvent.getInputStatus());
         assertFalse(storedEvent.hasDataCount());
         assertFalse(storedEvent.hasLatencyMs());
-        assertEquals(Arrays.asList(issue), storedEvent.getInputIssues());
+        assertEquals(Arrays.asList(firstIssue, secondIssue), storedEvent.getInputIssues());
         assertEquals(event.getRoleIds(), storedEvent.getRoleIds());
         assertEquals(event.getAttributes(), storedEvent.getAttributes());
     }
@@ -308,6 +312,26 @@ class MyBatisMonitoringRepositoryTest {
         assertFalse(storedEvent.hasDataCount());
         assertFalse(storedEvent.hasLatencyMs());
         assertTrue(storedEvent.getInputIssues().isEmpty());
+    }
+
+    @Test
+    void rejectsMalformedPersistedInputIssuesWithoutEchoingStoredValues() throws Exception {
+        DataSource dataSource = new UnpooledDataSource(
+            "org.h2.Driver", "jdbc:h2:mem:monitoring-input-quality-malformed;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        executeSchema(dataSource);
+        Instant occurredAt = Instant.parse("2026-07-24T03:02:03Z");
+        insertLegacyEvent(dataSource, occurredAt);
+        String malformedIssueCode = "UNSUPPORTED_ISSUE_CODE";
+        insertMalformedInputIssue(dataSource, "event-legacy-quality", malformedIssueCode);
+        Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
+            "test", new JdbcTransactionFactory(), dataSource));
+        MonitoringRepository repository = MyBatisMonitoringRepositoryRegistrar.create(configuration);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> repository.findEventsSince(occurredAt));
+
+        assertEquals("Persisted event input issue is invalid", exception.getMessage());
+        assertFalse(exception.getMessage().contains(malformedIssueCode));
     }
 
     private void executeSchema(DataSource dataSource) throws Exception {
@@ -386,6 +410,21 @@ class MyBatisMonitoringRepositoryTest {
             statement.setString(11, SecurityEventResult.SUCCESS.name());
             statement.setLong(12, 0L);
             statement.setLong(13, 0L);
+            statement.executeUpdate();
+        }
+    }
+
+    private void insertMalformedInputIssue(DataSource dataSource, String eventId, String issueCode) throws Exception {
+        String sql = "INSERT INTO security_event_input_issue (event_id, issue_index, rule_id, fact_name, issue_code, source_type) "
+            + "VALUES (?, ?, ?, ?, ?, ?)";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, eventId);
+            statement.setInt(2, 0);
+            statement.setString(3, "AUTH-01");
+            statement.setString(4, "resourceId");
+            statement.setString(5, issueCode);
+            statement.setString(6, EventFactSource.SERVER_COMPUTED.name());
             statement.executeUpdate();
         }
     }
