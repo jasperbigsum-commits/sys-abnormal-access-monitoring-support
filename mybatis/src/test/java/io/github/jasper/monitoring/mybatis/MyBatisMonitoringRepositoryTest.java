@@ -9,6 +9,10 @@ import io.github.jasper.monitoring.api.AlertStatus;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ControlStatus;
 import io.github.jasper.monitoring.api.DispositionType;
+import io.github.jasper.monitoring.api.EventFactSource;
+import io.github.jasper.monitoring.api.EventInputIssue;
+import io.github.jasper.monitoring.api.EventInputIssueCode;
+import io.github.jasper.monitoring.api.EventInputStatus;
 import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.api.RuleMode;
 import io.github.jasper.monitoring.api.RuleSource;
@@ -245,6 +249,67 @@ class MyBatisMonitoringRepositoryTest {
         assertFalse(repository.isWhitelisted("AUTH-01", "alice", Instant.parse("2026-07-22T01:30:00Z")));
     }
 
+    @Test
+    void persistsInputQualityMetadataWithoutChangingRolesOrAttributes() throws Exception {
+        DataSource dataSource = new UnpooledDataSource(
+            "org.h2.Driver", "jdbc:h2:mem:monitoring-input-quality;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        executeSchema(dataSource);
+        Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
+            "test", new JdbcTransactionFactory(), dataSource));
+        MonitoringRepository repository = MyBatisMonitoringRepositoryRegistrar.create(configuration);
+        Instant occurredAt = Instant.parse("2026-07-24T01:02:03Z");
+        EventInputIssue issue = EventInputIssue.of("EXPT-01", "dataCount", EventInputIssueCode.MISSING_DATA_COUNT,
+            EventFactSource.SERVER_COMPUTED);
+        Map<String, String> attributes = new LinkedHashMap<String, String>();
+        attributes.put("channel", "api");
+        SecurityEvent event = SecurityEvent.builder()
+            .eventId("event-input-quality")
+            .systemId("orders")
+            .eventType(SecurityEventType.EXPORT)
+            .occurredAt(occurredAt)
+            .receivedAt(occurredAt)
+            .userId("auditor")
+            .accountType(AccountType.PERSON)
+            .roleIds(new LinkedHashSet<String>(Arrays.asList("auditor", "operator")))
+            .sourceIp("203.0.113.17")
+            .requestId("request-input-quality")
+            .action("EXPORT")
+            .result(SecurityEventResult.SUCCESS)
+            .inputStatus(EventInputStatus.INCOMPLETE)
+            .inputIssues(Arrays.asList(issue))
+            .attributes(attributes)
+            .build();
+
+        repository.saveEvent(event);
+
+        SecurityEvent storedEvent = repository.findEventsSince(occurredAt).get(0);
+        assertEquals(EventInputStatus.INCOMPLETE, storedEvent.getInputStatus());
+        assertFalse(storedEvent.hasDataCount());
+        assertFalse(storedEvent.hasLatencyMs());
+        assertEquals(Arrays.asList(issue), storedEvent.getInputIssues());
+        assertEquals(event.getRoleIds(), storedEvent.getRoleIds());
+        assertEquals(event.getAttributes(), storedEvent.getAttributes());
+    }
+
+    @Test
+    void rebuildsLegacyEventsWithUnknownInputQualityDefaults() throws Exception {
+        DataSource dataSource = new UnpooledDataSource(
+            "org.h2.Driver", "jdbc:h2:mem:monitoring-input-quality-legacy;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        executeSchema(dataSource);
+        Instant occurredAt = Instant.parse("2026-07-24T02:02:03Z");
+        insertLegacyEvent(dataSource, occurredAt);
+        Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
+            "test", new JdbcTransactionFactory(), dataSource));
+        MonitoringRepository repository = MyBatisMonitoringRepositoryRegistrar.create(configuration);
+
+        SecurityEvent storedEvent = repository.findEventsSince(occurredAt).get(0);
+
+        assertEquals(EventInputStatus.UNKNOWN, storedEvent.getInputStatus());
+        assertFalse(storedEvent.hasDataCount());
+        assertFalse(storedEvent.hasLatencyMs());
+        assertTrue(storedEvent.getInputIssues().isEmpty());
+    }
+
     private void executeSchema(DataSource dataSource) throws Exception {
         InputStream input = getClass().getResourceAsStream("/db/monitoring-schema.sql");
         try (Connection connection = dataSource.getConnection();
@@ -299,6 +364,29 @@ class MyBatisMonitoringRepositoryTest {
              ResultSet resultSet = statement.executeQuery()) {
             resultSet.next();
             return resultSet.getInt(1);
+        }
+    }
+
+    private void insertLegacyEvent(DataSource dataSource, Instant occurredAt) throws Exception {
+        String sql = "INSERT INTO security_event (event_id, system_id, event_type, occurred_at, received_at, user_id, "
+            + "account_type, source_ip, request_id, action, result, data_count, latency_ms) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, "event-legacy-quality");
+            statement.setString(2, "orders");
+            statement.setString(3, SecurityEventType.EXPORT.name());
+            statement.setObject(4, occurredAt);
+            statement.setObject(5, occurredAt);
+            statement.setString(6, "auditor");
+            statement.setString(7, AccountType.PERSON.name());
+            statement.setString(8, "203.0.113.18");
+            statement.setString(9, "request-legacy-quality");
+            statement.setString(10, "EXPORT");
+            statement.setString(11, SecurityEventResult.SUCCESS.name());
+            statement.setLong(12, 0L);
+            statement.setLong(13, 0L);
+            statement.executeUpdate();
         }
     }
 }

@@ -1,11 +1,16 @@
 package io.github.jasper.monitoring.mybatis;
 
-import io.github.jasper.monitoring.mybatis.po.SecurityEventPo;
 import io.github.jasper.monitoring.mybatis.po.SecurityEventAttributePo;
+import io.github.jasper.monitoring.mybatis.po.SecurityEventInputIssuePo;
+import io.github.jasper.monitoring.mybatis.po.SecurityEventPo;
 import io.github.jasper.monitoring.mybatis.po.SecurityAlertPo;
 import io.github.jasper.monitoring.mybatis.po.ControlActionPo;
 import io.github.jasper.monitoring.mybatis.po.AlertDispositionPo;
 import io.github.jasper.monitoring.api.ControlStatus;
+import io.github.jasper.monitoring.api.EventFactSource;
+import io.github.jasper.monitoring.api.EventInputIssue;
+import io.github.jasper.monitoring.api.EventInputIssueCode;
+import io.github.jasper.monitoring.api.EventInputStatus;
 import io.github.jasper.monitoring.core.domain.AlertDisposition;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
@@ -79,6 +84,10 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
             for (Map.Entry<String, String> attribute : event.getAttributes().entrySet()) {
                 mapper.insertEventAttribute(event.getEventId(), attribute.getKey(), attribute.getValue());
             }
+            List<EventInputIssue> inputIssues = event.getInputIssues();
+            for (int index = 0; index < inputIssues.size(); index++) {
+                mapper.insertEventInputIssue(toRow(event.getEventId(), index, inputIssues.get(index)));
+            }
             return null;
         });
     }
@@ -94,7 +103,11 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
                 for (SecurityEventAttributePo attribute : mapper.findEventAttributes(row.getEventId())) {
                     attributes.put(attribute.getAttributeKey(), attribute.getAttributeValue());
                 }
-                events.add(toEvent(row, roleIds, attributes));
+                List<EventInputIssue> inputIssues = new ArrayList<EventInputIssue>();
+                for (SecurityEventInputIssuePo issue : mapper.findEventInputIssues(row.getEventId())) {
+                    inputIssues.add(toInputIssue(issue));
+                }
+                events.add(toEvent(row, roleIds, attributes, inputIssues));
             }
             return events;
         });
@@ -243,11 +256,14 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
         row.setOrgScope(event.getOrgScope());
         row.setDataCount(event.getDataCount());
         row.setLatencyMs(event.getLatencyMs());
+        row.setDataCountKnown(event.hasDataCount());
+        row.setLatencyMsKnown(event.hasLatencyMs());
+        row.setInputStatus(event.getInputStatus());
         return row;
     }
 
     private static SecurityEvent toEvent(SecurityEventPo row, Set<String> roleIds,
-                                         Map<String, String> attributes) {
+                                         Map<String, String> attributes, List<EventInputIssue> inputIssues) {
         return SecurityEvent.builder()
             .eventId(row.getEventId())
             .systemId(row.getSystemId())
@@ -269,9 +285,33 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
             .resourceId(row.getResourceId())
             .orgScope(row.getOrgScope())
             .dataCount(row.getDataCount())
+            .dataCountKnown(row.isDataCountKnown())
             .latencyMs(row.getLatencyMs())
+            .latencyMsKnown(row.isLatencyMsKnown())
+            .inputStatus(row.getInputStatus() == null ? EventInputStatus.UNKNOWN : row.getInputStatus())
+            .inputIssues(inputIssues)
             .attributes(attributes)
             .build();
+    }
+
+    private static SecurityEventInputIssuePo toRow(String eventId, int issueIndex, EventInputIssue issue) {
+        SecurityEventInputIssuePo row = new SecurityEventInputIssuePo();
+        row.setEventId(eventId);
+        row.setIssueIndex(issueIndex);
+        row.setRuleId(issue.getRuleId());
+        row.setFactName(issue.getFactName());
+        row.setIssueCode(issue.getIssueCode());
+        row.setSourceType(issue.getSourceType());
+        return row;
+    }
+
+    private static EventInputIssue toInputIssue(SecurityEventInputIssuePo row) {
+        try {
+            return EventInputIssue.of(row.getRuleId(), row.getFactName(),
+                EventInputIssueCode.valueOf(row.getIssueCode()), EventFactSource.valueOf(row.getSourceType()));
+        } catch (RuntimeException exception) {
+            throw new IllegalStateException("Persisted event input issue is invalid");
+        }
     }
 
     private static SecurityAlertPo toRow(SecurityAlert alert) {

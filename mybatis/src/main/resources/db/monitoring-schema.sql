@@ -19,8 +19,13 @@ CREATE TABLE security_event (
     org_scope VARCHAR(256) COMMENT '组织或租户范围',
     data_count BIGINT NOT NULL COMMENT '涉及数据数量',
     latency_ms BIGINT NOT NULL COMMENT '处理耗时，单位毫秒',
+    data_count_known TINYINT(1) NOT NULL DEFAULT 0 COMMENT '数据量是否由宿主明确提供',
+    latency_ms_known TINYINT(1) NOT NULL DEFAULT 0 COMMENT '耗时是否由宿主明确提供',
+    input_status VARCHAR(32) NOT NULL DEFAULT 'UNKNOWN' COMMENT '规则输入质量状态',
     PRIMARY KEY (event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件明细表';
+
+-- Existing deployments: ALTER TABLE additions for data_count_known, latency_ms_known, and input_status use NOT NULL DEFAULT 0, 0, and 'UNKNOWN' before creating the issue table, so historical events remain unknown rather than inferred.
 
 CREATE INDEX idx_security_event_occurred_at ON security_event (occurred_at);
 CREATE INDEX idx_security_event_subject_at ON security_event (user_id, source_ip, occurred_at);
@@ -37,6 +42,16 @@ CREATE TABLE security_event_attribute (
     attribute_value VARCHAR(512) NOT NULL COMMENT '受控扩展属性值',
     PRIMARY KEY (event_id, attribute_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件扩展属性表';
+
+CREATE TABLE security_event_input_issue (
+    event_id VARCHAR(128) NOT NULL COMMENT '事件唯一标识',
+    issue_index INTEGER NOT NULL COMMENT '事件内稳定问题序号',
+    rule_id VARCHAR(128) NOT NULL COMMENT '受影响规则稳定标识',
+    fact_name VARCHAR(128) NOT NULL COMMENT '受影响事实稳定名称',
+    issue_code VARCHAR(128) NOT NULL COMMENT '受控问题码',
+    source_type VARCHAR(64) NOT NULL COMMENT '受控事实来源类别',
+    PRIMARY KEY (event_id, issue_index)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件输入质量问题表';
 
 CREATE TABLE security_rule (
     rule_id VARCHAR(128) NOT NULL COMMENT '规则稳定标识',

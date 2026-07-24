@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.mybatis.po;
 
 import io.github.jasper.monitoring.api.AccountType;
+import io.github.jasper.monitoring.api.EventInputStatus;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import java.time.Instant;
@@ -51,4 +52,10 @@ public final class SecurityEventPo {
     private long dataCount;
     /** 本次操作的处理耗时，单位为毫秒。 */
     private long latencyMs;
+    /** 数据量是否由宿主明确提供。 */
+    private boolean dataCountKnown;
+    /** 耗时是否由宿主明确提供。 */
+    private boolean latencyMsKnown;
+    /** 规则输入质量状态。 */
+    private EventInputStatus inputStatus;
 }
