@@ -26,6 +26,8 @@ public final class EventInputValidation {
         this.status = status;
         this.issues = immutableIssues(issues);
         this.ineligibleRuleIds = immutableRuleIds(ineligibleRuleIds);
+        requireMatchingRuleIds(this.issues, this.ineligibleRuleIds);
+        requireStatusDetails(status, this.issues, this.ineligibleRuleIds);
     }
 
     /**
@@ -84,7 +86,7 @@ public final class EventInputValidation {
      * @return 规则标识有效且不在不可评估集合中时为 {@code true}
      */
     public boolean isEligible(String ruleId) {
-        return ruleId != null && !ruleId.trim().isEmpty() && !ineligibleRuleIds.contains(ruleId.trim());
+        return EventInputIssue.isStableRuleId(ruleId) && !ineligibleRuleIds.contains(ruleId);
     }
 
     private static List<EventInputIssue> immutableIssues(Collection<EventInputIssue> values) {
@@ -107,11 +109,35 @@ public final class EventInputValidation {
         }
         Set<String> copied = new LinkedHashSet<String>();
         for (String value : values) {
-            if (value == null || value.trim().isEmpty()) {
-                throw new IllegalArgumentException("ineligibleRuleIds must not contain blank values");
+            if (!EventInputIssue.isStableRuleId(value)) {
+                throw new IllegalArgumentException("ineligibleRuleIds must contain stable rule identifiers");
             }
-            copied.add(value.trim());
+            copied.add(value);
         }
         return Collections.unmodifiableSet(copied);
+    }
+
+    private static void requireMatchingRuleIds(Collection<EventInputIssue> issues, Set<String> ruleIds) {
+        Set<String> issueRuleIds = new LinkedHashSet<String>();
+        for (EventInputIssue issue : issues) {
+            issueRuleIds.add(issue.getRuleId());
+        }
+        if (!issueRuleIds.equals(ruleIds)) {
+            throw new IllegalArgumentException("ineligibleRuleIds must exactly match issue rule IDs");
+        }
+    }
+
+    private static void requireStatusDetails(EventInputStatus status, Collection<EventInputIssue> issues,
+                                             Set<String> ruleIds) {
+        boolean hasDetails = !issues.isEmpty() || !ruleIds.isEmpty();
+        if (status == EventInputStatus.INCOMPLETE || status == EventInputStatus.INVALID) {
+            if (!hasDetails) {
+                throw new IllegalArgumentException("INCOMPLETE and INVALID validations require issues and rule IDs");
+            }
+            return;
+        }
+        if (hasDetails) {
+            throw new IllegalArgumentException("VALID and UNKNOWN validations must not contain issues or rule IDs");
+        }
     }
 }

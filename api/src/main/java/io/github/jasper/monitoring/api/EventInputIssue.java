@@ -1,5 +1,11 @@
 package io.github.jasper.monitoring.api;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Pattern;
+
 /**
  * 一个稳定且不含原始输入值的监测事实问题。
  *
@@ -7,16 +13,26 @@ package io.github.jasper.monitoring.api;
  * 写入事件。</p>
  */
 public final class EventInputIssue {
+    private static final int MAXIMUM_IDENTIFIER_LENGTH = 128;
+    private static final Pattern RULE_ID = Pattern.compile("[A-Za-z][A-Za-z0-9]*(?:[._-][A-Za-z0-9]+)*");
+    private static final Pattern FACT_NAME = Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,127}");
+    private static final Pattern ISSUE_CODE = Pattern.compile("[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*");
+    private static final Set<String> SOURCE_TYPES = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
+        "STATIC_DECLARATION", "TRUSTED_REQUEST", "TRUSTED_IDENTITY", "METHOD_PARAMETER",
+        "SERVER_COMPUTED", "AUTHORIZATION", "EVENT_ENRICHER")));
+    private static final Set<String> PAYLOAD_FACT_MARKERS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
+        "payload", "body", "rawvalue", "rawinput", "rawdata", "exceptionmessage", "stacktrace")));
+
     private final String ruleId;
     private final String factName;
     private final String issueCode;
     private final String sourceType;
 
     private EventInputIssue(String ruleId, String factName, String issueCode, String sourceType) {
-        this.ruleId = requiredText(ruleId, "ruleId");
-        this.factName = requiredText(factName, "factName");
-        this.issueCode = requiredText(issueCode, "issueCode");
-        this.sourceType = requiredText(sourceType, "sourceType");
+        this.ruleId = requiredRuleId(ruleId);
+        this.factName = requiredFactName(factName);
+        this.issueCode = requiredIssueCode(issueCode);
+        this.sourceType = requiredSourceType(sourceType);
     }
 
     /**
@@ -41,7 +57,7 @@ public final class EventInputIssue {
      * @return 使用 {@code MISSING_*} 问题码的问题
      */
     public static EventInputIssue missing(String ruleId, String factName, String sourceType) {
-        String requiredFactName = requiredText(factName, "factName");
+        String requiredFactName = requiredFactName(factName);
         return new EventInputIssue(ruleId, requiredFactName, missingIssueCode(requiredFactName), sourceType);
     }
 
@@ -99,11 +115,86 @@ public final class EventInputIssue {
             + '}';
     }
 
-    private static String requiredText(String value, String name) {
-        if (value == null || value.trim().isEmpty()) {
-            throw new IllegalArgumentException(name + " is required");
+    private static String requiredRuleId(String value) {
+        if (!isStableRuleId(value)) {
+            throw new IllegalArgumentException("ruleId must be a stable rule identifier");
         }
-        return value.trim();
+        return value;
+    }
+
+    private static String requiredFactName(String value) {
+        String factName = requiredIdentifier(value, "factName");
+        requireNonSensitiveFactName(factName);
+        if (!FACT_NAME.matcher(factName).matches() || containsPayloadMarker(factName)) {
+            throw new IllegalArgumentException("factName must be a safe identifier");
+        }
+        return factName;
+    }
+
+    private static String requiredIssueCode(String value) {
+        String issueCode = requiredIdentifier(value, "issueCode");
+        if (!ISSUE_CODE.matcher(issueCode).matches()) {
+            throw new IllegalArgumentException("issueCode must be a stable uppercase code");
+        }
+        return issueCode;
+    }
+
+    private static String requiredSourceType(String value) {
+        String sourceType = requiredIdentifier(value, "sourceType");
+        if (!SOURCE_TYPES.contains(sourceType)) {
+            throw new IllegalArgumentException("sourceType must be a supported source category");
+        }
+        return sourceType;
+    }
+
+    static boolean isStableRuleId(String value) {
+        return isStableIdentifier(value) && RULE_ID.matcher(value).matches();
+    }
+
+    private static String requiredIdentifier(String value, String name) {
+        if (!isStableIdentifier(value)) {
+            throw new IllegalArgumentException(name + " must be a non-empty stable identifier");
+        }
+        return value;
+    }
+
+    private static boolean isStableIdentifier(String value) {
+        if (value == null || value.isEmpty() || value.length() > MAXIMUM_IDENTIFIER_LENGTH) {
+            return false;
+        }
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (Character.isWhitespace(character) || Character.isSpaceChar(character)
+                || Character.isISOControl(character)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void requireNonSensitiveFactName(String factName) {
+        try {
+            SecurityFieldSanitizer.requireSafeAttributeKey(factName);
+        } catch (IllegalArgumentException ignored) {
+            throw new IllegalArgumentException("factName must be a non-sensitive identifier");
+        }
+    }
+
+    private static boolean containsPayloadMarker(String factName) {
+        StringBuilder normalized = new StringBuilder(factName.length());
+        for (int index = 0; index < factName.length(); index++) {
+            char character = factName.charAt(index);
+            if (Character.isLetterOrDigit(character)) {
+                normalized.append(Character.toLowerCase(character));
+            }
+        }
+        String comparable = normalized.toString();
+        for (String marker : PAYLOAD_FACT_MARKERS) {
+            if (comparable.contains(marker)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String missingIssueCode(String factName) {
