@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.web;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 import io.github.jasper.monitoring.api.AccountType;
 import io.github.jasper.monitoring.api.SecurityFieldSanitizer;
 import java.util.Collections;
@@ -44,7 +47,10 @@ public final class FrontendServerContext {
     public Set<String> getRoleIds() { return roleIds; }
     private static String required(String value, String name) {
         String sanitized = SecurityFieldSanitizer.text(value, 128);
-        if (sanitized == null || sanitized.isEmpty()) { throw new IllegalArgumentException(name + " is required"); }
+        if (sanitized == null || sanitized.isEmpty()) {
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                name + " is required");
+        }
         return sanitized;
     }
     /** Builder for {@link FrontendServerContext}. */

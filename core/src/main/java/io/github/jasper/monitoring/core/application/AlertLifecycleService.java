@@ -6,6 +6,9 @@ import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.domain.AlertDisposition;
 import io.github.jasper.monitoring.api.AlertStatus;
 import io.github.jasper.monitoring.api.DispositionType;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringStateException;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
@@ -95,7 +98,8 @@ public final class AlertLifecycleService {
         requireText(commentText, "commentText");
         return repository.inTransaction(() -> {
             SecurityAlert alert = repository.findAlert(alertId)
-                .orElseThrow(() -> new IllegalArgumentException("Alert not found: " + alertId));
+                .orElseThrow(() -> new MonitoringValidationException(MonitoringErrorCode.ALERT_NOT_FOUND,
+                    "Alert not found"));
             assertTransitionAllowed(alert.getStatus(), dispositionType);
 
             Instant now = Instant.now(clock);
@@ -111,23 +115,28 @@ public final class AlertLifecycleService {
     private static void assertTransitionAllowed(AlertStatus currentStatus, DispositionType dispositionType) {
         if (dispositionType == DispositionType.ACKNOWLEDGED) {
             if (currentStatus == AlertStatus.NEW) { return; }
-            throw new IllegalStateException("Only new alerts can be acknowledged");
+            throw invalidTransition("Only new alerts can be acknowledged");
         }
         if (dispositionType == DispositionType.CLOSED) {
             if (currentStatus == AlertStatus.ACKNOWLEDGED || currentStatus == AlertStatus.IN_PROGRESS) { return; }
-            throw new IllegalStateException("Only acknowledged or in-progress alerts can be closed");
+            throw invalidTransition("Only acknowledged or in-progress alerts can be closed");
         }
         if (dispositionType == DispositionType.IN_PROGRESS) {
             if (currentStatus == AlertStatus.ACKNOWLEDGED) { return; }
-            throw new IllegalStateException("Only acknowledged alerts can enter investigation");
+            throw invalidTransition("Only acknowledged alerts can enter investigation");
         }
         if (dispositionType == DispositionType.FALSE_POSITIVE && currentStatus.isOpen()) { return; }
-        throw new IllegalStateException("Terminal alerts cannot be changed");
+        throw invalidTransition("Terminal alerts cannot be changed");
     }
 
     private static void requireText(String value, String name) {
         if (value == null || value.trim().isEmpty()) {
-            throw new IllegalArgumentException(name + " is required");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                name + " is required");
         }
+    }
+
+    private static MonitoringStateException invalidTransition(String message) {
+        return new MonitoringStateException(MonitoringErrorCode.INVALID_ALERT_TRANSITION, message);
     }
 }

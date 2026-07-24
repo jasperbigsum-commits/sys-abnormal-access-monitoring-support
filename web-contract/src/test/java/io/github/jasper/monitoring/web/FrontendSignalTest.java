@@ -1,5 +1,7 @@
 package io.github.jasper.monitoring.web;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.time.Instant;
@@ -9,7 +11,8 @@ class FrontendSignalTest {
 
     @Test
     void rejectsClientSuppliedIdentityAndUnknownMetadata() {
-        assertThrows(IllegalArgumentException.class, () -> FrontendSignal.builder()
+        MonitoringValidationException exception = assertThrows(MonitoringValidationException.class,
+            () -> FrontendSignal.builder()
             .clientEventId("client-1")
             .occurredAt(Instant.parse("2026-07-22T00:00:00Z"))
             .requestId("request-1")
@@ -17,6 +20,8 @@ class FrontendSignalTest {
             .action("VIEW")
             .attribute("user_id", "alice")
             .build());
+
+        assertEquals(MonitoringErrorCode.UNSAFE_EVENT_ATTRIBUTE, exception.getErrorCode());
     }
 
     @Test

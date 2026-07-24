@@ -7,6 +7,9 @@ import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ControlTrigger;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -120,12 +123,14 @@ public final class AnnotatedControlHandler implements ControlHandler {
                 continue;
             }
             if (trigger.value() == ControlActionType.RECORD) {
-                throw new IllegalArgumentException("ControlTrigger cannot bind RECORD");
+                throw new MonitoringValidationException(MonitoringErrorCode.INVALID_CONTROL_TRIGGER,
+                    "ControlTrigger cannot bind RECORD");
             }
             validate(method);
             makeAccessible(method);
             if (values.put(trigger.value(), method) != null) {
-                throw new IllegalArgumentException("Duplicate ControlTrigger binding for " + trigger.value());
+                throw new MonitoringConfigurationException(MonitoringErrorCode.DUPLICATE_CONTROL_BINDING,
+                    "Duplicate ControlTrigger binding");
             }
         }
         return values;
@@ -151,8 +156,8 @@ public final class AnnotatedControlHandler implements ControlHandler {
         if (!Modifier.isPublic(method.getModifiers()) || method.getParameterTypes().length != 1
             || method.getParameterTypes()[0] != ControlCommand.class
             || (method.getReturnType() != Void.TYPE && method.getReturnType() != ControlExecution.class)) {
-            throw new IllegalArgumentException("ControlTrigger method " + method.getName()
-                + " must be public, accept one ControlCommand, and return void or ControlExecution");
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_CONTROL_TRIGGER,
+                "ControlTrigger method must be public, accept one ControlCommand, and return void or ControlExecution");
         }
     }
 

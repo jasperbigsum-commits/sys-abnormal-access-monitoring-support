@@ -3,6 +3,9 @@ package io.github.jasper.monitoring.core.application;
 
 import io.github.jasper.monitoring.api.MonitorActionDefinition;
 import io.github.jasper.monitoring.api.SecurityFieldSanitizer;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -30,7 +33,8 @@ public final class MonitoringActionRegistry {
         MonitorActionDefinition value = Objects.requireNonNull(definition, "definition");
         MonitorActionDefinition previous = actions.get(value.getAction());
         if (previous != null && !previous.equals(value)) {
-            throw new IllegalStateException("Conflicting monitoring action definition: " + value.getAction());
+            throw new MonitoringConfigurationException(MonitoringErrorCode.CONFLICTING_ACTION_DEFINITION,
+                "Conflicting monitoring action definition");
         }
         actions.put(value.getAction(), value);
         return this;
@@ -57,7 +61,8 @@ public final class MonitoringActionRegistry {
         String key = normalizeAction(action);
         MonitorActionDefinition definition = actions.get(key);
         if (definition == null) {
-            throw new IllegalArgumentException("Monitoring action is not registered: " + key);
+            throw new MonitoringValidationException(MonitoringErrorCode.ACTION_NOT_REGISTERED,
+                "Monitoring action is not registered");
         }
         return definition;
     }
@@ -74,7 +79,8 @@ public final class MonitoringActionRegistry {
     private static String normalizeAction(String action) {
         String value = SecurityFieldSanitizer.text(action, 128);
         if (value == null || value.isEmpty()) {
-            throw new IllegalArgumentException("Monitoring action is required");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                "Monitoring action is required");
         }
         return value;
     }

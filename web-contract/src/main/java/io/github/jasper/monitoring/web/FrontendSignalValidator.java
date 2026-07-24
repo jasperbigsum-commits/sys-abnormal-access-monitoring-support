@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.web;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 import java.time.Duration;
 import java.time.Instant;
 
@@ -18,7 +21,10 @@ public final class FrontendSignalValidator {
      * @throws IllegalArgumentException if the duration is {@code null} or negative
      */
     public FrontendSignalValidator(Duration allowedClockSkew) {
-        if (allowedClockSkew == null || allowedClockSkew.isNegative()) { throw new IllegalArgumentException("allowedClockSkew must be non-negative"); }
+        if (allowedClockSkew == null || allowedClockSkew.isNegative()) {
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "allowedClockSkew must be non-negative");
+        }
         this.allowedClockSkew = allowedClockSkew;
     }
     /**
@@ -29,8 +35,14 @@ public final class FrontendSignalValidator {
      * @throws IllegalArgumentException if either input is missing or clock skew exceeds the limit
      */
     public void validate(FrontendSignal signal, Instant receivedAt) {
-        if (signal == null || receivedAt == null) { throw new IllegalArgumentException("signal and receivedAt are required"); }
+        if (signal == null || receivedAt == null) {
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                "signal and receivedAt are required");
+        }
         Duration skew = Duration.between(signal.getOccurredAt(), receivedAt).abs();
-        if (skew.compareTo(allowedClockSkew) > 0) { throw new IllegalArgumentException("Frontend signal is outside allowed clock skew"); }
+        if (skew.compareTo(allowedClockSkew) > 0) {
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "Frontend signal is outside allowed clock skew");
+        }
     }
 }
