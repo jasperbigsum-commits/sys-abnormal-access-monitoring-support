@@ -52,7 +52,7 @@ public final class SecurityEvent {
     private final List<EventInputIssue> inputIssues;
     private final Map<String, String> attributes;
 
-    private SecurityEvent(Builder builder) {
+    private SecurityEvent(Builder builder, EventInputValidation validation) {
         this.eventId = builder.eventId;
         this.systemId = builder.systemId;
         this.eventType = builder.eventType;
@@ -76,8 +76,8 @@ public final class SecurityEvent {
         this.dataCountKnown = builder.dataCountKnown;
         this.latencyMs = builder.latencyMs;
         this.latencyMsKnown = builder.latencyMsKnown;
-        this.inputStatus = builder.inputStatus;
-        this.inputIssues = Collections.unmodifiableList(new ArrayList<EventInputIssue>(builder.inputIssues));
+        this.inputStatus = validation.getStatus();
+        this.inputIssues = Collections.unmodifiableList(new ArrayList<EventInputIssue>(validation.getIssues()));
         this.attributes = Collections.unmodifiableMap(new LinkedHashMap<String, String>(builder.attributes));
     }
 
@@ -274,6 +274,20 @@ public final class SecurityEvent {
         /** @param value 已校验补充属性 @return 当前构建器 */
         public Builder attributes(Map<String, String> value) { attributes = value == null ? new LinkedHashMap<String, String>() : value; return this; }
         /** @return 本构建器表示的不可变安全事件 */
-        public SecurityEvent build() { return new SecurityEvent(this); }
+        public SecurityEvent build() {
+            EventInputValidation validation = EventInputValidation.of(inputStatus, inputIssues,
+                ineligibleRuleIds(inputIssues));
+            return new SecurityEvent(this, validation);
+        }
+
+        private static Set<String> ineligibleRuleIds(Collection<EventInputIssue> issues) {
+            Set<String> ruleIds = new LinkedHashSet<String>();
+            for (EventInputIssue issue : issues) {
+                if (issue != null) {
+                    ruleIds.add(issue.getRuleId());
+                }
+            }
+            return ruleIds;
+        }
     }
 }

@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.jasper.monitoring.api.EventFactSource;
@@ -12,6 +13,7 @@ import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Collections;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +38,36 @@ class SecurityEventTest {
 
         assertEquals(EventInputStatus.VALID, event.getInputStatus());
         assertTrue(event.getInputIssues().isEmpty());
+    }
+
+    @Test
+    void rejectsBuilderInputQualityCombinationsThatCannotBeValidated() {
+        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", EventFactSource.SERVER_COMPUTED);
+
+        assertThrows(IllegalArgumentException.class,
+            () -> SecurityEvent.builder().inputStatus(EventInputStatus.INCOMPLETE).build());
+        assertThrows(IllegalArgumentException.class,
+            () -> SecurityEvent.builder().inputStatus(EventInputStatus.VALID)
+                .inputIssues(Collections.singletonList(issue)).build());
+        assertThrows(IllegalArgumentException.class,
+            () -> SecurityEvent.builder().inputStatus(EventInputStatus.UNKNOWN)
+                .inputIssues(Collections.singletonList(issue)).build());
+        assertThrows(IllegalArgumentException.class,
+            () -> SecurityEvent.builder().inputStatus(EventInputStatus.INCOMPLETE)
+                .inputIssues(Arrays.asList((EventInputIssue) null)).build());
+    }
+
+    @Test
+    void preservesBuilderSupportForValidLegacyAndIncompleteRows() {
+        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", EventFactSource.SERVER_COMPUTED);
+
+        SecurityEvent legacyEvent = SecurityEvent.builder().build();
+        SecurityEvent incompleteEvent = SecurityEvent.builder().inputStatus(EventInputStatus.INCOMPLETE)
+            .inputIssues(Collections.singletonList(issue)).build();
+
+        assertEquals(EventInputStatus.UNKNOWN, legacyEvent.getInputStatus());
+        assertEquals(EventInputStatus.INCOMPLETE, incompleteEvent.getInputStatus());
+        assertEquals(Collections.singletonList(issue), incompleteEvent.getInputIssues());
     }
 
     private static SecurityEventDraft explicitZeroDraft() {
