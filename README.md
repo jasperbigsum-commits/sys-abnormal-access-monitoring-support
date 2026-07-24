@@ -34,6 +34,8 @@
 
 ## 快速接入
 
+生产接入按七步验收：唯一 Starter、受控 Schema 迁移、可信身份/授权/代理 SPI、`OBSERVE` 配置、安全测试事件、真实控制处理器测试，最后才启用 `ENFORCE`。逐步命令、遗漏检查和高级能力见[集成指南](docs/集成指南.md#十五分钟接入路径)。
+
 先通过 BOM 管理版本，再按宿主 Boot 大版本引入**一个** Starter：
 
 ```xml
@@ -165,13 +167,15 @@ mvn io.github.jasperbigsum-commits:sys-abnormal-access-monitoring-maven-plugin:$
   '-Dabnormal.access.monitor.systemId=order-service'
 ```
 
-目标会创建且只创建以下 5 个文件：`application-abnormal-access-monitoring.yml`、`host-spi/HostMonitoringSpi.java`、`host-spi/HostMonitoringActions.java`、`host-spi/HostControlHandler.java` 和 `frontend-signal-v1.example.json`。配置模板包含 `instrumentation` 与 `mdc` 默认项；`HostMonitoringActions` 提供 `MonitoringActionRegistry` 的注册式动作样例。Java 模板需要移入宿主 `src/main/java` 并注册为 Spring Bean；模板的匿名身份、默认拒绝和不执行控制均是安全占位，不能直接用于生产。
+目标会创建且只创建以下 5 个文件：`application-abnormal-access-monitoring.yml`、`host-spi/HostMonitoringSpi.java`、`host-spi/HostMonitoringActions.java`、`host-spi/HostControlHandler.java` 和 `frontend-signal-v1.example.json`。配置模板包含 `instrumentation` 与 `mdc` 默认项；`HostMonitoringActions` 提供 `MonitoringActionRegistry` 的注册式动作样例。Java 模板需要移入宿主 `src/main/java` 并注册为 Spring Bean；模板的匿名身份、默认拒绝和不执行控制均是安全默认实现，不能直接用于生产。
 
 ## 文档与验证
 
-- [集成指南](docs/集成指南.md)：依赖、SPI、注解/方法埋点、内部/持久化规则边界、MDC、控制触发、MyBatis、[前端补充信息统一接入](docs/集成指南.md#6-前端补充信息统一接入)（统一请求契约、宿主适配、安全校验与响应边界）和最小验收矩阵。
-- [架构与运维说明](docs/架构与运维说明.md)：运行时边界、上线步骤、迁移和巡检。
-- [1.0 最小上线验收与版本排期](docs/1.0最小上线验收与版本排期.md)：以最小验收成果为优先级的 1.0 TODO、发布门禁和 1.1/1.2 候选范围。
+- [集成指南](docs/集成指南.md)：十五分钟接入、常见遗漏、高级功能、前端契约与生产验收。
+- [错误规范](docs/错误规范.md)：13 个稳定错误码、异常层级、重试建议和宿主协议映射边界。
+- [架构与运维说明](docs/架构与运维说明.md)：模块隔离、调用流程、事务与提交后副作用、上线迁移和巡检。
+- [功能与优化路线图](docs/路线图.md)：M0-M3 优先级、范围、完成信号和明确延期项。
+- [1.0 最小上线验收与版本排期](docs/1.0最小上线验收与版本排期.md)：以最小验收成果为优先级的 1.0 遗留清单、发布门禁和 1.1/1.2 候选范围。
 - [领域模型与数据设计](docs/领域模型与数据设计.md)：聚合边界、表映射、规则契约和最小验收。
 - [MyBatis 标准化 ORM 与架构设计评审稿](docs/MyBatis标准化ORM与架构设计评审稿.md)：ORM 映射、全量表字段字典、事务边界、核心调用链和待决评审项。
 - [集成审计与基础项目验收](docs/集成审计与基础项目验收.md)：Boot 2/3 可启动审计项目、HTTP 验收路由、Surefire 证据路径与风险定位方式。
