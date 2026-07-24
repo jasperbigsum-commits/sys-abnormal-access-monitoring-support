@@ -2,13 +2,19 @@ package io.github.jasper.monitoring.core.domain;
 
 
 import io.github.jasper.monitoring.api.AccountType;
+import io.github.jasper.monitoring.api.EventInputIssue;
+import io.github.jasper.monitoring.api.EventInputStatus;
+import io.github.jasper.monitoring.api.EventInputValidation;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -39,7 +45,11 @@ public final class SecurityEvent {
     private final String resourceId;
     private final String orgScope;
     private final long dataCount;
+    private final boolean dataCountKnown;
     private final long latencyMs;
+    private final boolean latencyMsKnown;
+    private final EventInputStatus inputStatus;
+    private final List<EventInputIssue> inputIssues;
     private final Map<String, String> attributes;
 
     private SecurityEvent(Builder builder) {
@@ -63,7 +73,11 @@ public final class SecurityEvent {
         this.resourceId = builder.resourceId;
         this.orgScope = builder.orgScope;
         this.dataCount = builder.dataCount;
+        this.dataCountKnown = builder.dataCountKnown;
         this.latencyMs = builder.latencyMs;
+        this.latencyMsKnown = builder.latencyMsKnown;
+        this.inputStatus = builder.inputStatus;
+        this.inputIssues = Collections.unmodifiableList(new ArrayList<EventInputIssue>(builder.inputIssues));
         this.attributes = Collections.unmodifiableMap(new LinkedHashMap<String, String>(builder.attributes));
     }
 
@@ -77,6 +91,24 @@ public final class SecurityEvent {
      * @return 可用于持久化与规则评估的不可变事件
      */
     public static SecurityEvent from(SecurityEventDraft draft, String systemId, String eventId, Instant receivedAt) {
+        return from(draft, systemId, eventId, receivedAt, EventInputValidation.valid());
+    }
+
+    /**
+     * 将已校验的宿主事件草稿和其输入质量结论转换为可持久化事件。
+     *
+     * @param draft 来自可信服务端接入点的已校验输入
+     * @param systemId 事件来源系统的配置标识
+     * @param eventId 服务端生成的不可变事件标识
+     * @param receivedAt 服务端接收事件时加盖的时间
+     * @param validation 规则输入质量结论
+     * @return 可用于持久化与规则评估的不可变事件
+     */
+    public static SecurityEvent from(SecurityEventDraft draft, String systemId, String eventId, Instant receivedAt,
+                                     EventInputValidation validation) {
+        if (validation == null) {
+            throw new IllegalArgumentException("validation is required");
+        }
         return builder()
             .eventId(eventId).systemId(systemId).eventType(draft.getEventType())
             .occurredAt(draft.getOccurredAt()).receivedAt(receivedAt)
@@ -84,7 +116,9 @@ public final class SecurityEvent {
             .sourceIp(draft.getSourceIp()).deviceIdHash(draft.getDeviceIdHash()).sessionIdHash(draft.getSessionIdHash())
             .requestId(draft.getRequestId()).traceId(draft.getTraceId()).action(draft.getAction()).result(draft.getResult())
             .reasonCode(draft.getReasonCode()).resourceType(draft.getResourceType()).resourceId(draft.getResourceId())
-            .orgScope(draft.getOrgScope()).dataCount(draft.getDataCount()).latencyMs(draft.getLatencyMs())
+            .orgScope(draft.getOrgScope()).dataCount(draft.getDataCount()).dataCountKnown(draft.hasDataCount())
+            .latencyMs(draft.getLatencyMs()).latencyMsKnown(draft.hasLatencyMs())
+            .inputStatus(validation.getStatus()).inputIssues(validation.getIssues())
             .attributes(draft.getAttributes()).build();
     }
 
@@ -130,8 +164,16 @@ public final class SecurityEvent {
     public String getOrgScope() { return orgScope; }
     /** @return 业务动作涉及的数据量，未统计时为零 */
     public long getDataCount() { return dataCount; }
+    /** @return 是否由宿主明确提供数据量；显式 {@code 0} 仍返回 {@code true} */
+    public boolean hasDataCount() { return dataCountKnown; }
     /** @return 业务动作服务端耗时（毫秒），未统计时为零 */
     public long getLatencyMs() { return latencyMs; }
+    /** @return 是否由宿主明确提供服务端耗时；显式 {@code 0} 仍返回 {@code true} */
+    public boolean hasLatencyMs() { return latencyMsKnown; }
+    /** @return 事件接收时的规则输入质量状态 */
+    public EventInputStatus getInputStatus() { return inputStatus; }
+    /** @return 不可变的稳定输入问题集合 */
+    public List<EventInputIssue> getInputIssues() { return inputIssues; }
     /** @return 已校验的补充属性；返回只读映射 */
     public Map<String, String> getAttributes() { return attributes; }
     /**
@@ -167,7 +209,11 @@ public final class SecurityEvent {
         private String resourceId;
         private String orgScope;
         private long dataCount;
+        private boolean dataCountKnown;
         private long latencyMs;
+        private boolean latencyMsKnown;
+        private EventInputStatus inputStatus = EventInputStatus.UNKNOWN;
+        private List<EventInputIssue> inputIssues = new ArrayList<EventInputIssue>();
         private Map<String, String> attributes = new LinkedHashMap<String, String>();
         /** @param value 服务端生成的事件标识 @return 当前构建器 */
         public Builder eventId(String value) { eventId = value; return this; }
@@ -208,9 +254,23 @@ public final class SecurityEvent {
         /** @param value 组织或租户范围 @return 当前构建器 */
         public Builder orgScope(String value) { orgScope = value; return this; }
         /** @param value 涉及数据量 @return 当前构建器 */
-        public Builder dataCount(long value) { dataCount = value; return this; }
+        public Builder dataCount(long value) { dataCount = value; dataCountKnown = true; return this; }
+        /** @param value 是否明确提供了涉及数据量 @return 当前构建器 */
+        public Builder dataCountKnown(boolean value) { dataCountKnown = value; return this; }
         /** @param value 服务端耗时（毫秒） @return 当前构建器 */
-        public Builder latencyMs(long value) { latencyMs = value; return this; }
+        public Builder latencyMs(long value) { latencyMs = value; latencyMsKnown = true; return this; }
+        /** @param value 是否明确提供了服务端耗时 @return 当前构建器 */
+        public Builder latencyMsKnown(boolean value) { latencyMsKnown = value; return this; }
+        /** @param value 规则输入质量状态 @return 当前构建器 */
+        public Builder inputStatus(EventInputStatus value) {
+            inputStatus = value == null ? EventInputStatus.UNKNOWN : value;
+            return this;
+        }
+        /** @param value 稳定输入问题集合 @return 当前构建器 */
+        public Builder inputIssues(Collection<EventInputIssue> value) {
+            inputIssues = value == null ? new ArrayList<EventInputIssue>() : new ArrayList<EventInputIssue>(value);
+            return this;
+        }
         /** @param value 已校验补充属性 @return 当前构建器 */
         public Builder attributes(Map<String, String> value) { attributes = value == null ? new LinkedHashMap<String, String>() : value; return this; }
         /** @return 本构建器表示的不可变安全事件 */
