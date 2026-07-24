@@ -14,6 +14,8 @@ import io.github.jasper.monitoring.api.ResourceScopeRequest;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
 import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
 import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
@@ -336,7 +338,24 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     @Test
     void rejectsDuplicateAnnotatedControlTriggers() {
         contextRunner.withUserConfiguration(DuplicateControlTriggerConfiguration.class)
-            .run(context -> assertThat(context).hasFailed());
+            .run(context -> {
+                assertThat(context).hasFailed();
+                MonitoringConfigurationException failure = findCause(context.getStartupFailure(),
+                    MonitoringConfigurationException.class);
+                assertThat(failure).isNotNull();
+                assertThat(failure.getErrorCode()).isEqualTo(MonitoringErrorCode.DUPLICATE_CONTROL_BINDING);
+            });
+    }
+
+    private static <T extends Throwable> T findCause(Throwable failure, Class<T> type) {
+        Throwable current = failure;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private static Class<?> autoConfiguration() {

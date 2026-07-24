@@ -7,6 +7,8 @@ import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.core.application.ActionEventRecorder;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
 import io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger;
@@ -100,7 +102,8 @@ public class AbnormalAccessMonitorAutoConfiguration {
             ControlHandler handler = AnnotatedControlHandler.lazy(type, () -> beanFactory.getBean(beanName));
             for (ControlActionType action : ControlActionType.values()) {
                 if (handler.supports(action) && !annotatedActions.add(action)) {
-                    throw new IllegalArgumentException("Duplicate ControlTrigger binding for " + action);
+                    throw new MonitoringConfigurationException(MonitoringErrorCode.DUPLICATE_CONTROL_BINDING,
+                        "Duplicate annotated ControlTrigger binding");
                 }
             }
             values.add(handler);

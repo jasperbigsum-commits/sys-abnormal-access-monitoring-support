@@ -2,6 +2,7 @@ package io.github.jasper.monitoring.mybatis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.AccountType;
@@ -14,6 +15,8 @@ import io.github.jasper.monitoring.api.RuleMode;
 import io.github.jasper.monitoring.api.RuleSource;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringPersistenceException;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
 import io.github.jasper.monitoring.core.domain.ControlRecord;
@@ -46,6 +49,33 @@ import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.junit.jupiter.api.Test;
 
 class MyBatisMonitoringRepositoryTest {
+
+    @Test
+    void exposesCodedPersistenceFailureWhenSchemaHasNotBeenApplied() {
+        DataSource dataSource = new UnpooledDataSource(
+            "org.h2.Driver", "jdbc:h2:mem:monitoring-unmigrated;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
+            "test", new JdbcTransactionFactory(), dataSource));
+        MonitoringRepository repository = MyBatisMonitoringRepositoryRegistrar.create(configuration);
+        Instant occurredAt = Instant.parse("2026-07-22T01:00:00Z");
+        SecurityEvent event = SecurityEvent.builder()
+            .eventId("event-unmigrated")
+            .systemId("orders")
+            .eventType(SecurityEventType.LOGIN_FAILURE)
+            .occurredAt(occurredAt)
+            .receivedAt(occurredAt)
+            .sourceIp("203.0.113.8")
+            .requestId("request-unmigrated")
+            .action("LOGIN")
+            .result(SecurityEventResult.FAILURE)
+            .build();
+
+        MonitoringPersistenceException exception = assertThrows(MonitoringPersistenceException.class,
+            () -> repository.saveEvent(event));
+
+        assertEquals(MonitoringErrorCode.PERSISTENCE_OPERATION_FAILED, exception.getErrorCode());
+        assertNotNull(exception.getCause());
+    }
 
     @Test
     void declaresMySqlSchemaConventionsAndChineseTableComments() throws Exception {
