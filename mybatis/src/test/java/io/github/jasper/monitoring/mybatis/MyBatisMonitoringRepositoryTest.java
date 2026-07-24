@@ -315,6 +315,57 @@ class MyBatisMonitoringRepositoryTest {
     }
 
     @Test
+    void migratesLegacySchemaBeforePersistingInputQuality() throws Exception {
+        DataSource dataSource = new UnpooledDataSource(
+            "org.h2.Driver", "jdbc:h2:mem:monitoring-input-quality-migration;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        executeSchema(dataSource);
+        removeInputQualitySchema(dataSource);
+        Instant legacyOccurredAt = Instant.parse("2026-07-24T04:02:03Z");
+        insertLegacyEvent(dataSource, legacyOccurredAt);
+
+        executeMigration(dataSource);
+
+        Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
+            "test", new JdbcTransactionFactory(), dataSource));
+        MonitoringRepository repository = MyBatisMonitoringRepositoryRegistrar.create(configuration);
+        SecurityEvent legacyEvent = repository.findEventsSince(legacyOccurredAt).get(0);
+        assertEquals(EventInputStatus.UNKNOWN, legacyEvent.getInputStatus());
+        assertFalse(legacyEvent.hasDataCount());
+        assertFalse(legacyEvent.hasLatencyMs());
+        assertTrue(legacyEvent.getInputIssues().isEmpty());
+
+        Instant qualityOccurredAt = legacyOccurredAt.plusSeconds(1L);
+        EventInputIssue issue = EventInputIssue.of("EXPT-01", "resourceId", EventInputIssueCode.MISSING_RESOURCE_ID,
+            EventFactSource.SERVER_COMPUTED);
+        SecurityEvent qualityEvent = SecurityEvent.builder()
+            .eventId("event-migrated-quality")
+            .systemId("orders")
+            .eventType(SecurityEventType.EXPORT)
+            .occurredAt(qualityOccurredAt)
+            .receivedAt(qualityOccurredAt)
+            .userId("auditor")
+            .accountType(AccountType.PERSON)
+            .sourceIp("203.0.113.20")
+            .requestId("request-migrated-quality")
+            .action("EXPORT")
+            .result(SecurityEventResult.SUCCESS)
+            .dataCount(0L)
+            .latencyMs(5L)
+            .inputStatus(EventInputStatus.INCOMPLETE)
+            .inputIssues(Arrays.asList(issue))
+            .build();
+        repository.saveEvent(qualityEvent);
+
+        SecurityEvent storedQualityEvent = repository.findEventsSince(qualityOccurredAt).get(0);
+        assertEquals(EventInputStatus.INCOMPLETE, storedQualityEvent.getInputStatus());
+        assertEquals(Arrays.asList(issue), storedQualityEvent.getInputIssues());
+        assertEquals(0L, storedQualityEvent.getDataCount());
+        assertEquals(5L, storedQualityEvent.getLatencyMs());
+        assertTrue(storedQualityEvent.hasDataCount());
+        assertTrue(storedQualityEvent.hasLatencyMs());
+    }
+
+    @Test
     void rejectsMalformedPersistedInputIssuesWithoutEchoingStoredValues() throws Exception {
         DataSource dataSource = new UnpooledDataSource(
             "org.h2.Driver", "jdbc:h2:mem:monitoring-input-quality-malformed;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
@@ -335,7 +386,18 @@ class MyBatisMonitoringRepositoryTest {
     }
 
     private void executeSchema(DataSource dataSource) throws Exception {
-        InputStream input = getClass().getResourceAsStream("/db/monitoring-schema.sql");
+        executeSqlResource(dataSource, "/db/monitoring-schema.sql");
+    }
+
+    private void executeMigration(DataSource dataSource) throws Exception {
+        executeSqlResource(dataSource, "/db/migration/V2__event_input_quality.sql");
+    }
+
+    private void executeSqlResource(DataSource dataSource, String resourcePath) throws Exception {
+        InputStream input = getClass().getResourceAsStream(resourcePath);
+        if (input == null) {
+            throw new IllegalStateException("Missing SQL resource: " + resourcePath);
+        }
         try (Connection connection = dataSource.getConnection();
              InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
             ScriptRunner runner = new ScriptRunner(connection);
@@ -411,6 +473,16 @@ class MyBatisMonitoringRepositoryTest {
             statement.setLong(12, 0L);
             statement.setLong(13, 0L);
             statement.executeUpdate();
+        }
+    }
+
+    private void removeInputQualitySchema(DataSource dataSource) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             java.sql.Statement statement = connection.createStatement()) {
+            statement.execute("DROP TABLE security_event_input_issue");
+            statement.execute("ALTER TABLE security_event DROP COLUMN data_count_known");
+            statement.execute("ALTER TABLE security_event DROP COLUMN latency_ms_known");
+            statement.execute("ALTER TABLE security_event DROP COLUMN input_status");
         }
     }
 
