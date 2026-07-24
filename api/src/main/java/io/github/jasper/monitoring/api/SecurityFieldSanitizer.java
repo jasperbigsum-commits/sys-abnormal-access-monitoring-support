@@ -3,6 +3,7 @@ package io.github.jasper.monitoring.api;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -69,6 +70,21 @@ public final class SecurityFieldSanitizer {
                 throw new IllegalArgumentException("Event attributes must not contain credential material: " + normalized);
             }
         }
+    }
+
+    /**
+     * 清洗、校验并规范化属性键。
+     *
+     * <p>所有事件和动作元数据使用同一规范化形式，避免大小写变体绕过静态属性和保留前缀保护。</p>
+     *
+     * @param key 待规范化的属性键
+     * @return 已清洗的小写属性键
+     * @throws IllegalArgumentException 当属性键为空或指向凭据类信息时抛出
+     */
+    public static String normalizeAttributeKey(String key) {
+        String normalized = text(key, 128);
+        requireSafeAttributeKey(normalized);
+        return normalized.toLowerCase(Locale.ROOT);
     }
 
     private static String lettersAndDigits(String value) {

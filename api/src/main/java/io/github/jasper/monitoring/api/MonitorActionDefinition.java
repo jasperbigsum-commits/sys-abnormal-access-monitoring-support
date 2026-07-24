@@ -259,10 +259,12 @@ public final class MonitorActionDefinition {
          * @return current builder
          */
         public Builder attribute(String key, String value) {
-            String safeKey = SecurityFieldSanitizer.text(key, 128);
-            SecurityFieldSanitizer.requireSafeAttributeKey(safeKey);
+            String safeKey = SecurityFieldSanitizer.normalizeAttributeKey(key);
             if (safeKey.toLowerCase(Locale.ROOT).startsWith(RULE_TAG_PREFIX)) {
                 throw new IllegalArgumentException("MonitorAction static attributes cannot use " + RULE_TAG_PREFIX);
+            }
+            if (attributes.containsKey(safeKey)) {
+                throw new IllegalArgumentException("Duplicate MonitorAction static attribute key: " + safeKey);
             }
             String safeValue = SecurityFieldSanitizer.text(value, 512);
             if (safeValue == null || safeValue.isEmpty()) {
@@ -311,10 +313,12 @@ public final class MonitorActionDefinition {
     private static Map<String, String> immutableAttributes(Map<String, String> values) {
         Map<String, String> normalized = new LinkedHashMap<String, String>();
         for (Map.Entry<String, String> entry : values.entrySet()) {
-            String key = SecurityFieldSanitizer.text(entry.getKey(), 128);
-            SecurityFieldSanitizer.requireSafeAttributeKey(key);
+            String key = SecurityFieldSanitizer.normalizeAttributeKey(entry.getKey());
             if (key.toLowerCase(Locale.ROOT).startsWith(RULE_TAG_PREFIX)) {
                 throw new IllegalArgumentException("MonitorAction static attributes cannot use " + RULE_TAG_PREFIX);
+            }
+            if (normalized.containsKey(key)) {
+                throw new IllegalArgumentException("Duplicate MonitorAction static attribute key: " + key);
             }
             String value = SecurityFieldSanitizer.text(entry.getValue(), 512);
             if (value == null || value.isEmpty()) {

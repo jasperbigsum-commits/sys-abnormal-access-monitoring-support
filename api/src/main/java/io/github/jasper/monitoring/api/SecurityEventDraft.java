@@ -30,7 +30,9 @@ public final class SecurityEventDraft {
     private final String resourceId;
     private final String orgScope;
     private final long dataCount;
+    private final boolean dataCountKnown;
     private final long latencyMs;
+    private final boolean latencyMsKnown;
     private final Instant occurredAt;
     private final String reasonCode;
     private final Map<String, String> attributes;
@@ -50,8 +52,10 @@ public final class SecurityEventDraft {
         this.resourceType = SecurityFieldSanitizer.text(builder.resourceType, 128);
         this.resourceId = SecurityFieldSanitizer.text(builder.resourceId, 256);
         this.orgScope = SecurityFieldSanitizer.text(builder.orgScope, 256);
-        this.dataCount = nonNegative(builder.dataCount, "dataCount");
-        this.latencyMs = nonNegative(builder.latencyMs, "latencyMs");
+        this.dataCountKnown = builder.dataCount != null;
+        this.dataCount = nonNegative(builder.dataCount == null ? 0L : builder.dataCount.longValue(), "dataCount");
+        this.latencyMsKnown = builder.latencyMs != null;
+        this.latencyMs = nonNegative(builder.latencyMs == null ? 0L : builder.latencyMs.longValue(), "latencyMs");
         this.occurredAt = required(builder.occurredAt, "occurredAt");
         this.reasonCode = SecurityFieldSanitizer.text(builder.reasonCode, 128);
         this.attributes = immutableAttributes(builder.attributes);
@@ -94,10 +98,14 @@ public final class SecurityEventDraft {
     public String getResourceId() { return resourceId; }
     /** @return 租户、组织或数据域边界；不可用时为 {@code null} */
     public String getOrgScope() { return orgScope; }
-    /** @return 已知时提供的受影响记录数 */
+    /** @return 受影响记录数；未提供时为 {@code 0}，用于兼容既有调用方 */
     public long getDataCount() { return dataCount; }
-    /** @return 已知时提供的实测操作耗时，单位为毫秒 */
+    /** @return 是否由宿主明确提供受影响记录数；显式 {@code 0} 仍返回 {@code true} */
+    public boolean hasDataCount() { return dataCountKnown; }
+    /** @return 实测操作耗时，单位为毫秒；未提供时为 {@code 0}，用于兼容既有调用方 */
     public long getLatencyMs() { return latencyMs; }
+    /** @return 是否由宿主明确提供实测操作耗时；显式 {@code 0} 仍返回 {@code true} */
+    public boolean hasLatencyMs() { return latencyMsKnown; }
     /** @return 服务端观测到的事件时间 */
     public Instant getOccurredAt() { return occurredAt; }
     /** @return 稳定、非敏感的原因码；不可用时为 {@code null} */
@@ -149,10 +157,13 @@ public final class SecurityEventDraft {
 
     private static Map<String, String> immutableAttributes(Map<String, String> attributes) {
         Map<String, String> sanitized = new LinkedHashMap<String, String>();
+        Set<String> normalizedKeys = new LinkedHashSet<String>();
         if (attributes != null) {
             for (Map.Entry<String, String> entry : attributes.entrySet()) {
-                SecurityFieldSanitizer.requireSafeAttributeKey(entry.getKey());
-                String key = SecurityFieldSanitizer.text(entry.getKey(), 128);
+                String key = SecurityFieldSanitizer.normalizeAttributeKey(entry.getKey());
+                if (!normalizedKeys.add(key)) {
+                    throw new IllegalArgumentException("Duplicate event attribute key: " + key);
+                }
                 String value = SecurityFieldSanitizer.text(entry.getValue(), 512);
                 if (value != null) {
                     sanitized.put(key, value);
@@ -178,8 +189,8 @@ public final class SecurityEventDraft {
         private String resourceType;
         private String resourceId;
         private String orgScope;
-        private long dataCount;
-        private long latencyMs;
+        private Long dataCount;
+        private Long latencyMs;
         private Instant occurredAt;
         private String reasonCode;
         private Map<String, String> attributes = new LinkedHashMap<String, String>();
@@ -292,17 +303,17 @@ public final class SecurityEventDraft {
         /**
          * 设置受影响记录数。
          *
-         * @param value 受影响记录数，不能为负数
+         * @param value 受影响记录数，不能为负数；调用该方法即使传入 {@code 0} 也会标记为已提供
          * @return 当前构建器
          */
-        public Builder dataCount(long value) { this.dataCount = value; return this; }
+        public Builder dataCount(long value) { this.dataCount = Long.valueOf(value); return this; }
         /**
          * 设置实测操作耗时。
          *
-         * @param value 实测操作耗时，单位为毫秒，不能为负数
+         * @param value 实测操作耗时，单位为毫秒，不能为负数；调用该方法即使传入 {@code 0} 也会标记为已提供
          * @return 当前构建器
          */
-        public Builder latencyMs(long value) { this.latencyMs = value; return this; }
+        public Builder latencyMs(long value) { this.latencyMs = Long.valueOf(value); return this; }
         /**
          * 设置服务端观测到的事件时间。
          *
@@ -324,7 +335,14 @@ public final class SecurityEventDraft {
          * @param value 属性值
          * @return 当前构建器
          */
-        public Builder attribute(String key, String value) { this.attributes.put(key, value); return this; }
+        public Builder attribute(String key, String value) {
+            String normalizedKey = SecurityFieldSanitizer.normalizeAttributeKey(key);
+            if (this.attributes.containsKey(normalizedKey)) {
+                throw new IllegalArgumentException("Duplicate event attribute key: " + normalizedKey);
+            }
+            this.attributes.put(normalizedKey, value);
+            return this;
+        }
         /**
          * 使用复制后的映射替换扩展属性。
          *
