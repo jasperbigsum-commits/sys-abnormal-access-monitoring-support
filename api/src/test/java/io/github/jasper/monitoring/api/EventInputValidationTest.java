@@ -16,7 +16,7 @@ class EventInputValidationTest {
 
     @Test
     void snapshotsIssuesAndIneligibleRules() {
-        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", "SERVER_COMPUTED");
+        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", EventFactSource.SERVER_COMPUTED);
         List<EventInputIssue> issues = new ArrayList<EventInputIssue>();
         issues.add(issue);
         Set<String> ineligibleRuleIds = new LinkedHashSet<String>();
@@ -37,38 +37,49 @@ class EventInputValidationTest {
     @Test
     void rejectsBlankIssueIdentifiers() {
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of(" ", "dataCount", "MISSING_DATA_COUNT", "SERVER_COMPUTED"));
+            () -> EventInputIssue.of(" ", "dataCount", EventInputIssueCode.MISSING_DATA_COUNT,
+                EventFactSource.SERVER_COMPUTED));
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", " ", "MISSING_DATA_COUNT", "SERVER_COMPUTED"));
+            () -> EventInputIssue.of("EXPT-01", " ", EventInputIssueCode.MISSING_DATA_COUNT,
+                EventFactSource.SERVER_COMPUTED));
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", "dataCount", " ", "SERVER_COMPUTED"));
+            () -> EventInputIssue.of("EXPT-01", "dataCount", null, EventFactSource.SERVER_COMPUTED));
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", "dataCount", "MISSING_DATA_COUNT", " "));
+            () -> EventInputIssue.of("EXPT-01", "dataCount", EventInputIssueCode.MISSING_DATA_COUNT, null));
     }
 
     @Test
     void rejectsUnsafeDiagnosticIdentifiers() {
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", "password", "MISSING_DATA_COUNT", "SERVER_COMPUTED"));
+            () -> EventInputIssue.of("EXPT-01", "password", EventInputIssueCode.MISSING_DATA_COUNT,
+                EventFactSource.SERVER_COMPUTED));
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", "rawPayload", "MISSING_DATA_COUNT", "SERVER_COMPUTED"));
+            () -> EventInputIssue.of("EXPT-01", "rawPayload", EventInputIssueCode.MISSING_DATA_COUNT,
+                EventFactSource.SERVER_COMPUTED));
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", "data count", "MISSING_DATA_COUNT", "SERVER_COMPUTED"));
+            () -> EventInputIssue.of("EXPT-01", "data count", EventInputIssueCode.MISSING_DATA_COUNT,
+                EventFactSource.SERVER_COMPUTED));
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", "data\u0000Count", "MISSING_DATA_COUNT", "SERVER_COMPUTED"));
+            () -> EventInputIssue.of("EXPT-01", "data\u0000Count", EventInputIssueCode.MISSING_DATA_COUNT,
+                EventFactSource.SERVER_COMPUTED));
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", "dataCount", "missing_data_count", "SERVER_COMPUTED"));
+            () -> EventInputIssue.of("secret-token", "dataCount", EventInputIssueCode.MISSING_DATA_COUNT,
+                EventFactSource.SERVER_COMPUTED));
+    }
+
+    @Test
+    void exposesOnlyControlledDiagnosticCodesAndSources() {
+        assertThrows(NoSuchMethodException.class,
+            () -> EventInputIssue.class.getMethod("of", String.class, String.class, String.class, String.class));
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", "dataCount", "MISSING__DATA_COUNT", "SERVER_COMPUTED"));
+            () -> EventInputIssueCode.valueOf("RAW_PAYLOAD_ABC123"));
         assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", "dataCount", "MISSING_DATA_COUNT_", "SERVER_COMPUTED"));
-        assertThrows(IllegalArgumentException.class,
-            () -> EventInputIssue.of("EXPT-01", "dataCount", "MISSING_DATA_COUNT", "RAW_EXCEPTION"));
+            () -> EventFactSource.valueOf("RAW_EXCEPTION"));
     }
 
     @Test
     void acceptsSafeCustomRuleIdentifiers() {
-        EventInputIssue issue = EventInputIssue.missing("custom.rule-01", "dataCount", "SERVER_COMPUTED");
+        EventInputIssue issue = EventInputIssue.missing("custom.rule-01", "dataCount", EventFactSource.SERVER_COMPUTED);
         EventInputValidation validation = EventInputValidation.incomplete(
             Collections.singletonList(issue), Collections.singleton("custom.rule-01"));
 
@@ -78,7 +89,7 @@ class EventInputValidationTest {
 
     @Test
     void rejectsValidationWhenIneligibleRulesDoNotMatchIssueRules() {
-        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", "SERVER_COMPUTED");
+        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", EventFactSource.SERVER_COMPUTED);
 
         assertThrows(IllegalArgumentException.class,
             () -> EventInputValidation.incomplete(Collections.singletonList(issue), Collections.singleton("AUTH-01")));
@@ -91,7 +102,7 @@ class EventInputValidationTest {
 
     @Test
     void requiresIssuesAndIneligibleRulesToMatchTheInputStatus() {
-        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", "SERVER_COMPUTED");
+        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", EventFactSource.SERVER_COMPUTED);
 
         assertThrows(IllegalArgumentException.class,
             () -> EventInputValidation.of(EventInputStatus.INCOMPLETE,

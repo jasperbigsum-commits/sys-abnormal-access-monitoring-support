@@ -3,6 +3,7 @@ package io.github.jasper.monitoring.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.jasper.monitoring.api.EventFactSource;
 import io.github.jasper.monitoring.api.EventInputIssue;
 import io.github.jasper.monitoring.api.EventInputStatus;
 import io.github.jasper.monitoring.api.EventInputValidation;
@@ -18,7 +19,7 @@ class SecurityEventTest {
 
     @Test
     void preservesInputQualityAndKnownFactFlagsOnAcceptedEvent() {
-        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", "SERVER_COMPUTED");
+        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", EventFactSource.SERVER_COMPUTED);
         EventInputValidation validation = EventInputValidation.incomplete(
             Collections.singletonList(issue), Collections.singleton("EXPT-01"));
 

@@ -1,9 +1,5 @@
 package io.github.jasper.monitoring.api;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -16,19 +12,17 @@ public final class EventInputIssue {
     private static final int MAXIMUM_IDENTIFIER_LENGTH = 128;
     private static final Pattern RULE_ID = Pattern.compile("[A-Za-z][A-Za-z0-9]*(?:[._-][A-Za-z0-9]+)*");
     private static final Pattern FACT_NAME = Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,127}");
-    private static final Pattern ISSUE_CODE = Pattern.compile("[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*");
-    private static final Set<String> SOURCE_TYPES = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
-        "STATIC_DECLARATION", "TRUSTED_REQUEST", "TRUSTED_IDENTITY", "METHOD_PARAMETER",
-        "SERVER_COMPUTED", "AUTHORIZATION", "EVENT_ENRICHER")));
-    private static final Set<String> PAYLOAD_FACT_MARKERS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
-        "payload", "body", "rawvalue", "rawinput", "rawdata", "exceptionmessage", "stacktrace")));
+    private static final String[] PAYLOAD_FACT_MARKERS = {
+        "payload", "body", "rawvalue", "rawinput", "rawdata", "exceptionmessage", "stacktrace"
+    };
 
     private final String ruleId;
     private final String factName;
-    private final String issueCode;
-    private final String sourceType;
+    private final EventInputIssueCode issueCode;
+    private final EventFactSource sourceType;
 
-    private EventInputIssue(String ruleId, String factName, String issueCode, String sourceType) {
+    private EventInputIssue(String ruleId, String factName, EventInputIssueCode issueCode,
+                            EventFactSource sourceType) {
         this.ruleId = requiredRuleId(ruleId);
         this.factName = requiredFactName(factName);
         this.issueCode = requiredIssueCode(issueCode);
@@ -40,23 +34,24 @@ public final class EventInputIssue {
      *
      * @param ruleId 受影响规则的稳定标识
      * @param factName 缺失或无效的事实名称
-     * @param issueCode 稳定问题码
+     * @param issueCode 受控稳定问题码
      * @param sourceType 事实来源类别
      * @return 不包含原始值或异常信息的问题
      */
-    public static EventInputIssue of(String ruleId, String factName, String issueCode, String sourceType) {
+    public static EventInputIssue of(String ruleId, String factName, EventInputIssueCode issueCode,
+                                     EventFactSource sourceType) {
         return new EventInputIssue(ruleId, factName, issueCode, sourceType);
     }
 
     /**
-     * 创建一个缺失事实的问题，并根据事实名称生成稳定问题码。
+     * 创建一个缺失事实的问题，并根据事实名称生成受控问题码。
      *
      * @param ruleId 受影响规则的稳定标识
      * @param factName 缺失事实的稳定名称
      * @param sourceType 事实来源类别
-     * @return 使用 {@code MISSING_*} 问题码的问题
+     * @return 使用受控 {@code MISSING_*} 问题码的问题
      */
-    public static EventInputIssue missing(String ruleId, String factName, String sourceType) {
+    public static EventInputIssue missing(String ruleId, String factName, EventFactSource sourceType) {
         String requiredFactName = requiredFactName(factName);
         return new EventInputIssue(ruleId, requiredFactName, missingIssueCode(requiredFactName), sourceType);
     }
@@ -73,12 +68,12 @@ public final class EventInputIssue {
 
     /** @return 不含原始输入的稳定问题码 */
     public String getIssueCode() {
-        return issueCode;
+        return issueCode.name();
     }
 
     /** @return 事实来源类别 */
     public String getSourceType() {
-        return sourceType;
+        return sourceType.name();
     }
 
     @Override
@@ -92,8 +87,8 @@ public final class EventInputIssue {
         EventInputIssue that = (EventInputIssue) other;
         return ruleId.equals(that.ruleId)
             && factName.equals(that.factName)
-            && issueCode.equals(that.issueCode)
-            && sourceType.equals(that.sourceType);
+            && issueCode == that.issueCode
+            && sourceType == that.sourceType;
     }
 
     @Override
@@ -110,8 +105,8 @@ public final class EventInputIssue {
         return "EventInputIssue{"
             + "ruleId='" + ruleId + '\''
             + ", factName='" + factName + '\''
-            + ", issueCode='" + issueCode + '\''
-            + ", sourceType='" + sourceType + '\''
+            + ", issueCode='" + issueCode.name() + '\''
+            + ", sourceType='" + sourceType.name() + '\''
             + '}';
     }
 
@@ -131,24 +126,30 @@ public final class EventInputIssue {
         return factName;
     }
 
-    private static String requiredIssueCode(String value) {
-        String issueCode = requiredIdentifier(value, "issueCode");
-        if (!ISSUE_CODE.matcher(issueCode).matches()) {
-            throw new IllegalArgumentException("issueCode must be a stable uppercase code");
+    private static EventInputIssueCode requiredIssueCode(EventInputIssueCode value) {
+        if (value == null) {
+            throw new IllegalArgumentException("issueCode is required");
         }
-        return issueCode;
+        return value;
     }
 
-    private static String requiredSourceType(String value) {
-        String sourceType = requiredIdentifier(value, "sourceType");
-        if (!SOURCE_TYPES.contains(sourceType)) {
-            throw new IllegalArgumentException("sourceType must be a supported source category");
+    private static EventFactSource requiredSourceType(EventFactSource value) {
+        if (value == null) {
+            throw new IllegalArgumentException("sourceType is required");
         }
-        return sourceType;
+        return value;
     }
 
     static boolean isStableRuleId(String value) {
-        return isStableIdentifier(value) && RULE_ID.matcher(value).matches();
+        if (!isStableIdentifier(value) || !RULE_ID.matcher(value).matches()) {
+            return false;
+        }
+        try {
+            SecurityFieldSanitizer.requireSafeAttributeKey(value);
+            return true;
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     private static String requiredIdentifier(String value, String name) {
@@ -197,31 +198,31 @@ public final class EventInputIssue {
         return false;
     }
 
-    private static String missingIssueCode(String factName) {
-        StringBuilder code = new StringBuilder();
-        char previous = 0;
-        for (int index = 0; index < factName.length(); index++) {
-            char current = factName.charAt(index);
-            if (Character.isLetterOrDigit(current)) {
-                if (Character.isUpperCase(current)
-                    && (Character.isLowerCase(previous) || Character.isDigit(previous))) {
-                    appendSeparator(code);
-                }
-                code.append(Character.toUpperCase(current));
-            } else {
-                appendSeparator(code);
-            }
-            previous = current;
+    private static EventInputIssueCode missingIssueCode(String factName) {
+        if ("dataCount".equals(factName)) {
+            return EventInputIssueCode.MISSING_DATA_COUNT;
         }
-        while (code.length() > 0 && code.charAt(code.length() - 1) == '_') {
-            code.deleteCharAt(code.length() - 1);
+        if ("latencyMs".equals(factName)) {
+            return EventInputIssueCode.MISSING_LATENCY_MS;
         }
-        return "MISSING_" + code;
-    }
-
-    private static void appendSeparator(StringBuilder code) {
-        if (code.length() > 0 && code.charAt(code.length() - 1) != '_') {
-            code.append('_');
+        if ("resourceId".equals(factName)) {
+            return EventInputIssueCode.MISSING_RESOURCE_ID;
         }
+        if ("orgScope".equals(factName)) {
+            return EventInputIssueCode.MISSING_ORG_SCOPE;
+        }
+        if ("sourceIp".equals(factName)) {
+            return EventInputIssueCode.MISSING_SOURCE_IP;
+        }
+        if ("attemptedAccountHash".equals(factName)) {
+            return EventInputIssueCode.MISSING_ATTEMPTED_ACCOUNT_HASH;
+        }
+        if ("targetUserId".equals(factName)) {
+            return EventInputIssueCode.MISSING_TARGET_USER_ID;
+        }
+        if ("reasonCode".equals(factName)) {
+            return EventInputIssueCode.MISSING_REASON_CODE;
+        }
+        return EventInputIssueCode.MISSING_FACT;
     }
 }
