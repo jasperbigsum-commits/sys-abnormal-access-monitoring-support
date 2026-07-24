@@ -76,6 +76,50 @@ class MonitoringEventPolicyTest {
     }
 
     @Test
+    void excludesSessionRuleWhenItsNetworkConditionIsTrueButDataCountIsUnknown() {
+        EventInputValidation validation = policy.validate(baseDraft(SecurityEventType.SESSION_CONCURRENT)
+            .attribute("different_networks", "true")
+            .build(), ENABLED_RULE_IDS);
+
+        assertEquals(EventInputStatus.INCOMPLETE, validation.getStatus());
+        assertFalse(validation.isEligible("SESS-01"));
+        assertTrue(validation.isEligible("DATA-03"));
+        assertTrue(validation.isEligible("SECU-01"));
+        assertEquals(1, validation.getIssues().size());
+        assertEquals("MISSING_DATA_COUNT", validation.getIssues().get(0).getIssueCode());
+    }
+
+    @Test
+    void excludesSensitiveDataRuleWhenOutsideHoursConditionIsTrueButDataCountIsUnknown() {
+        EventInputValidation validation = policy.validate(baseDraft(SecurityEventType.LOGIN_SUCCESS)
+            .attribute("sensitive", "true")
+            .attribute("work_hours", "false")
+            .build(), ENABLED_RULE_IDS);
+
+        assertEquals(EventInputStatus.INCOMPLETE, validation.getStatus());
+        assertFalse(validation.isEligible("DATA-03"));
+        assertTrue(validation.isEligible("SESS-01"));
+        assertTrue(validation.isEligible("SECU-01"));
+        assertEquals(1, validation.getIssues().size());
+        assertEquals("MISSING_DATA_COUNT", validation.getIssues().get(0).getIssueCode());
+    }
+
+    @Test
+    void keepsCountRulesEligibleWhenTheirOptionalBooleanConditionsAreAbsentOrFalse() {
+        EventInputValidation sessionAbsent = policy.validate(baseDraft(SecurityEventType.SESSION_CONCURRENT).build(),
+            ENABLED_RULE_IDS);
+        EventInputValidation sensitiveFalse = policy.validate(baseDraft(SecurityEventType.LOGIN_SUCCESS)
+            .attribute("sensitive", "false")
+            .attribute("work_hours", "false")
+            .build(), ENABLED_RULE_IDS);
+
+        assertTrue(sessionAbsent.isEligible("SESS-01"));
+        assertTrue(sensitiveFalse.isEligible("DATA-03"));
+        assertEquals(EventInputStatus.VALID, sessionAbsent.getStatus());
+        assertEquals(EventInputStatus.VALID, sensitiveFalse.getStatus());
+    }
+
+    @Test
     void validatesOnlyEnabledBuiltInRules() {
         EventInputValidation validation = policy.validate(exportDraftWithoutDataCount(),
             new LinkedHashSet<String>(Arrays.asList("SECU-01", "CUSTOM-01")));

@@ -60,8 +60,12 @@ public final class DefaultMonitoringEventPolicy implements MonitoringEventPolicy
                                             Map<String, EventInputIssue> issues) {
         if (isEnabled(enabledRuleIds, SESS_ONE)
             && draft.getEventType() == SecurityEventType.SESSION_CONCURRENT) {
+            String differentNetworks = draft.getAttribute("different_networks");
             addInvalidBooleanWhenPresent(issues, SESS_ONE, "different_networks",
-                draft.getAttribute("different_networks"));
+                differentNetworks);
+            if (isStrictTrue(differentNetworks) && !draft.hasDataCount()) {
+                addMissing(issues, SESS_ONE, "dataCount", EventFactSource.SERVER_COMPUTED);
+            }
         }
     }
 
@@ -88,8 +92,13 @@ public final class DefaultMonitoringEventPolicy implements MonitoringEventPolicy
         if (!isEnabled(enabledRuleIds, DATA_THREE)) {
             return;
         }
-        addInvalidBooleanWhenPresent(issues, DATA_THREE, "sensitive", draft.getAttribute("sensitive"));
-        addInvalidBooleanWhenPresent(issues, DATA_THREE, "work_hours", draft.getAttribute("work_hours"));
+        String sensitive = draft.getAttribute("sensitive");
+        String workHours = draft.getAttribute("work_hours");
+        addInvalidBooleanWhenPresent(issues, DATA_THREE, "sensitive", sensitive);
+        addInvalidBooleanWhenPresent(issues, DATA_THREE, "work_hours", workHours);
+        if (isStrictTrue(sensitive) && isStrictFalse(workHours) && !draft.hasDataCount()) {
+            addMissing(issues, DATA_THREE, "dataCount", EventFactSource.SERVER_COMPUTED);
+        }
     }
 
     private static void validateExportRules(SecurityEventDraft draft, Set<String> enabledRuleIds,
@@ -177,6 +186,10 @@ public final class DefaultMonitoringEventPolicy implements MonitoringEventPolicy
 
     private static boolean isStrictTrue(String value) {
         return "true".equals(value);
+    }
+
+    private static boolean isStrictFalse(String value) {
+        return "false".equals(value);
     }
 
     private static boolean isValidBaselineRatio(String value) {
