@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -118,7 +119,10 @@ public final class SecurityEventDraft {
      * @param key 属性名称
      * @return 已清洗的属性值；不存在时为 {@code null}
      */
-    public String getAttribute(String key) { return attributes.get(key); }
+    public String getAttribute(String key) {
+        String normalized = SecurityFieldSanitizer.text(key, 128);
+        return normalized == null || normalized.isEmpty() ? null : attributes.get(normalized.toLowerCase(Locale.ROOT));
+    }
 
     private static long nonNegative(long value, String name) {
         if (value < 0) {

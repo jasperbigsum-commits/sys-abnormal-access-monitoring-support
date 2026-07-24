@@ -2,6 +2,7 @@ package io.github.jasper.monitoring.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.time.Instant;
@@ -49,6 +50,18 @@ class SecurityEventDraftTest {
         attributes.put("sensitivity", "LOW");
 
         assertThrows(IllegalArgumentException.class, () -> requiredDraft().attributes(attributes).build());
+    }
+
+    @Test
+    void normalizesAttributeLookupKeysWithoutRejectingProbes() {
+        SecurityEventDraft draft = requiredDraft().attribute("Sensitivity", "HIGH").build();
+
+        assertEquals("HIGH", draft.getAttribute("Sensitivity"));
+        assertEquals("HIGH", draft.getAttribute("SENSITIVITY"));
+        assertNull(draft.getAttribute(null));
+        assertNull(draft.getAttribute(" "));
+        assertNull(draft.getAttribute("password"));
+        assertNull(draft.getAttribute("unknown"));
     }
 
     @Test
