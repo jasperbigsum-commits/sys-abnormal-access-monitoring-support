@@ -1,18 +1,16 @@
 package io.github.jasper.monitoring.audit.spring3;
 
 import io.github.jasper.monitoring.api.AuthorizationDecision;
-import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitorAction;
 import io.github.jasper.monitoring.api.MonitorActionAttribute;
 import io.github.jasper.monitoring.api.MonitorActionAttributeTarget;
-import io.github.jasper.monitoring.api.MonitoringRequestContext;
+import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.core.application.ActionEventRecorder;
 import io.github.jasper.monitoring.core.application.MonitoringOutcome;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
-import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,32 +26,32 @@ import org.springframework.http.ResponseEntity;
 @RestController
 @RequestMapping("/audit")
 public class AuditController {
-    private static final String REQUEST_CONTEXT_ATTRIBUTE = "io.github.jasper.monitoring.request-context";
-    private static final String IDENTITY_CONTEXT_ATTRIBUTE = "io.github.jasper.monitoring.identity-context";
     // This integration fixture must not echo a client-controlled requested row count.
     private static final long SERVER_REPORTED_ROW_COUNT = 37L;
     private final ActionEventRecorder recorder;
     private final ResourceAccessGuard resourceAccessGuard;
+    private final MonitoringContextAccessor contextAccessor;
     private final AuditReportCatalog reportCatalog;
     private final AuditExportService exportService;
 
     /** @param recorder Starter 自动装配的动作记录器 */
     public AuditController(ActionEventRecorder recorder, ResourceAccessGuard resourceAccessGuard,
+                           MonitoringContextAccessor contextAccessor,
                            AuditReportCatalog reportCatalog, AuditExportService exportService) {
         this.recorder = recorder;
         this.resourceAccessGuard = resourceAccessGuard;
+        this.contextAccessor = contextAccessor;
         this.reportCatalog = reportCatalog;
         this.exportService = exportService;
     }
 
     @GetMapping("/reports/{reportId}")
-    public ResponseEntity<Map<String, Object>> report(@PathVariable("reportId") String reportId,
-                                                       HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> report(@PathVariable("reportId") String reportId) {
         AuditReportCatalog.AuditReport report = reportCatalog.find(reportId);
         if (report == null) {
             return ResponseEntity.notFound().build();
         }
-        AuthorizationDecision decision = authorize(request, report);
+        AuthorizationDecision decision = authorize(report);
         if (!decision.isAllowed()) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
@@ -63,13 +61,12 @@ public class AuditController {
     }
 
     @PostMapping("/reports/{reportId}/export")
-    public ResponseEntity<Map<String, Object>> exportReport(@PathVariable("reportId") String reportId,
-                                                             HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> exportReport(@PathVariable("reportId") String reportId) {
         AuditReportCatalog.AuditReport report = reportCatalog.find(reportId);
         if (report == null) {
             return ResponseEntity.notFound().build();
         }
-        AuthorizationDecision decision = authorize(request, report);
+        AuthorizationDecision decision = authorize(report);
         if (!decision.isAllowed()) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
@@ -80,12 +77,12 @@ public class AuditController {
     /**
      * 记录一次服务端确认的登录失败。连续调用五次会触发 {@code AUTH-01}。
      *
-     * @param request 当前 Servlet 请求；上下文由 Starter 拦截器建立
      * @return 已记录事件标识和本次命中规则数
      */
     @PostMapping("/login-failure")
-    public Map<String, Object> loginFailure(HttpServletRequest request) {
-        MonitoringOutcome outcome = recorder.record("audit:login-failure", requestContext(request), identityContext(request),
+    public Map<String, Object> loginFailure() {
+        MonitoringOutcome outcome = recorder.record("audit:login-failure", contextAccessor.requestContext(),
+            contextAccessor.identityContext(),
             SecurityEventResult.FAILURE, "INVALID_PASSWORD");
         return response(outcome);
     }
@@ -93,13 +90,12 @@ public class AuditController {
     /**
      * 记录一笔带服务端动态事实的导出，用于验证注册式埋点、规则标记与导出阈值规则。
      *
-     * @param request 当前 Servlet 请求；上下文由 Starter 拦截器建立
      * @return 已记录事件标识和本次命中规则数
      */
     @PostMapping("/export")
-    public Map<String, Object> export(HttpServletRequest request) {
-        MonitoringOutcome outcome = recorder.record(recorder.draft("audit:export", requestContext(request),
-            identityContext(request)).resourceId("audit-export-2026").dataCount(5000)
+    public Map<String, Object> export() {
+        MonitoringOutcome outcome = recorder.record(recorder.draft("audit:export", contextAccessor.requestContext(),
+            contextAccessor.identityContext()).resourceId("audit-export-2026").dataCount(5000)
             .result(SecurityEventResult.SUCCESS).reasonCode("EXPORT_COMPLETED").build());
         return response(outcome);
     }
@@ -152,25 +148,8 @@ public class AuditController {
         return response;
     }
 
-    private AuthorizationDecision authorize(HttpServletRequest request,
-                                            AuditReportCatalog.AuditReport report) {
-        return resourceAccessGuard.authorize(identityContext(request), new ResourceScopeRequest(
-            requestContext(request), "report", report.getId(), report.getOrganization()));
-    }
-
-    private static MonitoringRequestContext requestContext(HttpServletRequest request) {
-        Object value = request.getAttribute(REQUEST_CONTEXT_ATTRIBUTE);
-        if (!(value instanceof MonitoringRequestContext)) {
-            throw new IllegalStateException("Trusted monitoring request context is unavailable");
-        }
-        return (MonitoringRequestContext) value;
-    }
-
-    private static IdentityContext identityContext(HttpServletRequest request) {
-        Object value = request.getAttribute(IDENTITY_CONTEXT_ATTRIBUTE);
-        if (!(value instanceof IdentityContext)) {
-            throw new IllegalStateException("Trusted monitoring identity context is unavailable");
-        }
-        return (IdentityContext) value;
+    private AuthorizationDecision authorize(AuditReportCatalog.AuditReport report) {
+        return resourceAccessGuard.authorize(contextAccessor.identityContext(), new ResourceScopeRequest(
+            contextAccessor.requestContext(), "report", report.getId(), report.getOrganization()));
     }
 }

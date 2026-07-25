@@ -3,6 +3,7 @@ package io.github.jasper.monitoring.spring3.autoconfigure;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.EventEnricher;
 import io.github.jasper.monitoring.api.IdentityContextProvider;
+import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.ControlActionType;
@@ -318,6 +319,12 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnClass(name = "org.springframework.web.servlet.HandlerInterceptor")
     static class ServletMvcConfiguration {
+        @Bean
+        @ConditionalOnMissingBean(MonitoringContextAccessor.class)
+        ServletMonitoringContextAccessor abnormalAccessMonitoringContextAccessor() {
+            return new ServletMonitoringContextAccessor();
+        }
+
         @Bean("abnormalAccessRequestMetadataInterceptor")
         RequestMetadataInterceptor abnormalAccessRequestMetadataInterceptor(TrustedProxyResolver trustedProxyResolver,
                                                                             IdentityContextProvider identityContextProvider,
