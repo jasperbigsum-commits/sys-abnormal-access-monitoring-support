@@ -12,7 +12,7 @@
     <name>Abnormal Access Monitoring Spring Boot 3 Starter</name>
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
-        <spring.boot.version>3.2.12</spring.boot.version>
+        <spring.boot.version>3.5.13</spring.boot.version>
     </properties>
     <dependencyManagement>
         <dependencies>
