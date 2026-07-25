@@ -30,6 +30,7 @@
 8. 使用现有框架或成熟第三方能力替换属性路径、IP/CIDR 等容易出错的自研实现。
 9. 每个运行阶段都有明确的错误所有者和失败策略。
 10. `integration-audit` 以真实宿主方式实施新规范，并成为 Boot 2/3 的统一验收门禁。
+11. 文档按项目关联角色组织，每项规范只有一个事实来源，删除历史镜像和生成物重复。
 
 ## 3. 非目标
 
@@ -826,7 +827,125 @@ mvn clean verify -DskipTests=false
 
 任何共享验收 ID 在任一 Boot 版本缺失或跳过，都视为 reactor 验证失败。
 
-## 20. 实施分解
+## 20. 文档信息架构与治理
+
+### 20.1 关联角色与权责
+
+文档不再按形成时间或技术名词平铺，而是按使用者完成的任务组织。角色是职责而非具体人员：
+
+| 关联角色 | 负责决定 | 需要的文档 | 不应承担 |
+| --- | --- | --- | --- |
+| 宿主集成负责人 | 依赖、action、fact、SPI 接入 | 快速接入、Action/Fact 用法 | 内部实现与表字段设计 |
+| 安全与审计负责人 | 信任边界、规则、控制、证据要求 | 安全模型、规则与控制、审计矩阵 | Starter 装配细节 |
+| DBA/SRE | schema、事务、容量、故障处置 | 数据库与运维手册 | 业务 action 定义 |
+| 框架维护者 | 模块边界、扩展契约、测试策略 | 架构、开发与测试规范、ADR | 宿主授权结论 |
+| 发布负责人 | 版本范围、兼容性和发布门禁 | 路线图、发布清单、验收报告 | 重复维护技术参考 |
+
+每份文档顶部只保留稳定元数据：
+
+```text
+Audience: 主要阅读角色
+Owner: 负责维护的角色
+Source of truth: 对应代码、schema 或目录
+Validated by: 对应测试或验收 ID
+```
+
+不填写容易过期的个人姓名和人工“最后更新日期”；变更历史由 Git 提供。实际责任人由仓库权限和后续 CODEOWNERS 配置管理，不在正文复制。
+
+### 20.2 目标目录
+
+最终公开文档控制在以下结构，不再为同一主题维护中英文全文镜像：
+
+```text
+README.md                         中文项目入口，保持简短
+README.en.md                      精简英文入口，不复制完整手册
+docs/README.md                    按角色和任务导航
+docs/integrators/
+├─ getting-started.md             最短可运行接入
+├─ actions-and-facts.md           ActionContract、FactBinding、程序式入口
+└─ frontend-signals.md            前端补充证据边界
+docs/security/
+├─ security-model.md              身份、授权、来源和失败策略
+└─ rules-and-controls.md           规则前置事实、控制覆盖与审计
+docs/operators/
+├─ database.md                    MyBatis schema、事务、索引和迁移
+└─ operations.md                  配置、上线、观测和故障处置
+docs/maintainers/
+├─ architecture.md                模块、运行时编译和事件管线
+├─ development.md                 构建、测试、Javadoc 和贡献约束
+├─ release.md                     路线图与发布门禁
+└─ decisions/                     已批准 ADR
+docs/reference/
+├─ catalogs.md                    action/fact/rule/control 生成参考
+└─ errors.md                      稳定错误码与宿主映射
+integration-audit/README.md       规范到验收 ID 的可追踪矩阵
+```
+
+`docs/superpowers` 只作为重构期间的内部设计与实施材料，不出现在公开导航。重构完成后，仍有效的架构决定提炼为 ADR；临时计划不复制到公开手册，Git 历史承担归档职责。
+
+### 20.3 现有文档迁移
+
+| 现有文件 | 处理方式 | 唯一去向 |
+| --- | --- | --- |
+| `README.md` | 重写并压缩 | 项目定位、最短构建命令、角色导航 |
+| `README.en.md` | 重写并压缩 | 英文概览和公开入口链接 |
+| `docs/集成指南.md` | 拆解后删除 | `integrators/*`、`security/*`、`operators/*` |
+| `docs/integration-guide.en.md` | 删除全文镜像 | `README.en.md` 保留精简入口 |
+| `docs/集成审计与基础项目验收.md` | 合并后删除 | `integration-audit/README.md` |
+| 中英文错误规范 | 合并后删除原文件 | `reference/errors.md` |
+| 中英文架构与事务说明 | 合并后删除原文件 | `maintainers/architecture.md`、`operators/database.md` |
+| `docs/领域模型与数据设计.md` | 拆解后删除 | 架构、数据库和安全模型对应章节 |
+| `docs/MyBatis标准化ORM与架构设计评审稿.md` | 提炼决定后删除评审稿 | `operators/database.md` 和 ADR |
+| 中英文路线图与 1.0 排期 | 合并并删除旧版本 | `maintainers/release.md` |
+| `docs/Javadoc生成说明.md` | 合并后删除 | `maintainers/development.md` |
+| `output/pdf/*.pdf` | 从源码仓库移除 | 发布流程按需生成，不作为事实来源 |
+
+过期文档不移动到仓库内 `archive` 目录。Git 已提供历史恢复能力，保留一份失效副本只会继续参与搜索并误导使用者。
+
+### 20.4 单一事实来源
+
+每类信息只能有一个权威来源：
+
+| 信息 | 权威来源 | 文档处理 |
+| --- | --- | --- |
+| action/fact/rule/control 定义 | 冻结目录的代码定义 | 生成 `reference/catalogs.md` 并校验差异 |
+| Spring 配置项 | 配置属性类和 metadata | 文档只解释策略与示例，不手抄完整字段表 |
+| 数据表与索引 | `monitoring-schema.sql` | `database.md` 解释生命周期，不复制完整 DDL |
+| 错误码 | 错误码类型 | 生成或测试校验 `reference/errors.md` |
+| 接入示例 | `integration-audit` 可编译宿主源码 | 文档链接到示例，仅保留一个最短片段 |
+| 验收要求 | integration audit ID 矩阵 | 其他文档引用 ID，不复制验收清单 |
+| 架构决定 | ADR | README 和手册只链接，不复述评审过程 |
+
+生成型参考必须在 `verify` 阶段重新生成到 `target` 并与已提交版本比较。代码目录变化但参考未更新时构建失败。
+
+### 20.5 精简规则
+
+- `README.md` 目标不超过 120 行，只回答“是什么、如何构建、下一步读什么”。
+- 每份角色手册目标不超过 250 行；超出时先删除重复，再判断是否按独立任务拆分。
+- 同一个代码示例只完整出现一次；其他位置使用链接和一行说明。
+- 不在 README 复制 action 矩阵、表字段、错误码或发布清单。
+- 不保留已经由类型系统、schema 或配置 metadata 精确表达的手工表格。
+- 使用面向任务的标题，例如“注册自定义导出 action”，不使用“其他说明”“高级内容”。
+- 规范使用 MUST/SHOULD/MAY 或明确中文等价词，背景说明与强制要求分开。
+- 删除“当前”“未来”“暂时”等没有版本边界的措辞；版本差异进入 release 或 ADR。
+- 公共 Java API 的 Javadoc 保持简洁英文技术说明；叙述性项目手册以中文为唯一正式版本。
+- 英文 README 只维护稳定概览，不承诺与全部中文手册逐段镜像。
+
+### 20.6 文档测试与门禁
+
+文档作为代码进入 `verify`：
+
+- 校验全部相对链接、标题锚点和本地文件引用。
+- 校验公开文档不存在已删除类型、旧包名、字符串 action、内存回退和 `@ControlTrigger` 示例。
+- 编译或直接复用 `integration-audit` 中被引用的示例代码，禁止不可运行的伪代码充当接入规范。
+- 校验所有公开 action、fact、rule、control 和错误码都出现在生成参考中，且没有多余条目。
+- 校验 `integration-audit/README.md` 中的验收 ID 与两个 Boot 测试实际执行集合一致。
+- 校验生成 PDF、临时评审稿和 `target` 产物未被提交。
+- Markdown 格式和链接检查优先采用成熟 Maven/跨平台工具；只有领域一致性检查使用小型 JUnit 测试。
+
+文档验收不以“文件存在”为标准，而以目标角色能否沿导航完成任务、示例是否编译、参考是否与代码一致为标准。
+
+## 21. 实施分解
 
 本次重构分四个阶段实施，最终一次性交付，不保留兼容层。
 
@@ -851,7 +970,7 @@ mvn clean verify -DskipTests=false
 - 更新基线 schema；由于项目未投入使用，不保留旧结构兼容层。
 - 实现控制覆盖率、PENDING 幂等占位和明确终态。
 
-### 阶段四：Spring 适配、集成审计与外围收敛
+### 阶段四：Spring 适配、集成审计、文档与外围收敛
 
 - 抽取 Boot 2/3 公共执行内核。
 - 收紧前端信号。
@@ -859,11 +978,12 @@ mvn clean verify -DskipTests=false
 - 删除审计应用对旧字符串 action、旧属性注解、反射控制和手工内部 MyBatis 初始化的使用。
 - 重写 Maven 资源模板。
 - 迁移重复测试并加入架构、重复代码检查。
-- 更新中英文文档和集成审计应用。
+- 按关联角色重组并精简公开文档，删除旧镜像、评审稿和已提交 PDF。
+- 从运行时目录、错误码和集成审计生成可校验参考。
 
 每个阶段结束时运行 focused tests 和完整 reactor。临时迁移代码只能存在于阶段内部，阶段四结束时不存在旧公开类型、过渡适配器或双轨数据模型。
 
-## 21. 验收标准
+## 22. 验收标准
 
 1. 所有 `@MonitorAction` 都引用已注册的具体 `ActionType`，不存在运行时隐式 action。
 2. 内置和自定义 action 通过 `ActionContract` 继承事实、规则和最低失败策略，子 action 无法削弱约束。
@@ -881,3 +1001,7 @@ mvn clean verify -DskipTests=false
 14. `mvn clean verify -DskipTests=false` 通过，两个真实 Web 集成模块通过验收。
 15. `integration-audit` 的全部共享验收 ID 在 Boot 2 与 Boot 3 中均执行且通过。
 16. 集成审计应用只使用公开规范，不依赖旧 API 或内部实现捷径。
+17. 公开文档按关联角色导航，每项规范只有一个事实来源。
+18. 公开文档不存在旧 API、内存回退、字符串 action 或反射控制示例。
+19. 目录与错误码参考由代码生成或校验，文档漂移会使 `verify` 失败。
+20. 仓库不跟踪生成 PDF、临时评审稿或过期文档副本。
