@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.web;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,7 +20,10 @@ class FrontendSignalValidatorTest {
             .action("VIEW")
             .build();
 
-        assertThrows(IllegalArgumentException.class, () -> new FrontendSignalValidator(Duration.ofMinutes(5))
-            .validate(signal, Instant.parse("2026-07-22T00:00:00Z")));
+        MonitoringValidationException exception = assertThrows(MonitoringValidationException.class,
+            () -> new FrontendSignalValidator(Duration.ofMinutes(5))
+                .validate(signal, Instant.parse("2026-07-22T00:00:00Z")));
+
+        assertEquals(MonitoringErrorCode.INVALID_FIELD_VALUE, exception.getErrorCode());
     }
 }

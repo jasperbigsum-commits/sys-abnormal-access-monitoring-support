@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.web;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 import io.github.jasper.monitoring.api.SecurityFieldSanitizer;
 import java.time.Instant;
 import java.util.Arrays;
@@ -74,23 +77,35 @@ public final class FrontendSignal {
     private static String requireHash(String value, String name) {
         String sanitized = SecurityFieldSanitizer.text(value, 256);
         if (sanitized == null || sanitized.isEmpty()) { return null; }
-        if (!sanitized.startsWith("sha256:")) { throw new IllegalArgumentException(name + " must use a sha256: prefix"); }
+        if (!sanitized.startsWith("sha256:")) {
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                name + " must use a sha256: prefix");
+        }
         return sanitized;
     }
     private static String required(String value, String name, int maximumLength) {
         String sanitized = SecurityFieldSanitizer.text(value, maximumLength);
-        if (sanitized == null || sanitized.isEmpty()) { throw new IllegalArgumentException(name + " is required"); }
+        if (sanitized == null || sanitized.isEmpty()) {
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                name + " is required");
+        }
         return sanitized;
     }
     private static <T> T required(T value, String name) {
-        if (value == null) { throw new IllegalArgumentException(name + " is required"); }
+        if (value == null) {
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                name + " is required");
+        }
         return value;
     }
     private static Map<String, String> safeAttributes(Map<String, String> input) {
         Map<String, String> result = new LinkedHashMap<String, String>();
         for (Map.Entry<String, String> entry : input.entrySet()) {
             String key = SecurityFieldSanitizer.text(entry.getKey(), 64);
-            if (!ALLOWED_ATTRIBUTES.contains(key)) { throw new IllegalArgumentException("Unsupported frontend attribute: " + key); }
+            if (!ALLOWED_ATTRIBUTES.contains(key)) {
+                throw new MonitoringValidationException(MonitoringErrorCode.UNSAFE_EVENT_ATTRIBUTE,
+                    "Unsupported frontend attribute");
+            }
             result.put(key, SecurityFieldSanitizer.text(entry.getValue(), 256));
         }
         return Collections.unmodifiableMap(result);

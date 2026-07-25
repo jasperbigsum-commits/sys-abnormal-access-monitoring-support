@@ -8,6 +8,8 @@ import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.core.application.ActionEventRecorder;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
 import io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger;
@@ -108,7 +110,8 @@ public class AbnormalAccessMonitorAutoConfiguration {
             ControlHandler handler = AnnotatedControlHandler.lazy(type, () -> beanFactory.getBean(beanName));
             for (ControlActionType action : ControlActionType.values()) {
                 if (handler.supports(action) && !annotatedActions.add(action)) {
-                    throw new IllegalArgumentException("Duplicate ControlTrigger binding for " + action);
+                    throw new MonitoringConfigurationException(MonitoringErrorCode.DUPLICATE_CONTROL_BINDING,
+                        "Duplicate annotated ControlTrigger binding");
                 }
             }
             values.add(handler);
@@ -157,42 +160,47 @@ public class AbnormalAccessMonitorAutoConfiguration {
 
         private static void validate(AbnormalAccessMonitorProperties properties) {
             if (properties.getMode() != io.github.jasper.monitoring.api.MonitoringMode.ENFORCE) {
-                throw new IllegalStateException("ip-control requires abnormal.access.monitor.mode=ENFORCE");
+                throw invalidIpControlConfiguration("ip-control requires abnormal.access.monitor.mode=ENFORCE");
             }
             AbnormalAccessMonitorProperties.IpControl config = properties.getIpControl();
             requireNonEmptyText(config.getProtectedPaths(), "protected-paths");
             requireTextEntries(config.getExcludedPaths(), "excluded-paths");
             requireNonEmptyText(config.getRuleIds(), "rule-ids");
             if (config.getPermitsPerWindow() <= 0) {
-                throw new IllegalStateException("ip-control permits-per-window must be positive");
+                throw invalidIpControlConfiguration("ip-control permits-per-window must be positive");
             }
             if (config.getWindow() == null || config.getWindow().isZero() || config.getWindow().isNegative()) {
-                throw new IllegalStateException("ip-control window must be positive");
+                throw invalidIpControlConfiguration("ip-control window must be positive");
             }
             if (config.getMaxTtl() == null || config.getMaxTtl().isZero() || config.getMaxTtl().isNegative()) {
-                throw new IllegalStateException("ip-control max-ttl must be positive");
+                throw invalidIpControlConfiguration("ip-control max-ttl must be positive");
             }
             if (config.getCapacity() <= 0) {
-                throw new IllegalStateException("ip-control capacity must be positive");
+                throw invalidIpControlConfiguration("ip-control capacity must be positive");
             }
         }
 
         private static void requireNonEmptyText(List<String> values, String name) {
             if (values == null || values.isEmpty()) {
-                throw new IllegalStateException("ip-control " + name + " must not be empty");
+                throw invalidIpControlConfiguration("ip-control " + name + " must not be empty");
             }
             requireTextEntries(values, name);
         }
 
         private static void requireTextEntries(List<String> values, String name) {
             if (values == null) {
-                throw new IllegalStateException("ip-control " + name + " must not be null");
+                throw invalidIpControlConfiguration("ip-control " + name + " must not be null");
             }
             for (String value : values) {
                 if (value == null || value.trim().isEmpty()) {
-                    throw new IllegalStateException("ip-control " + name + " must contain only non-blank values");
+                    throw invalidIpControlConfiguration(
+                        "ip-control " + name + " must contain only non-blank values");
                 }
             }
+        }
+
+        private static MonitoringConfigurationException invalidIpControlConfiguration(String message) {
+            return new MonitoringConfigurationException(MonitoringErrorCode.INVALID_FIELD_VALUE, message);
         }
     }
 

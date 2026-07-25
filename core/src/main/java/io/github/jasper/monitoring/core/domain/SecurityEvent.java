@@ -8,6 +8,8 @@ import io.github.jasper.monitoring.api.EventInputValidation;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -107,7 +109,8 @@ public final class SecurityEvent {
     public static SecurityEvent from(SecurityEventDraft draft, String systemId, String eventId, Instant receivedAt,
                                      EventInputValidation validation) {
         if (validation == null) {
-            throw new IllegalArgumentException("validation is required");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                "validation is required");
         }
         return builder()
             .eventId(eventId).systemId(systemId).eventType(draft.getEventType())

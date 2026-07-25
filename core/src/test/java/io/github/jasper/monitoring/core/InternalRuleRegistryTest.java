@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.core;
 
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringStateException;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.application.rule.InternalRuleRegistry;
 import io.github.jasper.monitoring.core.domain.RuleMatch;
@@ -25,7 +28,20 @@ class InternalRuleRegistryTest {
         assertEquals(1, registry.rules().size());
         assertEquals("HOST-01", registry.entries().get(0).getRuleId());
         assertFalse(registry.entries().get(0).isMutable());
-        assertThrows(IllegalStateException.class, () -> registry.register(new TestRule("HOST-02")));
+        MonitoringStateException exception = assertThrows(MonitoringStateException.class,
+            () -> registry.register(new TestRule("HOST-02")));
+        assertEquals(MonitoringErrorCode.RULE_REGISTRY_FROZEN, exception.getErrorCode());
+    }
+
+    @Test
+    void rejectsDuplicateInternalRuleIdsWithAStableConfigurationCode() {
+        InternalRuleRegistry registry = new InternalRuleRegistry();
+        registry.register(new TestRule("HOST-01"));
+
+        MonitoringConfigurationException exception = assertThrows(MonitoringConfigurationException.class,
+            () -> registry.register(new TestRule("HOST-01")));
+
+        assertEquals(MonitoringErrorCode.DUPLICATE_INTERNAL_RULE_ID, exception.getErrorCode());
     }
 
     private static final class TestRule implements DetectionRule {

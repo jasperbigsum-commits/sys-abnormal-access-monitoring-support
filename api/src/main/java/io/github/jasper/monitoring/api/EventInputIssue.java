@@ -1,5 +1,7 @@
 package io.github.jasper.monitoring.api;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import java.util.regex.Pattern;
 
 /**
@@ -112,7 +114,7 @@ public final class EventInputIssue {
 
     private static String requiredRuleId(String value) {
         if (!isStableRuleId(value)) {
-            throw new IllegalArgumentException("ruleId must be a stable rule identifier");
+            throw invalid("ruleId must be a stable rule identifier");
         }
         return value;
     }
@@ -121,21 +123,21 @@ public final class EventInputIssue {
         String factName = requiredIdentifier(value, "factName");
         requireNonSensitiveFactName(factName);
         if (!FACT_NAME.matcher(factName).matches() || containsPayloadMarker(factName)) {
-            throw new IllegalArgumentException("factName must be a safe identifier");
+            throw invalid("factName must be a safe identifier");
         }
         return factName;
     }
 
     private static EventInputIssueCode requiredIssueCode(EventInputIssueCode value) {
         if (value == null) {
-            throw new IllegalArgumentException("issueCode is required");
+            throw required("issueCode is required");
         }
         return value;
     }
 
     private static EventFactSource requiredSourceType(EventFactSource value) {
         if (value == null) {
-            throw new IllegalArgumentException("sourceType is required");
+            throw required("sourceType is required");
         }
         return value;
     }
@@ -154,7 +156,7 @@ public final class EventInputIssue {
 
     private static String requiredIdentifier(String value, String name) {
         if (!isStableIdentifier(value)) {
-            throw new IllegalArgumentException(name + " must be a non-empty stable identifier");
+            throw invalid(name + " must be a non-empty stable identifier");
         }
         return value;
     }
@@ -177,7 +179,8 @@ public final class EventInputIssue {
         try {
             SecurityFieldSanitizer.requireSafeAttributeKey(factName);
         } catch (IllegalArgumentException ignored) {
-            throw new IllegalArgumentException("factName must be a non-sensitive identifier");
+            throw new MonitoringValidationException(MonitoringErrorCode.UNSAFE_EVENT_ATTRIBUTE,
+                "factName must be a non-sensitive identifier");
         }
     }
 
@@ -224,5 +227,13 @@ public final class EventInputIssue {
             return EventInputIssueCode.MISSING_REASON_CODE;
         }
         return EventInputIssueCode.MISSING_FACT;
+    }
+
+    private static MonitoringValidationException required(String message) {
+        return new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING, message);
+    }
+
+    private static MonitoringValidationException invalid(String message) {
+        return new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE, message);
     }
 }

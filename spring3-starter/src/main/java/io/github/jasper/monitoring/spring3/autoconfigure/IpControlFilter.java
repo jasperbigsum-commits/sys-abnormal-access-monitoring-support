@@ -1,6 +1,8 @@
 package io.github.jasper.monitoring.spring3.autoconfigure;
 
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import io.github.jasper.monitoring.spring.support.control.IpControlDecision;
 import io.github.jasper.monitoring.spring.support.control.IpAddressLiteral;
 import io.github.jasper.monitoring.spring.support.control.IpControlState;
@@ -30,7 +32,8 @@ public final class IpControlFilter extends OncePerRequestFilter {
     public IpControlFilter(IpControlState state, TrustedProxyResolver trustedProxyResolver,
                            List<String> protectedPaths, List<String> excludedPaths, Clock clock) {
         if (state == null || trustedProxyResolver == null || clock == null) {
-            throw new IllegalArgumentException("state, trustedProxyResolver and clock are required");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                "state, trustedProxyResolver and clock are required");
         }
         this.state = state;
         this.trustedProxyResolver = trustedProxyResolver;
@@ -88,7 +91,8 @@ public final class IpControlFilter extends OncePerRequestFilter {
 
     private static List<String> immutableCopy(List<String> values) {
         if (values == null) {
-            throw new IllegalArgumentException("path patterns are required");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                "path patterns are required");
         }
         return Collections.unmodifiableList(new ArrayList<String>(values));
     }

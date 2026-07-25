@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.api;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -75,7 +78,8 @@ public final class MonitorActionFacts {
             return OptionalLong.empty();
         }
         if (value.longValue() < 0) {
-            throw new IllegalArgumentException(name + " must not be negative");
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                name + " must not be negative");
         }
         return OptionalLong.of(value.longValue());
     }

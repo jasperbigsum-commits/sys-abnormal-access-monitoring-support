@@ -1,5 +1,7 @@
 package io.github.jasper.monitoring.api;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -79,7 +81,8 @@ class SecurityEventDraftTest {
 
     @Test
     void rejectsForbiddenMetadataKeys() {
-        assertThrows(IllegalArgumentException.class, () -> SecurityEventDraft.builder()
+        MonitoringValidationException exception = assertThrows(MonitoringValidationException.class,
+            () -> SecurityEventDraft.builder()
             .eventType(SecurityEventType.LOGIN_FAILURE)
             .action("LOGIN")
             .result(SecurityEventResult.FAILURE)
@@ -88,6 +91,9 @@ class SecurityEventDraftTest {
             .occurredAt(Instant.parse("2026-07-22T00:00:00Z"))
             .attribute("password", "not-allowed")
             .build());
+
+        assertEquals(MonitoringErrorCode.UNSAFE_EVENT_ATTRIBUTE, exception.getErrorCode());
+        assertTrue(exception instanceof IllegalArgumentException);
     }
 
     @Test

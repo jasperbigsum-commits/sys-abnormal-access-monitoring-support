@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.api;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -142,7 +145,8 @@ public final class SecurityEventDraft {
 
     private static long nonNegative(long value, String name) {
         if (value < 0) {
-            throw new IllegalArgumentException(name + " must not be negative");
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                name + " must not be negative");
         }
         return value;
     }
@@ -150,14 +154,16 @@ public final class SecurityEventDraft {
     private static String requiredText(String value, String name, int maximumLength) {
         String sanitized = SecurityFieldSanitizer.text(value, maximumLength);
         if (sanitized == null || sanitized.isEmpty()) {
-            throw new IllegalArgumentException(name + " is required");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                name + " is required");
         }
         return sanitized;
     }
 
     private static <T> T required(T value, String name) {
         if (value == null) {
-            throw new IllegalArgumentException(name + " is required");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                name + " is required");
         }
         return value;
     }
@@ -182,7 +188,8 @@ public final class SecurityEventDraft {
             for (Map.Entry<String, String> entry : attributes.entrySet()) {
                 String key = SecurityFieldSanitizer.normalizeAttributeKey(entry.getKey());
                 if (!normalizedKeys.add(key)) {
-                    throw new IllegalArgumentException("Duplicate event attribute key: " + key);
+                    throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                        "Duplicate event attribute key");
                 }
                 String value = SecurityFieldSanitizer.text(entry.getValue(), 512);
                 if (value != null) {
@@ -358,7 +365,8 @@ public final class SecurityEventDraft {
         public Builder attribute(String key, String value) {
             String normalizedKey = SecurityFieldSanitizer.normalizeAttributeKey(key);
             if (this.attributes.containsKey(normalizedKey)) {
-                throw new IllegalArgumentException("Duplicate event attribute key: " + normalizedKey);
+                throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                    "Duplicate event attribute key");
             }
             this.attributes.put(normalizedKey, value);
             return this;

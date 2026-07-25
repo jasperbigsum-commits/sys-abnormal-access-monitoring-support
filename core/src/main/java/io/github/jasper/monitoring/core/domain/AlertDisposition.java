@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.core.domain;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 
 import io.github.jasper.monitoring.api.DispositionType;
 import java.time.Instant;
@@ -58,7 +61,8 @@ public final class AlertDisposition {
 
     private static String requiredText(String value, String name) {
         if (value == null || value.trim().isEmpty()) {
-            throw new IllegalArgumentException(name + " is required");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                name + " is required");
         }
         return value;
     }

@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.core;
 
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
 import io.github.jasper.monitoring.core.port.ControlHandler;
@@ -105,9 +108,16 @@ class AnnotatedControlHandlerTest {
 
     @Test
     void rejectsDuplicateAndInvalidBindings() {
-        assertThrows(IllegalArgumentException.class, () -> new AnnotatedControlHandler(new DuplicateTarget()));
-        assertThrows(IllegalArgumentException.class, () -> new AnnotatedControlHandler(new InvalidTarget()));
-        assertThrows(IllegalArgumentException.class, () -> new AnnotatedControlHandler(new RecordTarget()));
+        MonitoringConfigurationException duplicate = assertThrows(MonitoringConfigurationException.class,
+            () -> new AnnotatedControlHandler(new DuplicateTarget()));
+        MonitoringValidationException invalid = assertThrows(MonitoringValidationException.class,
+            () -> new AnnotatedControlHandler(new InvalidTarget()));
+        MonitoringValidationException record = assertThrows(MonitoringValidationException.class,
+            () -> new AnnotatedControlHandler(new RecordTarget()));
+
+        assertEquals(MonitoringErrorCode.DUPLICATE_CONTROL_BINDING, duplicate.getErrorCode());
+        assertEquals(MonitoringErrorCode.INVALID_CONTROL_TRIGGER, invalid.getErrorCode());
+        assertEquals(MonitoringErrorCode.INVALID_CONTROL_TRIGGER, record.getErrorCode());
     }
 
     @Test
@@ -126,10 +136,12 @@ class AnnotatedControlHandlerTest {
             Arrays.<ControlHandler>asList(new AnnotatedControlHandler(new EmptyTarget())));
 
         assertTrue(handlers.isEmpty());
-        assertThrows(IllegalStateException.class, () -> new DefaultSecurityMonitor(
+        MonitoringConfigurationException exception = assertThrows(MonitoringConfigurationException.class,
+            () -> new DefaultSecurityMonitor(
             "orders", Clock.fixed(Instant.parse("2026-07-22T00:00:00Z"), ZoneOffset.UTC),
             new InMemoryMonitoringRepository(), Collections.<DetectionRule>emptyList(), MonitoringMode.ENFORCE,
             handlers, NotificationChannel.noop()));
+        assertEquals(MonitoringErrorCode.ENFORCEMENT_HANDLER_REQUIRED, exception.getErrorCode());
     }
 
     private static ControlCommand command(ControlActionType action) {

@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.api;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -62,12 +65,14 @@ public final class SecurityFieldSanitizer {
     public static void requireSafeAttributeKey(String key) {
         String normalized = text(key, 128);
         if (normalized == null || normalized.isEmpty()) {
-            throw new IllegalArgumentException("Event attribute key is required");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                "Event attribute key is required");
         }
         String comparable = lettersAndDigits(normalized);
         for (String keyword : FORBIDDEN_KEYWORDS) {
             if (comparable.contains(lettersAndDigits(keyword))) {
-                throw new IllegalArgumentException("Event attributes must not contain credential material: " + normalized);
+                throw new MonitoringValidationException(MonitoringErrorCode.UNSAFE_EVENT_ATTRIBUTE,
+                    "Event attributes must not contain credential material");
             }
         }
     }

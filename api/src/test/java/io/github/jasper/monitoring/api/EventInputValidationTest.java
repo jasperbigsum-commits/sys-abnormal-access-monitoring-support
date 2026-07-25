@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -36,9 +38,10 @@ class EventInputValidationTest {
 
     @Test
     void rejectsBlankIssueIdentifiers() {
-        assertThrows(IllegalArgumentException.class,
+        MonitoringValidationException missingRuleId = assertThrows(MonitoringValidationException.class,
             () -> EventInputIssue.of(" ", "dataCount", EventInputIssueCode.MISSING_DATA_COUNT,
                 EventFactSource.SERVER_COMPUTED));
+        assertEquals(MonitoringErrorCode.INVALID_FIELD_VALUE, missingRuleId.getErrorCode());
         assertThrows(IllegalArgumentException.class,
             () -> EventInputIssue.of("EXPT-01", " ", EventInputIssueCode.MISSING_DATA_COUNT,
                 EventFactSource.SERVER_COMPUTED));
@@ -50,9 +53,10 @@ class EventInputValidationTest {
 
     @Test
     void rejectsUnsafeDiagnosticIdentifiers() {
-        assertThrows(IllegalArgumentException.class,
+        MonitoringValidationException unsafeFact = assertThrows(MonitoringValidationException.class,
             () -> EventInputIssue.of("EXPT-01", "password", EventInputIssueCode.MISSING_DATA_COUNT,
                 EventFactSource.SERVER_COMPUTED));
+        assertEquals(MonitoringErrorCode.UNSAFE_EVENT_ATTRIBUTE, unsafeFact.getErrorCode());
         assertThrows(IllegalArgumentException.class,
             () -> EventInputIssue.of("EXPT-01", "rawPayload", EventInputIssueCode.MISSING_DATA_COUNT,
                 EventFactSource.SERVER_COMPUTED));
@@ -129,5 +133,19 @@ class EventInputValidationTest {
             Collections.singletonList(issue), Collections.singleton("EXPT-01")).getStatus());
         assertEquals(EventInputStatus.UNKNOWN, EventInputValidation.of(EventInputStatus.UNKNOWN,
             Collections.<EventInputIssue>emptyList(), Collections.<String>emptySet()).getStatus());
+    }
+
+    @Test
+    void exposesStableCodesForMissingAndInvalidValidationFields() {
+        MonitoringValidationException missingStatus = assertThrows(MonitoringValidationException.class,
+            () -> EventInputValidation.of(null, Collections.<EventInputIssue>emptyList(),
+                Collections.<String>emptySet()));
+        MonitoringValidationException invalidStatusDetails = assertThrows(MonitoringValidationException.class,
+            () -> EventInputValidation.of(EventInputStatus.VALID,
+                Collections.singletonList(EventInputIssue.missing("EXPT-01", "dataCount",
+                    EventFactSource.SERVER_COMPUTED)), Collections.singleton("EXPT-01")));
+
+        assertEquals(MonitoringErrorCode.REQUIRED_FIELD_MISSING, missingStatus.getErrorCode());
+        assertEquals(MonitoringErrorCode.INVALID_FIELD_VALUE, invalidStatusDetails.getErrorCode());
     }
 }

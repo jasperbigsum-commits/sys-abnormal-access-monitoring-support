@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.api;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -46,7 +49,10 @@ public final class MonitoringRequestContext {
     public Map<String, String> getTrustedHeaders() { return trustedHeaders; }
     private static String required(String value, String field, int length) {
         String sanitized = SecurityFieldSanitizer.text(value, length);
-        if (sanitized == null || sanitized.isEmpty()) { throw new IllegalArgumentException(field + " is required"); }
+        if (sanitized == null || sanitized.isEmpty()) {
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                field + " is required");
+        }
         return sanitized;
     }
     /** {@link MonitoringRequestContext} 的构建器（Builder）。 */

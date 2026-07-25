@@ -1,5 +1,7 @@
 package io.github.jasper.monitoring.api;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -21,7 +23,7 @@ public final class EventInputValidation {
     private EventInputValidation(EventInputStatus status, Collection<EventInputIssue> issues,
                                  Collection<String> ineligibleRuleIds) {
         if (status == null) {
-            throw new IllegalArgumentException("status is required");
+            throw required("status is required");
         }
         this.status = status;
         this.issues = immutableIssues(issues);
@@ -91,12 +93,12 @@ public final class EventInputValidation {
 
     private static List<EventInputIssue> immutableIssues(Collection<EventInputIssue> values) {
         if (values == null) {
-            throw new IllegalArgumentException("issues are required");
+            throw required("issues are required");
         }
         List<EventInputIssue> copied = new ArrayList<EventInputIssue>(values.size());
         for (EventInputIssue value : values) {
             if (value == null) {
-                throw new IllegalArgumentException("issues must not contain null");
+                throw invalid("issues must not contain null");
             }
             copied.add(value);
         }
@@ -105,12 +107,12 @@ public final class EventInputValidation {
 
     private static Set<String> immutableRuleIds(Collection<String> values) {
         if (values == null) {
-            throw new IllegalArgumentException("ineligibleRuleIds are required");
+            throw required("ineligibleRuleIds are required");
         }
         Set<String> copied = new LinkedHashSet<String>();
         for (String value : values) {
             if (!EventInputIssue.isStableRuleId(value)) {
-                throw new IllegalArgumentException("ineligibleRuleIds must contain stable rule identifiers");
+                throw invalid("ineligibleRuleIds must contain stable rule identifiers");
             }
             copied.add(value);
         }
@@ -123,7 +125,7 @@ public final class EventInputValidation {
             issueRuleIds.add(issue.getRuleId());
         }
         if (!issueRuleIds.containsAll(ruleIds)) {
-            throw new IllegalArgumentException("ineligibleRuleIds must have corresponding input issues");
+            throw invalid("ineligibleRuleIds must have corresponding input issues");
         }
     }
 
@@ -132,12 +134,20 @@ public final class EventInputValidation {
         boolean hasDetails = !issues.isEmpty() || !ruleIds.isEmpty();
         if (status == EventInputStatus.INCOMPLETE || status == EventInputStatus.INVALID) {
             if (!hasDetails) {
-                throw new IllegalArgumentException("INCOMPLETE and INVALID validations require issues and rule IDs");
+                throw invalid("INCOMPLETE and INVALID validations require issues and rule IDs");
             }
             return;
         }
         if (hasDetails) {
-            throw new IllegalArgumentException("VALID and UNKNOWN validations must not contain issues or rule IDs");
+            throw invalid("VALID and UNKNOWN validations must not contain issues or rule IDs");
         }
+    }
+
+    private static MonitoringValidationException required(String message) {
+        return new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING, message);
+    }
+
+    private static MonitoringValidationException invalid(String message) {
+        return new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE, message);
     }
 }

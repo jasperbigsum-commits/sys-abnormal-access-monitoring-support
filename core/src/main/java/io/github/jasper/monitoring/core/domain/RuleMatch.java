@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.core.domain;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.RiskLevel;
@@ -58,7 +61,8 @@ public final class RuleMatch {
         this.reason = reason;
         this.actions = Collections.unmodifiableList(new ArrayList<ControlActionType>(actions));
         if (controlTtl == null || controlTtl.isNegative() || controlTtl.isZero()) {
-            throw new IllegalArgumentException("controlTtl must be positive");
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "controlTtl must be positive");
         }
         this.controlTtl = controlTtl;
     }

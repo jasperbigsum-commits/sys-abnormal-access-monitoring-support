@@ -2,10 +2,13 @@ package io.github.jasper.monitoring.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ControlStatus;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import io.github.jasper.monitoring.core.application.DefaultControlService;
 import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
 import io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger;
@@ -22,6 +25,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class DefaultControlServiceTest {
+
+    @Test
+    void rejectsRecordAsADefaultControlTriggerWithStableCode() {
+        MonitoringValidationException exception = assertThrows(MonitoringValidationException.class,
+            () -> DefaultControlActionTrigger.forAction(ControlActionType.RECORD));
+
+        assertEquals(MonitoringErrorCode.INVALID_CONTROL_TRIGGER, exception.getErrorCode());
+    }
 
     @Test
     void retriesADefaultFallbackSkipAfterAHostHandlerBecomesAvailable() {

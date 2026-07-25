@@ -1,8 +1,12 @@
 package io.github.jasper.monitoring.spring3.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.spring.support.ConfiguredTrustedProxyResolver;
 import io.github.jasper.monitoring.spring.support.control.GenericIpControlHandler;
@@ -21,6 +25,16 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 class IpControlFilterTest {
     private static final Instant NOW = Instant.parse("2026-07-25T00:00:00Z");
+
+    @Test
+    void rejectsMissingDependenciesWithAStableCode() {
+        MonitoringValidationException exception = assertThrows(MonitoringValidationException.class,
+            () -> new IpControlFilter(null, new ConfiguredTrustedProxyResolver(Collections.<String>emptyList()),
+                Collections.singletonList("/api/**"), Collections.<String>emptyList(),
+                Clock.fixed(NOW, ZoneOffset.UTC)));
+
+        assertEquals(MonitoringErrorCode.REQUIRED_FIELD_MISSING, exception.getErrorCode());
+    }
 
     @Test
     void returnsBare403ForAProtectedDeniedIp() throws Exception {

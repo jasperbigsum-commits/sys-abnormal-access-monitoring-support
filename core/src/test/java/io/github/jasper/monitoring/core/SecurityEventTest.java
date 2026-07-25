@@ -11,6 +11,8 @@ import io.github.jasper.monitoring.api.EventInputValidation;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import java.time.Instant;
 import java.util.Arrays;
@@ -38,6 +40,14 @@ class SecurityEventTest {
 
         assertEquals(EventInputStatus.VALID, event.getInputStatus());
         assertTrue(event.getInputIssues().isEmpty());
+    }
+
+    @Test
+    void rejectsMissingInputValidationWithAStableCode() {
+        MonitoringValidationException exception = assertThrows(MonitoringValidationException.class,
+            () -> SecurityEvent.from(explicitZeroDraft(), "test", "event-1", Instant.EPOCH, null));
+
+        assertEquals(MonitoringErrorCode.REQUIRED_FIELD_MISSING, exception.getErrorCode());
     }
 
     @Test

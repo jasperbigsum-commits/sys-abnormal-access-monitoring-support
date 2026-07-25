@@ -1,6 +1,8 @@
 package io.github.jasper.monitoring.core.application.control;
 
 import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
 import io.github.jasper.monitoring.core.port.ControlHandler;
@@ -25,7 +27,8 @@ public final class DefaultControlActionTrigger implements ControlHandler {
     private DefaultControlActionTrigger(ControlActionType action) {
         this.action = Objects.requireNonNull(action, "action");
         if (!action.requiresHostHandler()) {
-            throw new IllegalArgumentException("RECORD does not have a default control trigger");
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_CONTROL_TRIGGER,
+                "RECORD does not have a default control trigger");
         }
     }
 

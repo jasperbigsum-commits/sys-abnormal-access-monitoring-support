@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.core.domain.rule;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.RuleMatch;
@@ -70,10 +73,12 @@ public final class WindowAggregateRule extends AbstractDetectionRule {
         this.candidate = Objects.requireNonNull(candidate, "candidate");
         this.window = Objects.requireNonNull(window, "window");
         if (window.isNegative() || window.isZero()) {
-            throw new IllegalArgumentException("window must be positive");
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "window must be positive");
         }
         if (threshold <= 0) {
-            throw new IllegalArgumentException("threshold must be positive");
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "threshold must be positive");
         }
         this.threshold = threshold;
         this.scope = Objects.requireNonNull(scope, "scope");

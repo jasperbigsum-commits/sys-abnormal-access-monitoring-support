@@ -19,6 +19,8 @@ Spring Boot 2.7.x (`javax.servlet`) and Spring Boot 3.x (`jakarta.servlet`) are 
 
 ## Quick start
 
+Production adoption follows seven evidence-based steps: one matching starter, controlled schema migration, trusted identity/authorization/proxy SPIs, `OBSERVE`, a safe test event, a tested real control handler, and only then `ENFORCE`. See the [Integration Guide](docs/integration-guide.en.md#fifteen-minute-path) for commands, omissions, and advanced features.
+
 Import the BOM, then add exactly one starter matching the host's Boot major version:
 
 ```xml
@@ -74,4 +76,10 @@ Build and verify all modules with:
 mvn clean verify -DskipTests=false
 ```
 
-For the detailed English architecture, transaction, and compatibility notes, see [Architecture and Transaction Boundaries](docs/architecture-and-transaction-boundaries.en.md). The Chinese integration and operations documentation is indexed in the [Chinese README](README.md).
+## Documentation
+
+- [Integration Guide](docs/integration-guide.en.md): fifteen-minute adoption, common omissions, advanced integration, and production acceptance.
+- [Public Error Contract](docs/error-contract.en.md): all 13 stable codes, hierarchy, retry guidance, and host transport mapping.
+- [Architecture and Transaction Boundaries](docs/architecture-and-transaction-boundaries.en.md): module isolation, runtime flow, persistence atomicity, and post-commit effects.
+- [Feature and Optimization Roadmap](docs/roadmap.en.md): M0-M3 priorities, completion signals, and explicitly deferred work.
+- [Chinese README](README.md): the Chinese documentation index.

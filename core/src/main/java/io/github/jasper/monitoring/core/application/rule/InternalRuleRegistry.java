@@ -6,6 +6,10 @@ package io.github.jasper.monitoring.core.application.rule;
 import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
 import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
 import io.github.jasper.monitoring.api.SecurityFieldSanitizer;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringStateException;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -51,12 +55,14 @@ public final class InternalRuleRegistry implements InternalRuleRegistrar {
     @Override
     public synchronized void register(DetectionRule rule) {
         if (frozen) {
-            throw new IllegalStateException("Internal rule registry is frozen");
+            throw new MonitoringStateException(MonitoringErrorCode.RULE_REGISTRY_FROZEN,
+                "Internal rule registry is frozen");
         }
         DetectionRule value = Objects.requireNonNull(rule, "rule");
         String ruleId = normalizeRuleId(value.getRuleId());
         if (rules.containsKey(ruleId)) {
-            throw new IllegalStateException("Duplicate internal rule id: " + ruleId);
+            throw new MonitoringConfigurationException(MonitoringErrorCode.DUPLICATE_INTERNAL_RULE_ID,
+                "Duplicate internal rule id");
         }
         rules.put(ruleId, value);
     }
@@ -108,7 +114,8 @@ public final class InternalRuleRegistry implements InternalRuleRegistrar {
     private static String normalizeRuleId(String ruleId) {
         String value = SecurityFieldSanitizer.text(ruleId, 128);
         if (value == null || value.isEmpty()) {
-            throw new IllegalArgumentException("DetectionRule ruleId is required");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                "DetectionRule ruleId is required");
         }
         return value;
     }

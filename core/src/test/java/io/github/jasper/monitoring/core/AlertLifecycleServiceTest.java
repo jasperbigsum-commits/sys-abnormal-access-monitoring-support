@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.core;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringStateException;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import io.github.jasper.monitoring.core.application.AlertLifecycleService;
 import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.infrastructure.memory.InMemoryMonitoringRepository;
@@ -77,16 +80,24 @@ class AlertLifecycleServiceTest {
             AlertStatus.NEW, NOW, NOW, 1));
         AlertLifecycleService lifecycle = new AlertLifecycleService(repository, Clock.fixed(NOW, ZoneOffset.UTC));
 
-        assertThrows(IllegalArgumentException.class,
+        MonitoringValidationException missingOperator = assertThrows(MonitoringValidationException.class,
             () -> lifecycle.acknowledge("alert-1", "", "Investigating"));
-        assertThrows(IllegalArgumentException.class,
+        assertEquals(MonitoringErrorCode.REQUIRED_FIELD_MISSING, missingOperator.getErrorCode());
+        MonitoringValidationException missingComment = assertThrows(MonitoringValidationException.class,
             () -> lifecycle.close("alert-1", "operator-1", "", "ticket-42"));
-        assertThrows(IllegalStateException.class,
+        assertEquals(MonitoringErrorCode.REQUIRED_FIELD_MISSING, missingComment.getErrorCode());
+        MonitoringStateException invalidClose = assertThrows(MonitoringStateException.class,
             () -> lifecycle.close("alert-1", "operator-1", "Confirmed mitigation", "ticket-42"));
+        assertEquals(MonitoringErrorCode.INVALID_ALERT_TRANSITION, invalidClose.getErrorCode());
 
         SecurityAlert falsePositive = lifecycle.falsePositive("alert-1", "operator-1", "Known test traffic", "case-7");
         assertEquals(AlertStatus.FALSE_POSITIVE, falsePositive.getStatus());
-        assertThrows(IllegalStateException.class,
+        MonitoringStateException terminalTransition = assertThrows(MonitoringStateException.class,
             () -> lifecycle.acknowledge("alert-1", "operator-1", "Retry"));
+        assertEquals(MonitoringErrorCode.INVALID_ALERT_TRANSITION, terminalTransition.getErrorCode());
+
+        MonitoringValidationException missingAlert = assertThrows(MonitoringValidationException.class,
+            () -> lifecycle.acknowledge("alert-missing", "operator-1", "Investigating"));
+        assertEquals(MonitoringErrorCode.ALERT_NOT_FOUND, missingAlert.getErrorCode());
     }
 }

@@ -26,6 +26,9 @@ import io.github.jasper.monitoring.api.MonitoringEventPolicy;
 import io.github.jasper.monitoring.api.MonitoringInputIssueReporter;
 import io.github.jasper.monitoring.api.MonitoringMode;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import io.github.jasper.monitoring.core.application.quality.DefaultMonitoringEventPolicy;
 import java.time.Clock;
 import java.time.Duration;
@@ -94,7 +97,10 @@ public final class DefaultSecurityMonitor implements SecurityMonitor {
     public DefaultSecurityMonitor(String systemId, Clock clock, MonitoringRepository repository, List<DetectionRule> rules,
                                   MonitoringMode mode, ControlHandlerRegistry handlers, NotificationChannel notifications,
                                   MonitoringEventPolicy eventPolicy, MonitoringInputIssueReporter inputIssueReporter) {
-        if (systemId == null || systemId.trim().isEmpty()) { throw new IllegalArgumentException("systemId is required"); }
+        if (systemId == null || systemId.trim().isEmpty()) {
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                "systemId is required");
+        }
         this.systemId = systemId;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.repository = Objects.requireNonNull(repository, "repository");
@@ -102,7 +108,8 @@ public final class DefaultSecurityMonitor implements SecurityMonitor {
         this.enabledRuleIds = enabledRuleIds(this.rules);
         this.mode = Objects.requireNonNull(mode, "mode");
         if (this.mode == MonitoringMode.ENFORCE && handlers.isEmpty()) {
-            throw new IllegalStateException("ENFORCE mode requires at least one host ControlHandler");
+            throw new MonitoringConfigurationException(MonitoringErrorCode.ENFORCEMENT_HANDLER_REQUIRED,
+                "ENFORCE mode requires at least one host ControlHandler");
         }
         this.alertService = new DefaultAlertService(repository, clock);
         this.controlService = new DefaultControlService(repository, handlers, clock);

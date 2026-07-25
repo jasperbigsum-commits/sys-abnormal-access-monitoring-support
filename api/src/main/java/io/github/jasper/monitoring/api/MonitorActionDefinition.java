@@ -1,5 +1,7 @@
 package io.github.jasper.monitoring.api;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import java.lang.reflect.AnnotatedElement;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -56,7 +58,7 @@ public final class MonitorActionDefinition {
         String shorthand = normalized(annotation.value());
         String named = normalized(annotation.action());
         if (shorthand != null && named != null && !shorthand.equals(named)) {
-            throw new IllegalArgumentException("MonitorAction value and action must match when both are set");
+            throw invalid("MonitorAction value and action must match when both are set");
         }
         return builder(shorthand == null ? named : shorthand)
             .eventType(annotation.eventType())
@@ -80,7 +82,7 @@ public final class MonitorActionDefinition {
         Objects.requireNonNull(element, "element");
         MonitorAction action = element.getAnnotation(MonitorAction.class);
         if (action == null) {
-            throw new IllegalArgumentException("MonitorAction is required");
+            throw required("MonitorAction is required");
         }
         Builder builder = from(action).toBuilder();
         for (MonitorActionAttribute attribute : element.getAnnotationsByType(MonitorActionAttribute.class)) {
@@ -99,10 +101,10 @@ public final class MonitorActionDefinition {
     public static void validateStaticAttribute(MonitorActionAttribute attribute) {
         Objects.requireNonNull(attribute, "attribute");
         if (attribute.target() != MonitorActionAttributeTarget.ATTRIBUTE || !attribute.path().isEmpty()) {
-            throw new IllegalArgumentException("Type and method MonitorActionAttribute declarations are static attributes only");
+            throw invalid("Type and method MonitorActionAttribute declarations are static attributes only");
         }
         if (!hasText(attribute.name()) || !hasText(attribute.value())) {
-            throw new IllegalArgumentException("Static MonitorActionAttribute name and value are required");
+            throw required("Static MonitorActionAttribute name and value are required");
         }
     }
 
@@ -115,10 +117,10 @@ public final class MonitorActionDefinition {
     public static void validateParameterAttribute(MonitorActionAttribute attribute) {
         Objects.requireNonNull(attribute, "attribute");
         if (!attribute.value().isEmpty()) {
-            throw new IllegalArgumentException("Parameter MonitorActionAttribute declarations must not define value");
+            throw invalid("Parameter MonitorActionAttribute declarations must not define value");
         }
         if (attribute.target() == MonitorActionAttributeTarget.ATTRIBUTE && !hasText(attribute.name())) {
-            throw new IllegalArgumentException("Parameter attribute declarations require a name");
+            throw required("Parameter attribute declarations require a name");
         }
     }
 
@@ -261,14 +263,14 @@ public final class MonitorActionDefinition {
         public Builder attribute(String key, String value) {
             String safeKey = SecurityFieldSanitizer.normalizeAttributeKey(key);
             if (safeKey.toLowerCase(Locale.ROOT).startsWith(RULE_TAG_PREFIX)) {
-                throw new IllegalArgumentException("MonitorAction static attributes cannot use " + RULE_TAG_PREFIX);
+                throw invalid("MonitorAction static attributes cannot use the reserved rule-tag namespace");
             }
             if (attributes.containsKey(safeKey)) {
-                throw new IllegalArgumentException("Duplicate MonitorAction static attribute key: " + safeKey);
+                throw invalid("Duplicate MonitorAction static attribute key");
             }
             String safeValue = SecurityFieldSanitizer.text(value, 512);
             if (safeValue == null || safeValue.isEmpty()) {
-                throw new IllegalArgumentException("MonitorAction static attribute value is required");
+                throw required("MonitorAction static attribute value is required");
             }
             attributes.put(safeKey, safeValue);
             return this;
@@ -287,7 +289,7 @@ public final class MonitorActionDefinition {
     private static String requiredAction(String value) {
         String normalized = normalized(value);
         if (normalized == null) {
-            throw new IllegalArgumentException("MonitorAction action is required");
+            throw required("MonitorAction action is required");
         }
         return normalized;
     }
@@ -315,14 +317,14 @@ public final class MonitorActionDefinition {
         for (Map.Entry<String, String> entry : values.entrySet()) {
             String key = SecurityFieldSanitizer.normalizeAttributeKey(entry.getKey());
             if (key.toLowerCase(Locale.ROOT).startsWith(RULE_TAG_PREFIX)) {
-                throw new IllegalArgumentException("MonitorAction static attributes cannot use " + RULE_TAG_PREFIX);
+                throw invalid("MonitorAction static attributes cannot use the reserved rule-tag namespace");
             }
             if (normalized.containsKey(key)) {
-                throw new IllegalArgumentException("Duplicate MonitorAction static attribute key: " + key);
+                throw invalid("Duplicate MonitorAction static attribute key");
             }
             String value = SecurityFieldSanitizer.text(entry.getValue(), 512);
             if (value == null || value.isEmpty()) {
-                throw new IllegalArgumentException("MonitorAction static attribute value is required");
+                throw required("MonitorAction static attribute value is required");
             }
             normalized.put(key, value);
         }
@@ -332,8 +334,16 @@ public final class MonitorActionDefinition {
     private static String normalizeRuleTag(String value) {
         String normalized = SecurityFieldSanitizer.text(value, 64);
         if (normalized == null || !RULE_TAG.matcher(normalized.toLowerCase(Locale.ROOT)).matches()) {
-            throw new IllegalArgumentException("MonitorAction rule tag must match [a-z0-9][a-z0-9_.-]{0,63}");
+            throw invalid("MonitorAction rule tag must match [a-z0-9][a-z0-9_.-]{0,63}");
         }
         return normalized.toLowerCase(Locale.ROOT);
+    }
+
+    private static MonitoringValidationException required(String message) {
+        return new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING, message);
+    }
+
+    private static MonitoringValidationException invalid(String message) {
+        return new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE, message);
     }
 }

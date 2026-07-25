@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.api;
 
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+
 import java.lang.reflect.Method;
 import java.util.Objects;
 
@@ -27,7 +30,8 @@ public final class MonitorActionInvocation {
         this.returnValue = returnValue;
         this.failure = failure;
         if (elapsedMs < 0) {
-            throw new IllegalArgumentException("elapsedMs must not be negative");
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "elapsedMs must not be negative");
         }
         this.elapsedMs = elapsedMs;
     }

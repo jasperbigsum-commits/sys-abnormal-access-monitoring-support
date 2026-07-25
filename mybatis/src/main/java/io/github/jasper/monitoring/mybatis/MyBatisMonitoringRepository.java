@@ -11,6 +11,9 @@ import io.github.jasper.monitoring.api.EventFactSource;
 import io.github.jasper.monitoring.api.EventInputIssue;
 import io.github.jasper.monitoring.api.EventInputIssueCode;
 import io.github.jasper.monitoring.api.EventInputStatus;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringPersistenceException;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import io.github.jasper.monitoring.core.domain.AlertDisposition;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
@@ -30,6 +33,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import org.apache.ibatis.exceptions.PersistenceException;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionManager;
 
@@ -65,6 +69,9 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
             T result = work.execute();
             sessionManager.commit();
             return result;
+        } catch (PersistenceException exception) {
+            sessionManager.rollback();
+            throw persistenceFailure(exception);
         } catch (RuntimeException exception) {
             sessionManager.rollback();
             throw exception;
@@ -204,7 +211,8 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
     public void addWhitelist(final WhitelistEntry entry) {
         Objects.requireNonNull(entry, "entry");
         if (entry.getExpiresAt() == null) {
-            throw new IllegalArgumentException("Whitelist entries must have an expiry time");
+            throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
+                "Whitelist entries require expiresAt");
         }
         write(mapper -> {
             if (mapper.countWhitelist(entry.getRuleId(), entry.getSubject(), entry.getExpiresAt()) == 0) {
@@ -221,6 +229,8 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
         sessionManager.startManagedSession(true);
         try {
             return work.apply(mapper());
+        } catch (PersistenceException exception) {
+            throw persistenceFailure(exception);
         } finally {
             sessionManager.close();
         }
@@ -310,7 +320,8 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
             return EventInputIssue.of(row.getRuleId(), row.getFactName(),
                 EventInputIssueCode.valueOf(row.getIssueCode()), EventFactSource.valueOf(row.getSourceType()));
         } catch (RuntimeException exception) {
-            throw new IllegalStateException("Persisted event input issue is invalid");
+            throw new MonitoringPersistenceException(MonitoringErrorCode.PERSISTENCE_OPERATION_FAILED,
+                "Persisted event input issue is invalid", exception);
         }
     }
 
@@ -372,10 +383,16 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
             row.getAction(), row.getExpiresAt(), row.getRuleId());
         if (row.getStatus() != ControlStatus.SUCCEEDED && row.getStatus() != ControlStatus.FAILED
             && row.getStatus() != ControlStatus.SKIPPED) {
-            throw new IllegalStateException("Unknown persisted control status: " + row.getStatus());
+            throw new MonitoringPersistenceException(MonitoringErrorCode.PERSISTENCE_OPERATION_FAILED,
+                "Persisted control status is invalid");
         }
         ControlExecution execution = ControlExecution.restored(row.getControlId(), row.getIdempotencyKey(),
             row.getStatus(), row.getFailureReason());
         return new ControlRecord(command, execution, row.getExecutedAt());
+    }
+
+    private static MonitoringPersistenceException persistenceFailure(PersistenceException exception) {
+        return new MonitoringPersistenceException(MonitoringErrorCode.PERSISTENCE_OPERATION_FAILED,
+            "Monitoring persistence operation failed", exception);
     }
 }
