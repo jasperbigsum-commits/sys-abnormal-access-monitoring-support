@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -45,53 +46,34 @@ class ActionFactsTest {
     }
 
     @Test
-    void rejectsAValueWhoseRuntimeTypeDoesNotMatchTheFactType() {
-        assertThrows(IllegalArgumentException.class,
-            () -> ActionFacts.builder().putRaw(DataCountFact.class, "5000").build());
-    }
-
-    @Test
-    void rejectsNullFactTypesValuesAndMissingValueTypeDeclarations() {
+    void rejectsNullFactTypesAndValues() {
         assertThrows(NullPointerException.class,
-            () -> ActionFacts.builder().putRaw(null, 5L));
+            () -> ActionFacts.builder().put(null, 5L));
         assertThrows(NullPointerException.class,
             () -> ActionFacts.builder().put(DataCountFact.class, null));
-        assertThrows(IllegalArgumentException.class,
-            () -> ActionFacts.builder().putRaw(rawFactType(), "value"));
-    }
-
-    @Test
-    void reusesResolvedMetadataForRepeatedPutsWithoutConstructingFactTypes() {
-        ActionFacts facts = ActionFacts.builder()
-            .put(ThrowingConstructorFact.class, 1L)
-            .put(ThrowingConstructorFact.class, 2L)
-            .build();
-
-        assertEquals(Long.valueOf(2L), facts.get(ThrowingConstructorFact.class));
     }
 
     @Test
     void rejectsStaticallyMismatchedValuesAtCompilation() {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         assertNotNull(compiler, "Tests must run on a JDK");
+        DiagnosticCollector<JavaFileObject> validDiagnostics = new DiagnosticCollector<JavaFileObject>();
+        JavaFileObject validSource = factPutSource("ValidFactPut", "5000L");
+        Boolean validCompiled = compiler.getTask(null, null, validDiagnostics,
+            Arrays.asList("-classpath", System.getProperty("java.class.path"), "-proc:none"),
+            null, Collections.singletonList(validSource)).call();
+        assertTrue(validCompiled.booleanValue(), () -> diagnosticsText(validDiagnostics));
+
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<JavaFileObject>();
-        JavaFileObject source = source("InvalidFactPut", String.join("\n",
-            "import io.github.jasper.monitoring.api.fact.ActionFacts;",
-            "import io.github.jasper.monitoring.api.fact.FactType;",
-            "final class InvalidFactPut {",
-            "  static final class DataCountFact implements FactType<Long> {",
-            "    public Class<Long> valueType() { return Long.class; }",
-            "  }",
-            "  void add() {",
-            "    ActionFacts.builder().put(DataCountFact.class, \"5000\");",
-            "  }",
-            "}"));
+        JavaFileObject source = factPutSource("InvalidFactPut", "\"5000\"");
 
         Boolean compiled = compiler.getTask(null, null, diagnostics,
             Arrays.asList("-classpath", System.getProperty("java.class.path"), "-proc:none"),
             null, Collections.singletonList(source)).call();
 
         assertFalse(compiled.booleanValue(), () -> diagnosticsText(diagnostics));
+        assertTrue(diagnostics.getDiagnostics().stream()
+            .anyMatch(diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR));
     }
 
     @Test
@@ -106,39 +88,9 @@ class ActionFactsTest {
     }
 
     public static final class DataCountFact implements FactType<Long> {
-        @Override
-        public Class<Long> valueType() {
-            return Long.class;
-        }
     }
 
     public static final class TextFact implements FactType<String> {
-        @Override
-        public Class<String> valueType() {
-            return String.class;
-        }
-    }
-
-    private interface LongFactType extends FactType<Long> {
-    }
-
-    private static final class ThrowingConstructorFact implements LongFactType {
-        private ThrowingConstructorFact() {
-            throw new AssertionError("Fact types must not be constructed to resolve metadata");
-        }
-
-        @Override
-        public Class<Long> valueType() {
-            return Long.class;
-        }
-    }
-
-    @SuppressWarnings("rawtypes")
-    private static final class RawFact implements FactType {
-        @Override
-        public Class valueType() {
-            return String.class;
-        }
     }
 
     private static final class DeclaredActions {
@@ -160,16 +112,23 @@ class ActionFactsTest {
         };
     }
 
+    private static JavaFileObject factPutSource(String className, String valueExpression) {
+        return source(className, String.join("\n",
+            "import io.github.jasper.monitoring.api.fact.ActionFacts;",
+            "import io.github.jasper.monitoring.api.fact.FactType;",
+            "final class " + className + " {",
+            "  static final class DataCountFact implements FactType<Long> {}",
+            "  void add() {",
+            "    ActionFacts.builder().put(DataCountFact.class, " + valueExpression + ");",
+            "  }",
+            "}"));
+    }
+
     private static String diagnosticsText(DiagnosticCollector<JavaFileObject> diagnostics) {
         StringBuilder text = new StringBuilder();
         for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
             text.append(diagnostic.getMessage(null)).append(System.lineSeparator());
         }
         return text.toString();
-    }
-
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private static Class<? extends FactType<?>> rawFactType() {
-        return (Class) RawFact.class;
     }
 }

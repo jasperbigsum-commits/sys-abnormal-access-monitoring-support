@@ -55,11 +55,8 @@
 @MonitorAction(ReportExportAction.class)
 void exportReport() {}
 
-@Test
-void rejectsAValueWhoseRuntimeTypeDoesNotMatchTheFactType() {
-    assertThrows(IllegalArgumentException.class,
-        () -> ActionFacts.builder().putRaw(DataCountFact.class, "5000").build());
-}
+ActionFacts.builder().put(DataCountFact.class, 5000L).build();
+// ActionFacts.builder().put(DataCountFact.class, "5000") must not compile.
 ```
 
 - [ ] **Step 2: Run the API tests and observe missing typed contracts**
@@ -72,7 +69,6 @@ Expected: compilation fails because `api.action` and `api.fact` do not exist.
 
 ```java
 public interface FactType<T> {
-    Class<T> valueType();
 }
 
 @Retention(RetentionPolicy.RUNTIME)
@@ -82,7 +78,7 @@ public @interface MonitorAction {
 }
 ```
 
-Implement `ActionFacts` as an immutable class-keyed map. `Builder.put(Class<? extends FactType<T>>, T)` validates null policy and `valueType()`; `putRaw` exists only for framework adapters and applies the same validation.
+Implement `ActionFacts` as an immutable class-keyed map. `Builder.put(Class<? extends FactType<T>>, T)` preserves the compile-time association and rejects null keys or values. Runtime validation of framework-supplied raw values belongs to `FactDefinition<T>` in Task 2, the specification's single owner of value type and validation metadata.
 
 - [ ] **Step 4: Run focused tests**
 
@@ -124,6 +120,12 @@ void derivedExportCannotWeakenContractFailurePolicy() {
 @Test
 void actionSpecificProviderDoesNotApplyToSiblingActions() {
     assertFalse(binding.forAction(FirstExport.class).appliesTo(SecondExport.class));
+}
+
+@Test
+void factDefinitionRejectsARawValueOfTheWrongRuntimeType() {
+    assertThrows(IllegalArgumentException.class,
+        () -> dataCountDefinition.validateRaw("5000"));
 }
 ```
 
