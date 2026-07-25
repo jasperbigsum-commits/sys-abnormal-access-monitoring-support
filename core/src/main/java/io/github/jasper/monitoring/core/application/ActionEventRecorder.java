@@ -5,6 +5,8 @@ package io.github.jasper.monitoring.core.application;
 
 
 import io.github.jasper.monitoring.api.IdentityContext;
+import io.github.jasper.monitoring.api.EventEnricher;
+import io.github.jasper.monitoring.api.EventInputValidation;
 import io.github.jasper.monitoring.api.MonitorAction;
 import io.github.jasper.monitoring.api.MonitorActionDefinition;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
@@ -13,6 +15,9 @@ import io.github.jasper.monitoring.api.SecurityEventResult;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -31,6 +36,7 @@ public final class ActionEventRecorder {
     private final SecurityMonitor monitor;
     private final Clock clock;
     private final MonitoringActionRegistry actions;
+    private final List<EventEnricher> enrichers;
 
     /**
      * 创建带空动作注册表的记录器。
@@ -42,7 +48,7 @@ public final class ActionEventRecorder {
      * @param clock 服务端事件时间来源
      */
     public ActionEventRecorder(SecurityMonitor monitor, Clock clock) {
-        this(monitor, clock, new MonitoringActionRegistry());
+        this(monitor, clock, new MonitoringActionRegistry(), Collections.<EventEnricher>emptyList());
     }
 
     /**
@@ -53,9 +59,20 @@ public final class ActionEventRecorder {
      * @param actions 启动期动作定义注册表
      */
     public ActionEventRecorder(SecurityMonitor monitor, Clock clock, MonitoringActionRegistry actions) {
+        this(monitor, clock, actions, Collections.<EventEnricher>emptyList());
+    }
+
+    public ActionEventRecorder(SecurityMonitor monitor, Clock clock, MonitoringActionRegistry actions,
+                               List<EventEnricher> enrichers) {
         this.monitor = Objects.requireNonNull(monitor, "monitor");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.actions = Objects.requireNonNull(actions, "actions");
+        Objects.requireNonNull(enrichers, "enrichers");
+        List<EventEnricher> values = new ArrayList<EventEnricher>(enrichers.size());
+        for (EventEnricher enricher : enrichers) {
+            values.add(Objects.requireNonNull(enricher, "enricher"));
+        }
+        this.enrichers = Collections.unmodifiableList(values);
     }
 
     /**
@@ -100,7 +117,8 @@ public final class ActionEventRecorder {
      */
     public MonitoringOutcome record(MonitorActionDefinition action, MonitoringRequestContext request,
                                     IdentityContext identity, SecurityEventResult result, String reasonCode) {
-        return monitor.record(draft(action, request, identity).result(result).reasonCode(reasonCode).build());
+        SecurityEventDraft value = draft(action, request, identity).result(result).reasonCode(reasonCode).build();
+        return monitor.record(applyEnrichers(value, request, identity));
     }
 
     /**
@@ -111,6 +129,31 @@ public final class ActionEventRecorder {
      */
     public MonitoringOutcome record(SecurityEventDraft draft) {
         return monitor.record(Objects.requireNonNull(draft, "draft"));
+    }
+
+    /**
+     * 记录由边界适配层补充了稳定输入质量诊断的动态草稿。
+     *
+     * @param draft 已补充结果和动态业务事实、并完成校验的安全事件草稿
+     * @param inputValidation 不包含原始值或异常文本的输入质量结论
+     * @return 标准监测器产生的处理结果
+     */
+    public MonitoringOutcome record(SecurityEventDraft draft, EventInputValidation inputValidation) {
+        return monitor.record(Objects.requireNonNull(draft, "draft"),
+            Objects.requireNonNull(inputValidation, "inputValidation"));
+    }
+
+    public MonitoringOutcome record(SecurityEventDraft draft, EventInputValidation inputValidation,
+                                    MonitoringRequestContext request, IdentityContext identity) {
+        return monitor.record(applyEnrichers(Objects.requireNonNull(draft, "draft"),
+            Objects.requireNonNull(request, "request"), Objects.requireNonNull(identity, "identity")),
+            Objects.requireNonNull(inputValidation, "inputValidation"));
+    }
+
+    public MonitoringOutcome record(SecurityEventDraft draft, MonitoringRequestContext request,
+                                    IdentityContext identity) {
+        return monitor.record(applyEnrichers(Objects.requireNonNull(draft, "draft"),
+            Objects.requireNonNull(request, "request"), Objects.requireNonNull(identity, "identity")));
     }
 
     /**
@@ -163,5 +206,46 @@ public final class ActionEventRecorder {
             draft.attribute(MonitorActionDefinition.ruleTagAttributeKey(ruleTag), "true");
         }
         return draft;
+    }
+
+    private SecurityEventDraft applyEnrichers(SecurityEventDraft draft, MonitoringRequestContext request,
+                                              IdentityContext identity) {
+        SecurityEventDraft current = draft;
+        for (EventEnricher enricher : enrichers) {
+            try {
+                SecurityEventDraft candidate = enricher.enrich(current, request, identity);
+                if (candidate != null && preservesTrustedFacts(current, candidate)) {
+                    current = candidate;
+                }
+            } catch (RuntimeException ignored) {
+                // Optional enrichment must not break event recording or the host action.
+            }
+        }
+        return current;
+    }
+
+    private static boolean preservesTrustedFacts(SecurityEventDraft before, SecurityEventDraft after) {
+        if (before.getEventType() != after.getEventType()
+            || !Objects.equals(before.getAction(), after.getAction())
+            || before.getResult() != after.getResult()
+            || !Objects.equals(before.getSourceIp(), after.getSourceIp())
+            || !Objects.equals(before.getRequestId(), after.getRequestId())
+            || !Objects.equals(before.getTraceId(), after.getTraceId())
+            || !Objects.equals(before.getUserId(), after.getUserId())
+            || before.getAccountType() != after.getAccountType()
+            || !Objects.equals(before.getRoleIds(), after.getRoleIds())
+            || !Objects.equals(before.getSessionIdHash(), after.getSessionIdHash())
+            || !Objects.equals(before.getDeviceIdHash(), after.getDeviceIdHash())
+            || !Objects.equals(before.getOccurredAt(), after.getOccurredAt())
+            || before.getResourceType() != null
+                && !Objects.equals(before.getResourceType(), after.getResourceType())) {
+            return false;
+        }
+        for (Map.Entry<String, String> attribute : before.getAttributes().entrySet()) {
+            if (!Objects.equals(attribute.getValue(), after.getAttributes().get(attribute.getKey()))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

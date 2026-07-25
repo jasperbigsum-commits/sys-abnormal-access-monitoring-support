@@ -60,4 +60,49 @@ class ControlHandlerRegistryTest {
         assertTrue(registry.isEmpty());
         assertFalse(registry.find(ControlActionType.RECORD).isPresent());
     }
+
+    @Test
+    void resolvesHostBeforeGenericAndGenericBeforeDefault() {
+        ControlHandler host = handlerFor(ControlActionType.DENY);
+        ControlHandler generic = handlerFor(ControlActionType.DENY, ControlActionType.RATE_LIMIT);
+        ControlHandlerRegistry registry = new ControlHandlerRegistry(Arrays.asList(host),
+            Arrays.asList(generic), DefaultControlActionTrigger.defaults());
+
+        assertSame(host, registry.find(ControlActionType.DENY).get());
+        assertSame(generic, registry.find(ControlActionType.RATE_LIMIT).get());
+        assertFalse(registry.isEmpty());
+    }
+
+    @Test
+    void anEffectiveGenericTierSatisfiesTheEnforceModeHandlerRequirement() {
+        ControlHandler generic = handlerFor(ControlActionType.RATE_LIMIT);
+        ControlHandlerRegistry registry = new ControlHandlerRegistry(Collections.<ControlHandler>emptyList(),
+            Arrays.asList(generic), DefaultControlActionTrigger.defaults());
+
+        assertFalse(registry.isEmpty());
+    }
+
+    @Test
+    void twoArgumentConstructorRetainsHostThenDefaultCompatibility() {
+        ControlHandler host = handlerFor(ControlActionType.DENY);
+        ControlHandler fallback = handlerFor(ControlActionType.RATE_LIMIT);
+        ControlHandlerRegistry registry = new ControlHandlerRegistry(Arrays.asList(host), Arrays.asList(fallback));
+
+        assertSame(host, registry.find(ControlActionType.DENY).get());
+        assertSame(fallback, registry.find(ControlActionType.RATE_LIMIT).get());
+    }
+
+    private static ControlHandler handlerFor(final ControlActionType... supported) {
+        return new ControlHandler() {
+            @Override
+            public boolean supports(ControlActionType action) {
+                return Arrays.asList(supported).contains(action);
+            }
+
+            @Override
+            public ControlExecution execute(ControlCommand command) {
+                return ControlExecution.succeeded(command.getIdempotencyKey());
+            }
+        };
+    }
 }

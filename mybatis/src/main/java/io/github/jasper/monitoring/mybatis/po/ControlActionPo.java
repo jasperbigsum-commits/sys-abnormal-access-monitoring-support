@@ -16,6 +16,8 @@ public final class ControlActionPo {
     private String idempotencyKey;
     /** 关联的告警唯一标识；未由告警触发时可为空。 */
     private String alertId;
+    /** 产生控制动作的规则标识；旧记录或手工命令可为空。 */
+    private String ruleId;
     /** 控制动作作用的目标主体。 */
     private String subject;
     /** 要执行的控制动作类型。 */

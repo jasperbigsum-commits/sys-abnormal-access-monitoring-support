@@ -124,22 +124,22 @@ interface MonitoringSqlMapper {
     List<AlertDispositionPo> findAlertDispositions(@Param("alertId") String alertId);
 
     @Select({
-        "SELECT control_id AS controlId, idempotency_key AS idempotencyKey, alert_id AS alertId, subject,",
+        "SELECT control_id AS controlId, idempotency_key AS idempotencyKey, alert_id AS alertId, rule_id AS ruleId, subject,",
         "action_type AS action, expires_at AS expiresAt, status, failure_reason AS failureReason, executed_at AS executedAt",
         "FROM control_action WHERE idempotency_key = #{idempotencyKey}"
     })
     ControlActionPo findControl(@Param("idempotencyKey") String idempotencyKey);
 
     @Insert({
-        "INSERT INTO control_action (control_id, idempotency_key, alert_id, subject, action_type, expires_at, status,",
+        "INSERT INTO control_action (control_id, idempotency_key, alert_id, rule_id, subject, action_type, expires_at, status,",
         "failure_reason, executed_at)",
-        "VALUES (#{controlId}, #{idempotencyKey}, #{alertId}, #{subject}, #{action}, #{expiresAt}, #{status},",
+        "VALUES (#{controlId}, #{idempotencyKey}, #{alertId}, #{ruleId}, #{subject}, #{action}, #{expiresAt}, #{status},",
         "#{failureReason}, #{executedAt})"
     })
     int insertControl(ControlActionPo control);
 
     @Update({
-        "UPDATE control_action SET control_id = #{controlId}, alert_id = #{alertId}, subject = #{subject},",
+        "UPDATE control_action SET control_id = #{controlId}, alert_id = #{alertId}, rule_id = #{ruleId}, subject = #{subject},",
         "action_type = #{action}, expires_at = #{expiresAt}, status = #{status}, failure_reason = #{failureReason},",
         "executed_at = #{executedAt} WHERE idempotency_key = #{idempotencyKey}"
     })

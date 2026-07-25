@@ -1,16 +1,22 @@
 package io.github.jasper.monitoring.spring.support;
 
+import io.github.jasper.monitoring.api.EventFactSource;
+import io.github.jasper.monitoring.api.EventInputIssue;
+import io.github.jasper.monitoring.api.EventInputIssueCode;
+import io.github.jasper.monitoring.api.EventInputValidation;
 import io.github.jasper.monitoring.api.MonitorActionDefinition;
 import io.github.jasper.monitoring.api.MonitorActionEnricher;
 import io.github.jasper.monitoring.api.MonitorActionFacts;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
+import io.github.jasper.monitoring.api.SecurityFieldSanitizer;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Request-scoped dynamic facts collected for one annotated MVC action. */
@@ -18,12 +24,15 @@ public final class AnnotatedActionFacts {
     /** Request attribute shared by the MVC interceptor and its action aspect. */
     public static final String REQUEST_ATTRIBUTE = "io.github.jasper.monitoring.annotated-action-facts";
     private static final String RULE_TAG_ATTRIBUTE_PREFIX = "monitor.rule-tag.";
+    private static final String DIAGNOSTIC_FACT_NAME = "attribute";
 
     private final MonitorActionDefinition definition;
     private final Method method;
     private final List<Class<? extends MonitorActionEnricher>> enrichers;
     private final AtomicReference<MonitorActionFacts> facts = new AtomicReference<MonitorActionFacts>(
         MonitorActionFacts.empty());
+    private final AtomicReference<List<EventInputIssue>> inputIssues = new AtomicReference<List<EventInputIssue>>(
+        Collections.<EventInputIssue>emptyList());
 
     public AnnotatedActionFacts(MonitorActionDefinition definition, Method method,
                                 List<Class<? extends MonitorActionEnricher>> enrichers) {
@@ -44,22 +53,60 @@ public final class AnnotatedActionFacts {
         return enrichers;
     }
 
-    /** Merges a later dynamic contribution without allowing static attributes to be replaced. */
+    /** Merges parameter extraction facts and their stable diagnostics. */
+    public void merge(BoundParameterFactsExtractor.ExtractionResult extraction) {
+        if (extraction == null) {
+            return;
+        }
+        merge(extraction.getFacts(), EventFactSource.METHOD_PARAMETER);
+        addIssues(extraction.getIssues());
+    }
+
+    /** Merges an enricher contribution without allowing protected static facts to be replaced. */
     public void merge(MonitorActionFacts contribution) {
+        merge(contribution, EventFactSource.EVENT_ENRICHER);
+    }
+
+    /**
+     * Merges a dynamic contribution with its trustworthy source category.
+     *
+     * @param contribution dynamic facts from a parameter extractor or enricher
+     * @param sourceType stable source category for any protected-override diagnostic
+     */
+    public void merge(MonitorActionFacts contribution, EventFactSource sourceType) {
         if (contribution == null) {
             return;
         }
+        Objects.requireNonNull(sourceType, "sourceType");
         MonitorActionFacts current;
-        MonitorActionFacts merged;
         do {
             current = facts.get();
-            merged = merged(current, contribution);
-        } while (!facts.compareAndSet(current, merged));
+            MergeResult result = merged(current, contribution, sourceType);
+            if (facts.compareAndSet(current, result.facts)) {
+                addIssues(result.issues);
+                return;
+            }
+        } while (true);
     }
 
     /** @return a stable snapshot for final event recording. */
     public MonitorActionFacts snapshot() {
         return facts.get();
+    }
+
+    /** @return immutable stable diagnostics accumulated while collecting dynamic facts. */
+    public List<EventInputIssue> getInputIssues() {
+        return inputIssues.get();
+    }
+
+    /** @return an immutable quality result suitable for the standard event recorder. */
+    public EventInputValidation getInputValidation() {
+        List<EventInputIssue> issues = inputIssues.get();
+        if (issues.isEmpty()) {
+            return EventInputValidation.valid();
+        }
+        return EventInputValidation.of(io.github.jasper.monitoring.api.EventInputStatus.INCOMPLETE,
+            issues, Collections.<String>emptySet());
     }
 
     /** Applies a supplied snapshot to a pre-populated event draft. */
@@ -83,7 +130,7 @@ public final class AnnotatedActionFacts {
         }
     }
 
-    private MonitorActionFacts merged(MonitorActionFacts before, MonitorActionFacts after) {
+    private MergeResult merged(MonitorActionFacts before, MonitorActionFacts after, EventFactSource sourceType) {
         MonitorActionFacts.Builder builder = MonitorActionFacts.builder();
         String resourceId = after.getResourceId() == null ? before.getResourceId() : after.getResourceId();
         String orgScope = after.getOrgScope() == null ? before.getOrgScope() : after.getOrgScope();
@@ -113,21 +160,48 @@ public final class AnnotatedActionFacts {
         } else if (before.getReasonCode() != null) {
             builder.reasonCode(before.getReasonCode());
         }
-        copyAttributes(builder, before);
-        copyAttributes(builder, after);
-        return builder.build();
+        copyAcceptedAttributes(builder, before);
+        List<EventInputIssue> issues = new ArrayList<EventInputIssue>();
+        copyContributionAttributes(builder, after, sourceType, issues);
+        return new MergeResult(builder.build(), issues);
     }
 
-    private void copyAttributes(MonitorActionFacts.Builder builder, MonitorActionFacts source) {
+    private static void copyAcceptedAttributes(MonitorActionFacts.Builder builder, MonitorActionFacts source) {
         for (Map.Entry<String, String> attribute : source.getAttributes().entrySet()) {
-            if (!isRuleTag(attribute.getKey()) && !definition.getAttributes().containsKey(attribute.getKey())) {
-                builder.attribute(attribute.getKey(), attribute.getValue());
-            }
+            builder.attribute(SecurityFieldSanitizer.normalizeAttributeKey(attribute.getKey()), attribute.getValue());
         }
     }
 
-    private static boolean isRuleTag(String key) {
-        return key.toLowerCase(Locale.ROOT).startsWith(RULE_TAG_ATTRIBUTE_PREFIX);
+    private void copyContributionAttributes(MonitorActionFacts.Builder builder, MonitorActionFacts source,
+                                            EventFactSource sourceType, List<EventInputIssue> issues) {
+        for (Map.Entry<String, String> attribute : source.getAttributes().entrySet()) {
+            String key = SecurityFieldSanitizer.normalizeAttributeKey(attribute.getKey());
+            if (isProtectedAttribute(key)) {
+                issues.add(EventInputIssue.of(BoundParameterFactsExtractor.DIAGNOSTIC_RULE_ID,
+                    DIAGNOSTIC_FACT_NAME, EventInputIssueCode.PROTECTED_FACT_OVERRIDE, sourceType));
+                continue;
+            }
+            builder.attribute(key, attribute.getValue());
+        }
+    }
+
+    private boolean isProtectedAttribute(String normalizedKey) {
+        return normalizedKey.startsWith(RULE_TAG_ATTRIBUTE_PREFIX)
+            || definition.getAttributes().containsKey(normalizedKey);
+    }
+
+    private void addIssues(List<EventInputIssue> additions) {
+        if (additions == null || additions.isEmpty()) {
+            return;
+        }
+        List<EventInputIssue> current;
+        List<EventInputIssue> updated;
+        do {
+            current = inputIssues.get();
+            LinkedHashSet<EventInputIssue> unique = new LinkedHashSet<EventInputIssue>(current);
+            unique.addAll(additions);
+            updated = Collections.unmodifiableList(new ArrayList<EventInputIssue>(unique));
+        } while (!inputIssues.compareAndSet(current, updated));
     }
 
     private static List<Class<? extends MonitorActionEnricher>> immutableEnrichers(
@@ -136,5 +210,15 @@ public final class AnnotatedActionFacts {
             return Collections.emptyList();
         }
         return Collections.unmodifiableList(new ArrayList<Class<? extends MonitorActionEnricher>>(values));
+    }
+
+    private static final class MergeResult {
+        private final MonitorActionFacts facts;
+        private final List<EventInputIssue> issues;
+
+        private MergeResult(MonitorActionFacts facts, List<EventInputIssue> issues) {
+            this.facts = facts;
+            this.issues = issues;
+        }
     }
 }

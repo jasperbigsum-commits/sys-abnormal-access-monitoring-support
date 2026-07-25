@@ -3,6 +3,7 @@ package io.github.jasper.monitoring.spring2.autoconfigure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.jasper.monitoring.api.AccountType;
+import io.github.jasper.monitoring.api.EventInputValidation;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitorAction;
 import io.github.jasper.monitoring.api.MonitorActionAttribute;
@@ -73,6 +74,9 @@ class DynamicActionFactsTest {
         assertThat(event.getDataCount()).isEqualTo(7L);
         assertThat(event.getResult()).isEqualTo(SecurityEventResult.SUCCESS);
         assertThat(event.getReasonCode()).isEqualTo("BUSINESS_OK");
+        assertThat(fixture.monitor.validations).singleElement().satisfies(validation ->
+            assertThat(validation.getIssues()).extracting(issue -> issue.getIssueCode())
+                .contains("PROTECTED_FACT_OVERRIDE"));
     }
 
     @Test
@@ -483,6 +487,9 @@ class DynamicActionFactsTest {
         assertThat(event.getAttribute("broken")).isNull();
         assertThat(event.getAttribute("password")).isNull();
         assertThat(event.getAttribute("leading")).isNull();
+        assertThat(fixture.monitor.validations).singleElement().satisfies(validation ->
+            assertThat(validation.getIssues()).extracting(issue -> issue.getIssueCode())
+                .contains("UNRESOLVED_PARAMETER_PATH", "INVALID_PARAMETER_VALUE"));
     }
 
     private static final class Fixture {
@@ -833,7 +840,7 @@ class DynamicActionFactsTest {
                 return MonitorActionFacts.empty();
             }
             return MonitorActionFacts.builder().dataCount(7).result(SecurityEventResult.SUCCESS)
-                .reasonCode("BUSINESS_OK").attribute("classification", "dynamic").build();
+                .reasonCode("BUSINESS_OK").attribute("Classification", "dynamic").build();
         }
     }
 
@@ -936,10 +943,18 @@ class DynamicActionFactsTest {
 
     private static final class CapturingSecurityMonitor implements SecurityMonitor {
         private final List<SecurityEventDraft> events = new ArrayList<SecurityEventDraft>();
+        private final List<EventInputValidation> validations = new ArrayList<EventInputValidation>();
 
         @Override
         public MonitoringOutcome record(SecurityEventDraft draft) {
             events.add(draft);
+            return null;
+        }
+
+        @Override
+        public MonitoringOutcome record(SecurityEventDraft draft, EventInputValidation validation) {
+            events.add(draft);
+            validations.add(validation);
             return null;
         }
     }

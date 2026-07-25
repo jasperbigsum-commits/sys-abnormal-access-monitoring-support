@@ -16,7 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.EventFactSource;
 import io.github.jasper.monitoring.api.EventInputIssue;
+import io.github.jasper.monitoring.api.EventInputIssueCode;
 import io.github.jasper.monitoring.api.EventInputValidation;
+import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.api.MonitoringMode;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
 import io.github.jasper.monitoring.api.SecurityEventResult;
@@ -26,6 +28,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -128,6 +132,7 @@ class DefaultSecurityMonitorTest {
         }
 
         assertEquals("ip:203.0.113.8", executed.get().getSubject());
+        assertEquals("AUTH-02", executed.get().getRuleId());
         assertEquals(now.plus(Duration.ofMinutes(30)), executed.get().getExpiresAt());
     }
 
@@ -261,6 +266,40 @@ class DefaultSecurityMonitorTest {
         assertEquals("INCOMPLETE", outcome.getEvent().getInputStatus().name());
         assertEquals(1, reports.get());
         assertEquals(1, repository.getEvents().size());
+    }
+
+    @Test
+    void honorsExternalIneligibleRuleIdsEvenWhenTheyMatchAConfiguredRule() {
+        InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
+        DefaultSecurityMonitor monitor = new DefaultSecurityMonitor(
+            "orders", Clock.fixed(Instant.parse("2026-07-22T00:00:00Z"), ZoneOffset.UTC), repository,
+            Collections.<io.github.jasper.monitoring.core.domain.rule.DetectionRule>singletonList(
+                new io.github.jasper.monitoring.core.domain.rule.DetectionRule() {
+                    @Override
+                    public String getRuleId() {
+                        return "MONITOR-ACTION";
+                    }
+
+                    @Override
+                    public Optional<io.github.jasper.monitoring.core.domain.RuleMatch> evaluate(
+                        io.github.jasper.monitoring.core.domain.SecurityEvent event,
+                        java.util.List<io.github.jasper.monitoring.core.domain.SecurityEvent> history) {
+                        return Optional.of(new io.github.jasper.monitoring.core.domain.RuleMatch("MONITOR-ACTION",
+                            RiskLevel.LOW, event.subject(), "", "host rule", Collections.singletonList(
+                                ControlActionType.RECORD)));
+                    }
+                }),
+            MonitoringMode.OBSERVE, ControlHandlerRegistry.empty(), NotificationChannel.noop());
+        EventInputIssue annotationIssue = EventInputIssue.of("MONITOR-ACTION", "resourceId",
+            EventInputIssueCode.UNRESOLVED_PARAMETER_PATH, EventFactSource.METHOD_PARAMETER);
+
+        MonitoringOutcome outcome = monitor.record(query("annotation-diagnostic",
+            Instant.parse("2026-07-22T00:00:00Z")), EventInputValidation.incomplete(
+            Collections.singletonList(annotationIssue), Collections.singleton("MONITOR-ACTION")));
+
+        assertEquals("INCOMPLETE", outcome.getEvent().getInputStatus().name());
+        assertTrue(outcome.getMatches().isEmpty());
+        assertEquals(Collections.singletonList(annotationIssue), repository.getEvents().get(0).getInputIssues());
     }
 
     private SecurityEventDraft loginFailure(String userId, String requestId, Instant occurredAt) {

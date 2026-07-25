@@ -4,6 +4,8 @@ import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.RuleMatch;
 import static org.assertj.core.api.Assertions.assertThat;
 import io.github.jasper.monitoring.api.AccountType;
+import io.github.jasper.monitoring.api.EventEnricher;
+import io.github.jasper.monitoring.api.MonitorActionDefinition;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ControlTrigger;
@@ -16,6 +18,7 @@ import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
 import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
+import io.github.jasper.monitoring.core.application.ActionEventRecorder;
 import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
 import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
 import io.github.jasper.monitoring.core.application.AlertLifecycleService;
@@ -29,6 +32,8 @@ import io.github.jasper.monitoring.core.application.MonitoringOutcome;
 import io.github.jasper.monitoring.core.port.MonitoringRepository;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import io.github.jasper.monitoring.core.application.SecurityMonitor;
+import io.github.jasper.monitoring.spring.support.control.GenericIpControlHandler;
+import io.github.jasper.monitoring.spring.support.control.LocalIpControlState;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -70,6 +75,20 @@ class AbnormalAccessMonitorAutoConfigurationTest {
                 assertThat(outcome.getEvent().getSystemId()).isEqualTo("orders");
                 assertThat(outcome.getControls()).isEmpty();
             });
+    }
+
+    @Test
+    void automaticallyAppliesHostEventEnricherBeans() {
+        contextRunner.withUserConfiguration(EventEnricherConfiguration.class).run(context -> {
+            context.getBean(ActionEventRecorder.class).record(
+                MonitorActionDefinition.builder("report:read").build(),
+                MonitoringRequestContext.builder().method("GET").path("/reports/r-1")
+                    .sourceIp("203.0.113.7").requestId("request-enricher").build(),
+                IdentityContext.anonymous(), SecurityEventResult.SUCCESS, null);
+
+            assertThat(((InMemoryMonitoringRepository) context.getBean(MonitoringRepository.class))
+                .getEvents().get(0).getOrgScope()).isEqualTo("org-enriched");
+        });
     }
 
     @Test
@@ -136,6 +155,72 @@ class AbnormalAccessMonitorAutoConfigurationTest {
                         ControlActionType.RATE_LIMIT, Instant.parse("2026-07-24T00:00:00Z")));
                 assertThat(fallback.getStatus().name()).isEqualTo("SKIPPED");
                 assertThat(fallback.getFailureReason()).isEqualTo("DEFAULT_TRIGGER_REQUIRES_HOST_HANDLER:RATE_LIMIT");
+            });
+    }
+
+    @Test
+    void leavesGenericIpControlDisabledByDefault() {
+        webContextRunner.run(context -> {
+            assertThat(context).doesNotHaveBean(IpControlFilter.class);
+            assertThat(context).doesNotHaveBean(GenericIpControlHandler.class);
+            assertThat(context).doesNotHaveBean(LocalIpControlState.class);
+        });
+    }
+
+    @Test
+    void rejectsGenericIpControlOutsideEnforceMode() {
+        webContextRunner.withPropertyValues(validIpControlProperties())
+            .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    void rejectsIncompleteGenericIpControlConfiguration() {
+        webContextRunner.withPropertyValues(
+                "abnormal.access.monitor.mode=ENFORCE",
+                "abnormal.access.monitor.ip-control.enabled=true")
+            .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    void allowsGenericIpControlWithoutExcludedPaths() {
+        webContextRunner.withPropertyValues(
+                "abnormal.access.monitor.mode=ENFORCE",
+                "abnormal.access.monitor.ip-control.enabled=true",
+                "abnormal.access.monitor.ip-control.protected-paths[0]=/api/**",
+                "abnormal.access.monitor.ip-control.rule-ids[0]=RULE-IP",
+                "abnormal.access.monitor.ip-control.permits-per-window=2",
+                "abnormal.access.monitor.ip-control.window=30s",
+                "abnormal.access.monitor.ip-control.max-ttl=5m",
+                "abnormal.access.monitor.ip-control.capacity=100")
+            .run(context -> assertThat(context).hasSingleBean(IpControlFilter.class));
+    }
+
+    @Test
+    void doesNotRegisterGenericIpControlOutsideAServletApplication() {
+        contextRunner.withUserConfiguration(ControlHandlerConfiguration.class)
+            .withPropertyValues(validIpControlProperties())
+            .withPropertyValues("abnormal.access.monitor.mode=ENFORCE")
+            .run(context -> {
+                assertThat(context).doesNotHaveBean(IpControlFilter.class);
+                assertThat(context).doesNotHaveBean(GenericIpControlHandler.class);
+                assertThat(context).doesNotHaveBean(LocalIpControlState.class);
+            });
+    }
+
+    @Test
+    void registersGenericIpControlAsASeparateTierBehindHostHandlers() {
+        webContextRunner.withUserConfiguration(ControlHandlerConfiguration.class)
+            .withPropertyValues(validIpControlProperties())
+            .withPropertyValues("abnormal.access.monitor.mode=ENFORCE")
+            .run(context -> {
+                assertThat(context).hasSingleBean(IpControlFilter.class);
+                assertThat(context).hasSingleBean(GenericIpControlHandler.class);
+                assertThat(context).hasSingleBean(LocalIpControlState.class);
+                ControlHandlerRegistry registry = context.getBean(ControlHandlerRegistry.class);
+                assertThat(registry.find(ControlActionType.DENY).get())
+                    .isSameAs(context.getBean("controlHandler", ControlHandler.class));
+                assertThat(registry.find(ControlActionType.RATE_LIMIT).get())
+                    .isSameAs(context.getBean(GenericIpControlHandler.class));
             });
     }
 
@@ -347,6 +432,19 @@ class AbnormalAccessMonitorAutoConfigurationTest {
         }
     }
 
+    private static String[] validIpControlProperties() {
+        return new String[] {
+            "abnormal.access.monitor.ip-control.enabled=true",
+            "abnormal.access.monitor.ip-control.protected-paths[0]=/api/**",
+            "abnormal.access.monitor.ip-control.excluded-paths[0]=/api/health",
+            "abnormal.access.monitor.ip-control.rule-ids[0]=RULE-IP",
+            "abnormal.access.monitor.ip-control.permits-per-window=2",
+            "abnormal.access.monitor.ip-control.window=30s",
+            "abnormal.access.monitor.ip-control.max-ttl=5m",
+            "abnormal.access.monitor.ip-control.capacity=100"
+        };
+    }
+
     private static SecurityEventDraft disabledLoginFailure() {
         return SecurityEventDraft.builder()
             .eventType(SecurityEventType.LOGIN_FAILURE)
@@ -432,6 +530,14 @@ class AbnormalAccessMonitorAutoConfigurationTest {
                     return Optional.empty();
                 }
             });
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class EventEnricherConfiguration {
+        @Bean
+        EventEnricher eventEnricher() {
+            return (draft, request, identity) -> draft.toBuilder().orgScope("org-enriched").build();
         }
     }
 

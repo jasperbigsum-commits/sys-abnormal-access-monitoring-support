@@ -319,7 +319,7 @@ Expected: current fixed identity setup allows the endpoint or lacks a rejected-r
 
 Use an in-memory Shiro `Realm` and an `AuditPrincipalFilter` that accepts only a fixed set of non-secret fixture principal names from `X-Audit-Principal`; missing/unknown names return 401. The `IdentityContextProvider` reads only the authenticated Shiro `Subject`, not the header. `AuditResourceScopeAuthorizer` combines `Subject.isPermitted("report:read"/"report:export")` with a server-side report catalog mapping. The controller resolves the report from that catalog, calls `ResourceAccessGuard.authorize` before invoking the export service, and maps a denied `AuthorizationDecision` to 403.
 
-For Boot 2, set only the audit module compiler release to 11 and use the maintained Shiro 2.2.1 `javax` starter. For Boot 3, use the same artifact with its `jakarta` classifier after verifying Maven resolution. Do not add Shiro to parent dependency management, core, API or Starter modules.
+For Boot 2, keep the audit module at Java 8 and use `org.apache.shiro:shiro-spring-boot-web-starter:1.13.0` with `javax.servlet`. For Boot 3, import `org.apache.shiro:shiro-bom:2.0.4` only in that module's `dependencyManagement`, then use its Jakarta-resolved `shiro-spring-boot-web-starter`; do not add an unclassified Shiro 2 starter to the Boot 3 classpath. Do not add Shiro to parent dependency management, core, API or Starter modules.
 
 - [ ] **Step 4: Run both audit modules and commit**
 

@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.spring3.autoconfigure;
 
 import io.github.jasper.monitoring.api.MonitorActionEnricher;
+import io.github.jasper.monitoring.api.EventFactSource;
 import io.github.jasper.monitoring.api.MonitorActionFacts;
 import io.github.jasper.monitoring.api.MonitorActionInvocation;
 import io.github.jasper.monitoring.spring.support.AnnotatedActionFacts;
@@ -46,7 +47,7 @@ public final class AnnotatedActionMonitoringAspect extends StaticMethodMatcherPo
         }
         Method method = action.getMethod();
         Object[] arguments = invocation.getArguments();
-        facts.merge(parameters.extract(action.getParameterMethod(), arguments));
+        facts.merge(parameters.extractWithDiagnostics(action.getParameterMethod(), arguments));
         enrich(facts, MonitorActionInvocation.before(facts.getDefinition(), method, arguments));
         long startedAt = System.nanoTime();
         try {
@@ -66,7 +67,7 @@ public final class AnnotatedActionMonitoringAspect extends StaticMethodMatcherPo
             try {
                 MonitorActionEnricher enricher = beanFactory.getBean(type);
                 MonitorActionFacts contribution = enricher.enrich(invocation);
-                facts.merge(contribution);
+                facts.merge(contribution, EventFactSource.EVENT_ENRICHER);
             } catch (RuntimeException ignored) {
                 // Host enrichers are observational and may not affect the controller call.
             }

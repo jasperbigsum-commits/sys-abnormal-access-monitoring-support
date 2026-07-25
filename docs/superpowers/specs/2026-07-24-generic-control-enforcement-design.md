@@ -147,7 +147,7 @@ core 新增框架无关的控制状态端口和领域值对象。端口负责：
 
 为使策略能够按规则安全选择，`ControlCommand` 增加可选 `ruleId`，并保留原构造器以维持兼容。`DefaultSecurityMonitor` 在创建控制指令时填入 `RuleMatch` 的规则 ID。通用处理器只接受配置允许的 `ruleId + action + subject-kind` 组合。
 
-控制状态写入必须与控制记录使用同一幂等键。重复投递不延长有效期，除非宿主显式选择新的控制指令。
+控制状态写入必须与控制记录使用同一幂等键。活动控制期间的重复投递不延长有效期；跨过期、重启和节点的长期幂等由 `DefaultControlService` 的持久化记录负责，本地有界状态会释放过期键。需要并发原子领取或多实例强一致的宿主必须提供相应仓储或分布式处理器。
 
 ### Spring Boot 2 与 Spring Boot 3 Starter
 
@@ -182,9 +182,9 @@ Redis 运行时不可用时默认不切换存储实现，并遵循可配置的�
 
 Shiro 仅作为验收依赖放在 `integration-audit/spring2-web` 与 `integration-audit/spring3-web`。`api`、`core`、`spring-support`、两个 Starter、BOM 和业务接入 API 都不新增 Shiro 类型或传递依赖，保证组件继续可接入 Spring Security、自建认证、无 Web 的任务和其他权限框架。
 
-受维护的 Shiro 2.x 需要 Java 11 运行时。因此 `integration-audit/spring2-web` 样例单独将编译版本提升至 Java 11，并使用 `org.apache.shiro:shiro-spring-boot-web-starter:2.2.1` 的 `javax` 变体；Spring Boot 2 Starter 本身仍保持 Java 8。`integration-audit/spring3-web` 保持 Java 17，使用同版本的 `jakarta` classifier。实现时必须通过 Maven dependency tree 和两个应用上下文启动测试验证 classifier 与 Servlet API 的解析，不能把这一示例依赖提升到公共依赖管理。
+`integration-audit/spring2-web` 保持现有 Java 8 / `javax.servlet` 基线，并使用 `org.apache.shiro:shiro-spring-boot-web-starter:1.13.0`。`integration-audit/spring3-web` 保持 Java 17 / `jakarta.servlet`，在模块自己的 `dependencyManagement` 导入 `org.apache.shiro:shiro-bom:2.0.4`，再由该 BOM 解析 Jakarta 变体的 `shiro-spring-boot-web-starter`。Shiro 2 的无 classifier 依赖仍是 `javax`，因此 Boot 3 不能只增加单个 starter 或手工混用 `javax`/`jakarta` JAR。实现时必须通过 Maven dependency tree 和两个应用上下文启动测试验证 Servlet API 的解析，不能把任何一个示例依赖提升到公共依赖管理。
 
-若未来要求 Spring Boot 2 审计样例也必须运行于 Java 8，则不退回已停止维护的 Shiro 1.x；应改用框架无关的内存 RBAC 模拟，并在文档中明确该限制。当前推荐方案以“可维护的权限框架”和“核心模块 Java 8 兼容”之间的隔离为准。
+Shiro 1.13.0 仅保留给 Boot 2 的遗留 `javax` 验收夹具；正式宿主系统应优先迁移到 Boot 3/Jakarta 和 Shiro 2.x。当前推荐方案以“可运行的双版本验收”与“核心模块 Java 8 兼容”之间的隔离为准。
 
 ### 验收架构
 

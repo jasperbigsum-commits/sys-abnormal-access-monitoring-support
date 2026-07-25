@@ -1,8 +1,5 @@
 package io.github.jasper.monitoring.audit.spring3;
 
-import io.github.jasper.monitoring.api.AccountType;
-import io.github.jasper.monitoring.api.IdentityContext;
-import io.github.jasper.monitoring.api.IdentityContextProvider;
 import io.github.jasper.monitoring.api.MonitorActionDefinition;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.core.application.MonitoringActionRegistry;
@@ -10,7 +7,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
-import java.util.Collections;
 import javax.sql.DataSource;
 import org.apache.ibatis.jdbc.ScriptRunner;
 import org.apache.ibatis.session.Configuration;
@@ -42,13 +38,6 @@ public class Spring3AuditApplication {
         Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
             "audit-spring3", new JdbcTransactionFactory(), dataSource));
         return new SqlSessionFactoryBuilder().build(configuration);
-    }
-
-    /** @return 固定的服务端身份，用于基础项目验收，不读取客户端身份字段 */
-    @Bean
-    public IdentityContextProvider auditIdentityContextProvider() {
-        return request -> new IdentityContext("audit-user", AccountType.PERSON,
-            Collections.singleton("auditor"), "audit-session-hash");
     }
 
     /** @return 服务调用埋点使用的固定动作定义 */

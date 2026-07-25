@@ -71,6 +71,22 @@ public final class SecurityEventDraft {
         return new Builder();
     }
 
+    /** @return pre-populated builder for an approved enrichment contribution */
+    public Builder toBuilder() {
+        Builder builder = builder().eventType(eventType).action(action).result(result).sourceIp(sourceIp)
+            .requestId(requestId).traceId(traceId).userId(userId).accountType(accountType).roleIds(roleIds)
+            .sessionIdHash(sessionIdHash).deviceIdHash(deviceIdHash).resourceType(resourceType)
+            .resourceId(resourceId).orgScope(orgScope).occurredAt(occurredAt).reasonCode(reasonCode)
+            .attributes(attributes);
+        if (dataCountKnown) {
+            builder.dataCount(dataCount);
+        }
+        if (latencyMsKnown) {
+            builder.latencyMs(latencyMs);
+        }
+        return builder;
+    }
+
     /** @return 标准化安全活动类别 */
     public SecurityEventType getEventType() { return eventType; }
     /** @return 已清洗的操作名称 */

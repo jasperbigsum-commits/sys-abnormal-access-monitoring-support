@@ -9,6 +9,14 @@
     { "name": "abnormal.access.monitor.instrumentation.enabled", "type": "java.lang.Boolean", "defaultValue": true, "description": "是否自动记录 MVC 方法上的 @MonitorAction。" },
     { "name": "abnormal.access.monitor.mdc.enabled", "type": "java.lang.Boolean", "defaultValue": true, "description": "是否将审计 traceId 写入日志 MDC。" },
     { "name": "abnormal.access.monitor.mdc.trace-id-key", "type": "java.lang.String", "defaultValue": "traceId", "description": "日志格式读取追踪标识时使用的 MDC 键。" },
-    { "name": "abnormal.access.monitor.trusted-proxies", "type": "java.util.List<java.lang.String>", "description": "可解析转发 IP 头的反向代理地址或 CIDR；留空表示不信任转发头。" }
+    { "name": "abnormal.access.monitor.trusted-proxies", "type": "java.util.List<java.lang.String>", "description": "可解析转发 IP 头的反向代理地址或 CIDR；留空表示不信任转发头。" },
+    { "name": "abnormal.access.monitor.ip-control.enabled", "type": "java.lang.Boolean", "defaultValue": false, "description": "是否显式启用本机 IP 拒绝与限流；仅允许在 ENFORCE 模式启用。" },
+    { "name": "abnormal.access.monitor.ip-control.protected-paths", "type": "java.util.List<java.lang.String>", "description": "应用 IP 控制的 Ant 风格请求路径模式；启用时不能为空。" },
+    { "name": "abnormal.access.monitor.ip-control.excluded-paths", "type": "java.util.List<java.lang.String>", "description": "始终绕过 IP 控制的 Ant 风格请求路径模式。" },
+    { "name": "abnormal.access.monitor.ip-control.rule-ids", "type": "java.util.List<java.lang.String>", "description": "允许触发通用 IP 控制的规则 ID 白名单；启用时不能为空。" },
+    { "name": "abnormal.access.monitor.ip-control.permits-per-window", "type": "java.lang.Integer", "description": "RATE_LIMIT 控制在每个固定窗口内允许的请求数；必须为正数。" },
+    { "name": "abnormal.access.monitor.ip-control.window", "type": "java.time.Duration", "description": "RATE_LIMIT 的固定时间窗口；必须为正时长。" },
+    { "name": "abnormal.access.monitor.ip-control.max-ttl", "type": "java.time.Duration", "description": "通用 IP 控制命令允许的最大有效期；必须为正时长。" },
+    { "name": "abnormal.access.monitor.ip-control.capacity", "type": "java.lang.Integer", "description": "单 JVM 内最多保存的活动 IP 控制数量；必须为正数。" }
   ]
 }

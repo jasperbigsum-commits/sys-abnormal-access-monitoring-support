@@ -17,6 +17,7 @@ import java.util.Optional;
  */
 public final class ControlHandlerRegistry {
     private final List<ControlHandler> hostHandlers;
+    private final List<ControlHandler> genericHandlers;
     private final List<ControlHandler> defaultHandlers;
 
     /**
@@ -36,7 +37,20 @@ public final class ControlHandlerRegistry {
      * @param defaultHandlers 已排序的框架默认回退处理器
      */
     public ControlHandlerRegistry(List<ControlHandler> hostHandlers, List<ControlHandler> defaultHandlers) {
+        this(hostHandlers, Collections.<ControlHandler>emptyList(), defaultHandlers);
+    }
+
+    /**
+     * 创建具有宿主、显式通用控制和默认回退三层优先级的注册表。
+     *
+     * @param hostHandlers 已排序的宿主控制处理器
+     * @param genericHandlers 已排序且经过配置校验的通用控制处理器
+     * @param defaultHandlers 已排序的框架默认回退处理器
+     */
+    public ControlHandlerRegistry(List<ControlHandler> hostHandlers, List<ControlHandler> genericHandlers,
+                                  List<ControlHandler> defaultHandlers) {
         this.hostHandlers = immutableCopy(hostHandlers, "hostHandlers");
+        this.genericHandlers = immutableCopy(genericHandlers, "genericHandlers");
         this.defaultHandlers = immutableCopy(defaultHandlers, "defaultHandlers");
     }
     /** @return 不含处理器的注册表，仅适用于观察模式 */
@@ -47,7 +61,11 @@ public final class ControlHandlerRegistry {
      */
     public Optional<ControlHandler> find(ControlActionType action) {
         Optional<ControlHandler> host = find(hostHandlers, action);
-        return host.isPresent() ? host : find(defaultHandlers, action);
+        if (host.isPresent()) {
+            return host;
+        }
+        Optional<ControlHandler> generic = find(genericHandlers, action);
+        return generic.isPresent() ? generic : find(defaultHandlers, action);
     }
     /**
      * @param action 待判断的控制动作
@@ -56,17 +74,21 @@ public final class ControlHandlerRegistry {
     public boolean supports(ControlActionType action) { return find(action).isPresent(); }
     /** @return 是否没有任何已配置处理器支持可执行的控制动作 */
     public boolean isEmpty() {
-        for (ControlHandler handler : hostHandlers) {
+        return !hasExecutableHandler(hostHandlers) && !hasExecutableHandler(genericHandlers);
+    }
+
+    private static boolean hasExecutableHandler(List<ControlHandler> handlers) {
+        for (ControlHandler handler : handlers) {
             if (handler.isFallback()) {
                 continue;
             }
             for (ControlActionType action : ControlActionType.values()) {
                 if (action.requiresHostHandler() && handler.supports(action)) {
-                    return false;
+                    return true;
                 }
             }
         }
-        return true;
+        return false;
     }
 
     private static Optional<ControlHandler> find(List<ControlHandler> handlers, ControlActionType action) {

@@ -1,19 +1,23 @@
 package io.github.jasper.monitoring.audit.spring2;
 
+import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitorAction;
 import io.github.jasper.monitoring.api.MonitorActionAttribute;
 import io.github.jasper.monitoring.api.MonitorActionAttributeTarget;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
+import io.github.jasper.monitoring.api.ResourceScopeRequest;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.core.application.ActionEventRecorder;
 import io.github.jasper.monitoring.core.application.MonitoringOutcome;
+import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,10 +33,48 @@ public class AuditController {
     // This integration fixture must not echo a client-controlled requested row count.
     private static final long SERVER_REPORTED_ROW_COUNT = 37L;
     private final ActionEventRecorder recorder;
+    private final ResourceAccessGuard resourceAccessGuard;
+    private final AuditReportCatalog reportCatalog;
+    private final AuditExportService exportService;
 
     /** @param recorder Starter 自动装配的动作记录器 */
-    public AuditController(ActionEventRecorder recorder) {
+    public AuditController(ActionEventRecorder recorder, ResourceAccessGuard resourceAccessGuard,
+                           AuditReportCatalog reportCatalog, AuditExportService exportService) {
         this.recorder = recorder;
+        this.resourceAccessGuard = resourceAccessGuard;
+        this.reportCatalog = reportCatalog;
+        this.exportService = exportService;
+    }
+
+    @GetMapping("/reports/{reportId}")
+    public ResponseEntity<Map<String, Object>> report(@PathVariable("reportId") String reportId,
+                                                       HttpServletRequest request) {
+        AuditReportCatalog.AuditReport report = reportCatalog.find(reportId);
+        if (report == null) {
+            return ResponseEntity.notFound().build();
+        }
+        AuthorizationDecision decision = authorize(request, report);
+        if (!decision.isAllowed()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("reportId", report.getId());
+        return ResponseEntity.ok(body);
+    }
+
+    @PostMapping("/reports/{reportId}/export")
+    public ResponseEntity<Map<String, Object>> exportReport(@PathVariable("reportId") String reportId,
+                                                             HttpServletRequest request) {
+        AuditReportCatalog.AuditReport report = reportCatalog.find(reportId);
+        if (report == null) {
+            return ResponseEntity.notFound().build();
+        }
+        AuthorizationDecision decision = authorize(request, report);
+        if (!decision.isAllowed()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        exportService.export(report);
+        return ResponseEntity.ok(exportResponse(SERVER_REPORTED_ROW_COUNT));
     }
 
     /**
@@ -108,6 +150,12 @@ public class AuditController {
         response.put("eventId", outcome.getEvent().getEventId());
         response.put("matchCount", outcome.getMatches().size());
         return response;
+    }
+
+    private AuthorizationDecision authorize(HttpServletRequest request,
+                                            AuditReportCatalog.AuditReport report) {
+        return resourceAccessGuard.authorize(identityContext(request), new ResourceScopeRequest(
+            requestContext(request), "report", report.getId(), report.getOrganization()));
     }
 
     private static MonitoringRequestContext requestContext(HttpServletRequest request) {

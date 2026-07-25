@@ -1,5 +1,8 @@
 package io.github.jasper.monitoring.spring.support;
 
+import io.github.jasper.monitoring.api.EventFactSource;
+import io.github.jasper.monitoring.api.EventInputIssue;
+import io.github.jasper.monitoring.api.EventInputIssueCode;
 import io.github.jasper.monitoring.api.MonitorActionAttribute;
 import io.github.jasper.monitoring.api.MonitorActionAttributeTarget;
 import io.github.jasper.monitoring.api.MonitorActionDefinition;
@@ -10,35 +13,87 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /** Safely extracts approved facts from annotated method parameters. */
 public final class BoundParameterFactsExtractor {
+    /** Stable pseudo rule used only for annotation collection diagnostics. */
+    public static final String DIAGNOSTIC_RULE_ID = "MONITOR-ACTION";
+
+    /**
+     * Extracts approved facts while retaining the original no-diagnostics API.
+     *
+     * @param method annotated controller method
+     * @param arguments runtime method arguments
+     * @return immutable dynamic facts
+     */
     public MonitorActionFacts extract(Method method, Object[] arguments) {
-        MonitorActionFacts.Builder facts = MonitorActionFacts.builder();
-        if (method == null || arguments == null) {
-            return facts.build();
-        }
-        java.lang.reflect.Parameter[] parameters = method.getParameters();
-        for (int index = 0; index < parameters.length && index < arguments.length; index++) {
-            for (MonitorActionAttribute attribute : parameters[index].getAnnotationsByType(MonitorActionAttribute.class)) {
-                try {
-                    MonitorActionDefinition.validateParameterAttribute(attribute);
-                    Object value = value(arguments[index], attribute.path());
-                    merge(facts, contribution(attribute, value));
-                } catch (RuntimeException ignored) {
-                    // Annotation or reflection failures are observational only.
-                }
-            }
-        }
-        return facts.build();
+        return extractWithDiagnostics(method, arguments).getFacts();
     }
 
-    private static MonitorActionFacts contribution(MonitorActionAttribute attribute, Object value) {
-        String text = safeScalarText(value);
-        if (text == null) {
-            return MonitorActionFacts.empty();
+    /**
+     * Extracts approved facts and stable diagnostics for annotations that could not be resolved.
+     *
+     * <p>The result intentionally excludes parameter paths, values and reflection failure details. A failed
+     * extraction remains observational and never throws into the controller invocation.</p>
+     *
+     * @param method annotated controller method
+     * @param arguments runtime method arguments
+     * @return immutable facts and stable input-quality issues
+     */
+    public ExtractionResult extractWithDiagnostics(Method method, Object[] arguments) {
+        MonitorActionFacts.Builder facts = MonitorActionFacts.builder();
+        List<EventInputIssue> issues = new ArrayList<EventInputIssue>();
+        if (method == null || arguments == null) {
+            return new ExtractionResult(facts.build(), issues);
         }
+        java.lang.reflect.Parameter[] parameters = method.getParameters();
+        for (int index = 0; index < parameters.length; index++) {
+            Object argument = index < arguments.length ? arguments[index] : null;
+            for (MonitorActionAttribute attribute : parameters[index].getAnnotationsByType(MonitorActionAttribute.class)) {
+                extract(attribute, argument, facts, issues);
+            }
+        }
+        return new ExtractionResult(facts.build(), issues);
+    }
+
+    private static void extract(MonitorActionAttribute attribute, Object argument, MonitorActionFacts.Builder facts,
+                                List<EventInputIssue> issues) {
+        try {
+            MonitorActionDefinition.validateParameterAttribute(attribute);
+            Resolution resolution = resolve(argument, attribute.path());
+            if (!resolution.isResolved()) {
+                issues.add(issue(attribute, EventInputIssueCode.UNRESOLVED_PARAMETER_PATH));
+                return;
+            }
+            String text = safeScalarText(resolution.getValue());
+            if (text == null) {
+                issues.add(issue(attribute, EventInputIssueCode.INVALID_PARAMETER_VALUE));
+                return;
+            }
+            merge(facts, contribution(attribute, text));
+        } catch (RuntimeException ignored) {
+            // Annotation and reflection failures are observational only and have a stable diagnostic.
+            issues.add(issue(attribute, EventInputIssueCode.INVALID_PARAMETER_VALUE));
+        }
+    }
+
+    private static EventInputIssue issue(MonitorActionAttribute attribute, EventInputIssueCode code) {
+        return EventInputIssue.of(DIAGNOSTIC_RULE_ID, factName(attribute), code, EventFactSource.METHOD_PARAMETER);
+    }
+
+    private static String factName(MonitorActionAttribute attribute) {
+        if (attribute.target() == MonitorActionAttributeTarget.RESOURCE_ID) {
+            return "resourceId";
+        }
+        if (attribute.target() == MonitorActionAttributeTarget.ORG_SCOPE) {
+            return "orgScope";
+        }
+        return "attribute";
+    }
+
+    private static MonitorActionFacts contribution(MonitorActionAttribute attribute, String text) {
         MonitorActionFacts.Builder facts = MonitorActionFacts.builder();
         if (attribute.target() == MonitorActionAttributeTarget.RESOURCE_ID) {
             facts.resourceId(text);
@@ -97,24 +152,24 @@ public final class BoundParameterFactsExtractor {
         }
     }
 
-    private static Object value(Object root, String path) {
+    private static Resolution resolve(Object root, String path) {
         if (root == null) {
-            return null;
+            return Resolution.unresolved();
         }
         List<Segment> segments = parse(path);
         Object value = root;
         for (Segment segment : segments) {
             value = segment.index == null ? property(value, segment.name) : indexed(value, segment.index.intValue());
             if (value == null) {
-                return null;
+                return Resolution.unresolved();
             }
         }
-        return value;
+        return Resolution.resolved(value);
     }
 
     private static List<Segment> parse(String path) {
         if (path == null || path.isEmpty()) {
-            return java.util.Collections.emptyList();
+            return Collections.emptyList();
         }
         if (path.charAt(0) == '.') {
             throw new IllegalArgumentException("Invalid parameter path");
@@ -226,6 +281,55 @@ public final class BoundParameterFactsExtractor {
 
     private static boolean identifierPart(char value) {
         return identifierStart(value) || Character.isDigit(value);
+    }
+
+    /** Immutable result of one parameter-fact extraction attempt. */
+    public static final class ExtractionResult {
+        private final MonitorActionFacts facts;
+        private final List<EventInputIssue> issues;
+
+        private ExtractionResult(MonitorActionFacts facts, List<EventInputIssue> issues) {
+            this.facts = facts;
+            this.issues = Collections.unmodifiableList(new ArrayList<EventInputIssue>(issues));
+        }
+
+        /** @return approved immutable facts extracted from scalar values */
+        public MonitorActionFacts getFacts() {
+            return facts;
+        }
+
+        /** @return immutable stable diagnostics without paths, values or exception text */
+        public List<EventInputIssue> getIssues() {
+            return issues;
+        }
+    }
+
+    private static final class Resolution {
+        private static final Resolution UNRESOLVED = new Resolution(false, null);
+
+        private final boolean resolved;
+        private final Object value;
+
+        private Resolution(boolean resolved, Object value) {
+            this.resolved = resolved;
+            this.value = value;
+        }
+
+        private static Resolution unresolved() {
+            return UNRESOLVED;
+        }
+
+        private static Resolution resolved(Object value) {
+            return new Resolution(true, value);
+        }
+
+        private boolean isResolved() {
+            return resolved;
+        }
+
+        private Object getValue() {
+            return value;
+        }
     }
 
     private static final class Segment {

@@ -1,8 +1,7 @@
 package io.github.jasper.monitoring.spring.support;
 
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
+import io.github.jasper.monitoring.spring.support.control.IpAddressLiteral;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -41,21 +40,23 @@ public final class ConfiguredTrustedProxyResolver implements TrustedProxyResolve
      */
     @Override
     public String resolveClientIp(String directRemoteAddress, String forwardedForHeader) {
+        String directAddress = IpAddressLiteral.canonicalize(directRemoteAddress);
         if (!isTrusted(directRemoteAddress) || forwardedForHeader == null || forwardedForHeader.trim().isEmpty()) {
-            return directRemoteAddress;
+            return directAddress;
         }
         String[] values = forwardedForHeader.split(",");
         for (String value : values) {
             String candidate = value.trim();
-            if (!candidate.isEmpty() && parseAddress(candidate) != null) {
-                return candidate;
+            String canonical = IpAddressLiteral.canonicalize(candidate);
+            if (canonical != null) {
+                return canonical;
             }
         }
-        return directRemoteAddress;
+        return directAddress;
     }
 
     private boolean isTrusted(String address) {
-        byte[] candidate = parseAddress(address);
+        byte[] candidate = IpAddressLiteral.parseBytes(address);
         if (candidate == null) {
             return false;
         }
@@ -65,17 +66,6 @@ public final class ConfiguredTrustedProxyResolver implements TrustedProxyResolve
             }
         }
         return false;
-    }
-
-    private static byte[] parseAddress(String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return null;
-        }
-        try {
-            return InetAddress.getByName(value.trim()).getAddress();
-        } catch (UnknownHostException exception) {
-            return null;
-        }
     }
 
     private static final class TrustedAddress {
@@ -92,7 +82,7 @@ public final class ConfiguredTrustedProxyResolver implements TrustedProxyResolve
                 return null;
             }
             String[] parts = value.trim().split("/", -1);
-            byte[] address = parseAddress(parts[0]);
+            byte[] address = IpAddressLiteral.parseBytes(parts[0]);
             if (address == null || parts.length > 2) {
                 return null;
             }

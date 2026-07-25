@@ -6,6 +6,7 @@ import io.github.jasper.monitoring.core.application.MonitoringActionRegistry;
 import io.github.jasper.monitoring.core.application.MonitoringOutcome;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import io.github.jasper.monitoring.api.AccountType;
+import io.github.jasper.monitoring.api.EventEnricher;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitorAction;
 import io.github.jasper.monitoring.api.MonitorActionDefinition;
@@ -114,6 +115,29 @@ class ActionEventRecorderTest {
         assertEquals("hash-42", monitor.draft.getAttribute("attempted_account_hash"));
         assertEquals(Arrays.asList("attempted_account_hash", "monitor.rule-tag.authentication"),
             new ArrayList<String>(monitor.draft.getAttributes().keySet()));
+    }
+
+    @Test
+    void appliesEnrichersAndRejectsTrustedFactOverrides() {
+        CapturingMonitor monitor = new CapturingMonitor();
+        EventEnricher approved = (draft, request, identity) -> draft.toBuilder()
+            .orgScope("org-a").attribute("classification", "restricted").build();
+        EventEnricher invalid = (draft, request, identity) -> draft.toBuilder().sourceIp("198.51.100.9").build();
+        ActionEventRecorder recorder = new ActionEventRecorder(monitor,
+            Clock.fixed(Instant.parse("2026-07-22T01:02:03Z"), ZoneOffset.UTC),
+            new MonitoringActionRegistry(), Arrays.asList(approved, invalid));
+        MonitorAction action;
+        try {
+            action = DeclaredAction.class.getMethod("exportReport").getAnnotation(MonitorAction.class);
+        } catch (NoSuchMethodException exception) {
+            throw new AssertionError(exception);
+        }
+
+        recorder.record(action, request(), identity(), SecurityEventResult.SUCCESS, null);
+
+        assertEquals("org-a", monitor.draft.getOrgScope());
+        assertEquals("restricted", monitor.draft.getAttribute("classification"));
+        assertEquals("203.0.113.10", monitor.draft.getSourceIp());
     }
 
     private static MonitoringRequestContext request() {

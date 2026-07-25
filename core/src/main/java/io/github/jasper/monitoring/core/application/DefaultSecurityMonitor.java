@@ -20,6 +20,7 @@ import io.github.jasper.monitoring.core.domain.RuleMatch;
 
 import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
 import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.EventInputStatus;
 import io.github.jasper.monitoring.api.EventInputValidation;
 import io.github.jasper.monitoring.api.MonitoringEventPolicy;
 import io.github.jasper.monitoring.api.MonitoringInputIssueReporter;
@@ -121,13 +122,60 @@ public final class DefaultSecurityMonitor implements SecurityMonitor {
      */
     @Override
     public MonitoringOutcome record(SecurityEventDraft draft) {
-        EventInputValidation validation = eventPolicy.validate(draft, enabledRuleIds);
+        return record(draft, EventInputValidation.valid());
+    }
+
+    /**
+     * 将边界适配器的稳定诊断与规则输入策略结论合并后再持久化和评估。
+     *
+     * <p>边界诊断的伪规则标识不会匹配实际检测规则，因此它会标记事件输入不完整，但不会阻止
+     * 无关规则运行。</p>
+     */
+    @Override
+    public MonitoringOutcome record(SecurityEventDraft draft, EventInputValidation externalValidation) {
+        Objects.requireNonNull(draft, "draft");
+        Objects.requireNonNull(externalValidation, "externalValidation");
+        EventInputValidation policyValidation = eventPolicy.validate(draft, enabledRuleIds);
+        EventInputValidation validation = mergeValidations(policyValidation, externalValidation);
         SecurityEvent event = SecurityEvent.from(draft, systemId, UUID.randomUUID().toString(), Instant.now(clock), validation);
         PersistenceResult persistence = repository.inTransaction(() -> persist(event, validation));
         reportInputIssues(draft, validation);
         notifyAlerts(persistence.alerts);
         List<ControlExecution> controls = executeControls(persistence.matches, persistence.alerts);
         return new MonitoringOutcome(event, persistence.matches, persistence.alerts, controls);
+    }
+
+    private static EventInputValidation mergeValidations(EventInputValidation policyValidation,
+                                                          EventInputValidation externalValidation) {
+        Set<io.github.jasper.monitoring.api.EventInputIssue> uniqueIssues =
+            new LinkedHashSet<io.github.jasper.monitoring.api.EventInputIssue>();
+        uniqueIssues.addAll(policyValidation.getIssues());
+        uniqueIssues.addAll(externalValidation.getIssues());
+        List<io.github.jasper.monitoring.api.EventInputIssue> issues =
+            new ArrayList<io.github.jasper.monitoring.api.EventInputIssue>(uniqueIssues);
+        Set<String> ineligibleRuleIds = new LinkedHashSet<String>();
+        ineligibleRuleIds.addAll(policyValidation.getIneligibleRuleIds());
+        ineligibleRuleIds.addAll(externalValidation.getIneligibleRuleIds());
+        EventInputStatus status = mergedStatus(policyValidation.getStatus(), externalValidation.getStatus());
+        if (issues.isEmpty()) {
+            return status == EventInputStatus.VALID ? EventInputValidation.valid()
+                : EventInputValidation.of(status, Collections.<io.github.jasper.monitoring.api.EventInputIssue>emptyList(),
+                    Collections.<String>emptySet());
+        }
+        return EventInputValidation.of(status, issues, ineligibleRuleIds);
+    }
+
+    private static EventInputStatus mergedStatus(EventInputStatus policyStatus, EventInputStatus externalStatus) {
+        if (policyStatus == EventInputStatus.INVALID || externalStatus == EventInputStatus.INVALID) {
+            return EventInputStatus.INVALID;
+        }
+        if (policyStatus == EventInputStatus.INCOMPLETE || externalStatus == EventInputStatus.INCOMPLETE) {
+            return EventInputStatus.INCOMPLETE;
+        }
+        if (policyStatus == EventInputStatus.UNKNOWN || externalStatus == EventInputStatus.UNKNOWN) {
+            return EventInputStatus.UNKNOWN;
+        }
+        return EventInputStatus.VALID;
     }
 
     private PersistenceResult persist(SecurityEvent event, EventInputValidation validation) {
@@ -217,7 +265,7 @@ public final class DefaultSecurityMonitor implements SecurityMonitor {
             for (ControlActionType action : match.getActions()) {
                 if (action == ControlActionType.RECORD) { continue; }
                 ControlCommand command = new ControlCommand(alert.getAlertId() + ":" + action, alert.getAlertId(),
-                    match.getSubject(), action, Instant.now(clock).plus(match.getControlTtl()));
+                    match.getSubject(), action, Instant.now(clock).plus(match.getControlTtl()), match.getRuleId());
                 controls.add(controlService.execute(command));
             }
         }

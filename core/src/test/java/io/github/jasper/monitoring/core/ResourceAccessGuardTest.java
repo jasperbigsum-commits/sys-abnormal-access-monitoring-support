@@ -5,6 +5,8 @@ import io.github.jasper.monitoring.core.infrastructure.memory.InMemoryMonitoring
 import io.github.jasper.monitoring.core.domain.rule.DefaultRuleCatalog;
 import io.github.jasper.monitoring.core.port.NotificationChannel;
 import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
+import io.github.jasper.monitoring.core.application.ActionEventRecorder;
+import io.github.jasper.monitoring.core.application.MonitoringActionRegistry;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -18,6 +20,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Collections;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
 class ResourceAccessGuardTest {
@@ -77,5 +80,25 @@ class ResourceAccessGuardTest {
 
         assertEquals(1, repository.getAlerts().size());
         assertEquals("AUTHZ-01", repository.getAlerts().get(0).getRuleId());
+    }
+
+    @Test
+    void appliesRecorderEnrichersToAuthorizationEvents() {
+        InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
+        Clock clock = Clock.fixed(Instant.parse("2026-07-22T00:00:00Z"), ZoneOffset.UTC);
+        DefaultSecurityMonitor monitor = new DefaultSecurityMonitor("orders", clock, repository,
+            DefaultRuleCatalog.initialRules(), io.github.jasper.monitoring.api.MonitoringMode.OBSERVE,
+            ControlHandlerRegistry.empty(), NotificationChannel.noop());
+        ActionEventRecorder recorder = new ActionEventRecorder(monitor, clock, new MonitoringActionRegistry(),
+            Arrays.asList((draft, request, identity) -> draft.toBuilder()
+                .attribute("rbac_source", "shiro-rbac").build()));
+        ResourceAccessGuard guard = new ResourceAccessGuard(
+            (identity, request) -> AuthorizationDecision.allowed(), recorder, clock);
+        MonitoringRequestContext request = MonitoringRequestContext.builder().method("GET").path("/orders/o-1")
+            .sourceIp("203.0.113.7").requestId("req-enriched").build();
+
+        guard.authorize(IdentityContext.anonymous(), new ResourceScopeRequest(request, "order", "o-1", "org-a"));
+
+        assertEquals("shiro-rbac", repository.getEvents().get(0).getAttribute("rbac_source"));
     }
 }

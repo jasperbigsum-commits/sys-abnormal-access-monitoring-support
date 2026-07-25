@@ -88,14 +88,22 @@ class EventInputValidationTest {
     }
 
     @Test
-    void rejectsValidationWhenIneligibleRulesDoNotMatchIssueRules() {
+    void allowsDiagnosticIssuesThatDoNotGateRuleEvaluation() {
+        EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", EventFactSource.SERVER_COMPUTED);
+
+        EventInputValidation validation = EventInputValidation.of(EventInputStatus.INCOMPLETE,
+            Collections.singletonList(issue), Collections.<String>emptySet());
+
+        assertTrue(validation.isEligible("EXPT-01"));
+        assertEquals(Collections.singletonList(issue), validation.getIssues());
+    }
+
+    @Test
+    void rejectsIneligibleRulesWithoutCorrespondingIssues() {
         EventInputIssue issue = EventInputIssue.missing("EXPT-01", "dataCount", EventFactSource.SERVER_COMPUTED);
 
         assertThrows(IllegalArgumentException.class,
             () -> EventInputValidation.incomplete(Collections.singletonList(issue), Collections.singleton("AUTH-01")));
-        assertThrows(IllegalArgumentException.class,
-            () -> EventInputValidation.of(EventInputStatus.INCOMPLETE,
-                Collections.singletonList(issue), Collections.<String>emptySet()));
         assertThrows(IllegalArgumentException.class,
             () -> EventInputValidation.incomplete(Collections.singletonList(issue), Collections.singleton(" EXPT-01")));
     }

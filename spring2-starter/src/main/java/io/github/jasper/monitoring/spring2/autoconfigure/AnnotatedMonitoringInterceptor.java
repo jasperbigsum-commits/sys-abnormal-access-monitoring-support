@@ -109,7 +109,8 @@ public final class AnnotatedMonitoringInterceptor implements HandlerInterceptor 
                 (MonitoringRequestContext) requestContext, (IdentityContext) identity);
             facts.apply(draft, dynamic);
             recorder.record(draft.result(result(response, exception, dynamic))
-                .reasonCode(reasonCode(response, exception, dynamic)).build());
+                    .reasonCode(reasonCode(response, exception, dynamic)).build(), facts.getInputValidation(),
+                (MonitoringRequestContext) requestContext, (IdentityContext) identity);
         } catch (RuntimeException ignored) {
             // Observational monitoring cannot fail the completed host action.
         } finally {

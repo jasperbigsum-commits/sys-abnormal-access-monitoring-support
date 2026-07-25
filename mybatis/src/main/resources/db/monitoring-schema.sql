@@ -93,6 +93,7 @@ CREATE TABLE control_action (
     control_id VARCHAR(128) NOT NULL COMMENT '控制执行唯一标识',
     idempotency_key VARCHAR(256) NOT NULL COMMENT '幂等键',
     alert_id VARCHAR(128) COMMENT '关联告警标识',
+    rule_id VARCHAR(128) COMMENT '产生控制动作的规则标识',
     subject VARCHAR(256) NOT NULL COMMENT '控制目标主体',
     action_type VARCHAR(64) NOT NULL COMMENT '控制动作类型',
     expires_at TIMESTAMP COMMENT '控制失效时间',

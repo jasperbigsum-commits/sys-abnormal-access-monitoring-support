@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.MonitorActionAttribute;
 import io.github.jasper.monitoring.api.MonitorActionAttributeTarget;
 import io.github.jasper.monitoring.api.MonitorActionFacts;
+import io.github.jasper.monitoring.api.EventFactSource;
+import io.github.jasper.monitoring.api.EventInputIssue;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -93,6 +95,22 @@ class BoundParameterFactsExtractorTest {
         assertEquals(0, number.getToStringCalls());
     }
 
+    @Test
+    void reportsUnresolvedPathsWithoutExposingThePathValueOrGetterFailure() throws Exception {
+        BoundParameterFactsExtractor.ExtractionResult result = extractor.extractWithDiagnostics(
+            method("unresolvedPath", ExplodingPathPayload.class), new Object[] {new ExplodingPathPayload()});
+
+        assertNull(result.getFacts().getResourceId());
+        assertEquals(1, result.getIssues().size());
+        EventInputIssue issue = result.getIssues().get(0);
+        assertEquals("MONITOR-ACTION", issue.getRuleId());
+        assertEquals("resourceId", issue.getFactName());
+        assertEquals("UNRESOLVED_PARAMETER_PATH", issue.getIssueCode());
+        assertEquals(EventFactSource.METHOD_PARAMETER.name(), issue.getSourceType());
+        assertTrue(!issue.toString().contains("value"));
+        assertTrue(!issue.toString().contains("must-not-leak"));
+    }
+
     private static Method method(String name, Class<?>... parameterTypes) throws Exception {
         return Fixture.class.getDeclaredMethod(name, parameterTypes);
     }
@@ -136,6 +154,12 @@ class BoundParameterFactsExtractorTest {
         private void customResolvedScalars(
             @MonitorActionAttribute(name = "characters", path = "characters")
             @MonitorActionAttribute(name = "number", path = "number") ScalarPayload payload) {
+        }
+
+        @SuppressWarnings("unused")
+        private void unresolvedPath(
+            @MonitorActionAttribute(target = MonitorActionAttributeTarget.RESOURCE_ID, path = "value")
+            ExplodingPathPayload payload) {
         }
     }
 
@@ -294,6 +318,12 @@ class BoundParameterFactsExtractorTest {
 
         private int getToStringCalls() {
             return toStringCalls;
+        }
+    }
+
+    private static final class ExplodingPathPayload {
+        public String getValue() {
+            throw new IllegalStateException("must-not-leak");
         }
     }
 }

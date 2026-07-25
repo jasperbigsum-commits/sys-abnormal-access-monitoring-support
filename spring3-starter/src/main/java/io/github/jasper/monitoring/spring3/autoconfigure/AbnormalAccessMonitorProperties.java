@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.spring3.autoconfigure;
 
 import io.github.jasper.monitoring.api.MonitoringMode;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -18,6 +19,7 @@ public class AbnormalAccessMonitorProperties {
     private Frontend frontend = new Frontend();
     private Instrumentation instrumentation = new Instrumentation();
     private Mdc mdc = new Mdc();
+    private IpControl ipControl = new IpControl();
     private List<String> trustedProxies = new ArrayList<String>();
 
     /** @return 写入每个安全事件的稳定系统标识 */
@@ -50,6 +52,14 @@ public class AbnormalAccessMonitorProperties {
 
     /** @param mdc 可选日志 MDC 链路追踪配置；{@code null} 时恢复默认值 */
     public void setMdc(Mdc mdc) { this.mdc = mdc == null ? new Mdc() : mdc; }
+
+    /** @return 显式启用的通用 IP 控制配置 */
+    public IpControl getIpControl() { return ipControl; }
+
+    /** @param ipControl 通用 IP 控制配置；{@code null} 时恢复禁用默认值 */
+    public void setIpControl(IpControl ipControl) {
+        this.ipControl = ipControl == null ? new IpControl() : ipControl;
+    }
 
     /** 前端补充证据与请求元数据采集配置。 */
     public static class Frontend {
@@ -85,5 +95,42 @@ public class AbnormalAccessMonitorProperties {
 
         /** @param traceIdKey 宿主日志格式中读取追踪标识的 MDC 键 */
         public void setTraceIdKey(String traceIdKey) { this.traceIdKey = traceIdKey; }
+    }
+
+    /** 通用 IP 拒绝与固定窗口限流配置，默认完全禁用。 */
+    public static class IpControl {
+        private boolean enabled;
+        private List<String> protectedPaths = new ArrayList<String>();
+        private List<String> excludedPaths = new ArrayList<String>();
+        private List<String> ruleIds = new ArrayList<String>();
+        private int permitsPerWindow;
+        private Duration window;
+        private Duration maxTtl;
+        private int capacity;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public List<String> getProtectedPaths() { return protectedPaths; }
+        public void setProtectedPaths(List<String> protectedPaths) {
+            this.protectedPaths = copy(protectedPaths);
+        }
+        public List<String> getExcludedPaths() { return excludedPaths; }
+        public void setExcludedPaths(List<String> excludedPaths) {
+            this.excludedPaths = copy(excludedPaths);
+        }
+        public List<String> getRuleIds() { return ruleIds; }
+        public void setRuleIds(List<String> ruleIds) { this.ruleIds = copy(ruleIds); }
+        public int getPermitsPerWindow() { return permitsPerWindow; }
+        public void setPermitsPerWindow(int permitsPerWindow) { this.permitsPerWindow = permitsPerWindow; }
+        public Duration getWindow() { return window; }
+        public void setWindow(Duration window) { this.window = window; }
+        public Duration getMaxTtl() { return maxTtl; }
+        public void setMaxTtl(Duration maxTtl) { this.maxTtl = maxTtl; }
+        public int getCapacity() { return capacity; }
+        public void setCapacity(int capacity) { this.capacity = capacity; }
+
+        private static List<String> copy(List<String> values) {
+            return values == null ? new ArrayList<String>() : new ArrayList<String>(values);
+        }
     }
 }

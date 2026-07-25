@@ -26,7 +26,7 @@ public final class EventInputValidation {
         this.status = status;
         this.issues = immutableIssues(issues);
         this.ineligibleRuleIds = immutableRuleIds(ineligibleRuleIds);
-        requireMatchingRuleIds(this.issues, this.ineligibleRuleIds);
+        requireIneligibleRulesHaveIssues(this.issues, this.ineligibleRuleIds);
         requireStatusDetails(status, this.issues, this.ineligibleRuleIds);
     }
 
@@ -117,13 +117,13 @@ public final class EventInputValidation {
         return Collections.unmodifiableSet(copied);
     }
 
-    private static void requireMatchingRuleIds(Collection<EventInputIssue> issues, Set<String> ruleIds) {
+    private static void requireIneligibleRulesHaveIssues(Collection<EventInputIssue> issues, Set<String> ruleIds) {
         Set<String> issueRuleIds = new LinkedHashSet<String>();
         for (EventInputIssue issue : issues) {
             issueRuleIds.add(issue.getRuleId());
         }
-        if (!issueRuleIds.equals(ruleIds)) {
-            throw new IllegalArgumentException("ineligibleRuleIds must exactly match issue rule IDs");
+        if (!issueRuleIds.containsAll(ruleIds)) {
+            throw new IllegalArgumentException("ineligibleRuleIds must have corresponding input issues");
         }
     }
 

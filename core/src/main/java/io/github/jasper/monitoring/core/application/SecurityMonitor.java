@@ -4,6 +4,7 @@ import io.github.jasper.monitoring.core.port.ControlHandler;
 
 
 
+import io.github.jasper.monitoring.api.EventInputValidation;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
 
 /**
@@ -25,4 +26,18 @@ public interface SecurityMonitor {
      * @throws RuntimeException 当事件转换、持久化或规则评估不能完成时
      */
     MonitoringOutcome record(SecurityEventDraft draft);
+
+    /**
+     * 持久化并评估一条包含边界适配层输入质量诊断的事件草稿。
+     *
+     * <p>默认实现保留既有宿主实现的兼容性：尚未感知输入质量的自定义监测器仍会收到原始草稿。
+     * 默认监测器会将该结论与其规则策略结论合并。</p>
+     *
+     * @param draft 已校验的事件数据
+     * @param inputValidation 仅包含稳定标识的边界诊断
+     * @return 已持久化事件及其产生的规则命中、告警和控制执行结果
+     */
+    default MonitoringOutcome record(SecurityEventDraft draft, EventInputValidation inputValidation) {
+        return record(draft);
+    }
 }

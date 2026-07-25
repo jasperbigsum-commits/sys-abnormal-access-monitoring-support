@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.core.application.authorization;
 
 import io.github.jasper.monitoring.core.application.SecurityMonitor;
+import io.github.jasper.monitoring.core.application.ActionEventRecorder;
 
 
 import io.github.jasper.monitoring.api.AuthorizationDecision;
@@ -23,6 +24,7 @@ import java.util.Objects;
 public final class ResourceAccessGuard {
     private final ResourceScopeAuthorizer authorizer;
     private final SecurityMonitor monitor;
+    private final ActionEventRecorder recorder;
     private final Clock clock;
 
     /**
@@ -35,6 +37,15 @@ public final class ResourceAccessGuard {
     public ResourceAccessGuard(ResourceScopeAuthorizer authorizer, SecurityMonitor monitor, Clock clock) {
         this.authorizer = Objects.requireNonNull(authorizer, "authorizer");
         this.monitor = Objects.requireNonNull(monitor, "monitor");
+        this.recorder = null;
+        this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    /** Creates a guard whose authorization events use the recorder's configured enrichment chain. */
+    public ResourceAccessGuard(ResourceScopeAuthorizer authorizer, ActionEventRecorder recorder, Clock clock) {
+        this.authorizer = Objects.requireNonNull(authorizer, "authorizer");
+        this.monitor = null;
+        this.recorder = Objects.requireNonNull(recorder, "recorder");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -80,7 +91,11 @@ public final class ResourceAccessGuard {
                 .orgScope(resource.getOrgScope())
                 .reasonCode(decision.getReasonCode())
                 .occurredAt(Instant.now(clock));
-            monitor.record(draft.build());
+            if (recorder == null) {
+                monitor.record(draft.build());
+            } else {
+                recorder.record(draft.build(), resource.getRequest(), identity);
+            }
         } catch (RuntimeException ignored) {
             // Monitoring failures cannot bypass the host system's established authorization decision.
         }

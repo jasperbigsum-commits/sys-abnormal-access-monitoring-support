@@ -106,7 +106,7 @@ Expected: missing state classes.
 
 - [ ] **Step 3: Implement bounded state semantics**
 
-The state API accepts only canonical IP values supplied by its caller. Activation stores the original idempotency key and never extends an existing matching control. `check` lazily removes expired entries, checks `DENY` first, then atomically advances the configured fixed-window counter for active rate-limit state. At capacity, activation returns a stable `CAPACITY_REJECTED` result and never evicts active controls.
+The state API accepts only canonical IP values supplied by its caller. Activation stores the original idempotency key and never extends an existing matching control while it is active. Durable replay protection across expiry, restart and nodes remains the responsibility of `DefaultControlService` and its repository; the bounded local state releases expired keys. `check` lazily removes expired entries, checks `DENY` first, then atomically advances the configured fixed-window counter for active rate-limit state. At capacity, activation returns a stable `CAPACITY_REJECTED` result and never evicts active controls.
 
 - [ ] **Step 4: Run the state tests and commit**
 

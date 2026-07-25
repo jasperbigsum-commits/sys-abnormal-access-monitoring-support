@@ -111,7 +111,8 @@ public final class AnnotatedActionMonitoringInterceptor implements HandlerInterc
                 (MonitoringRequestContext) requestValue, (IdentityContext) identityValue);
             facts.apply(draft, dynamic);
             recorder.record(draft.result(result(response, exception, dynamic))
-                .reasonCode(reasonCode(response, exception, dynamic)).build());
+                    .reasonCode(reasonCode(response, exception, dynamic)).build(), facts.getInputValidation(),
+                (MonitoringRequestContext) requestValue, (IdentityContext) identityValue);
         } catch (RuntimeException ignored) {
             // Monitoring is observational and must not change the completed MVC response.
         } finally {

@@ -67,6 +67,7 @@ class MyBatisMonitoringRepositoryTest {
     void exposesInputQualityUpgradeOnlyThroughExplicitHostResource() {
         assertNull(getClass().getResource("/db/migration/V2__event_input_quality.sql"));
         assertNotNull(getClass().getResource("/db/upgrade/monitoring-event-input-quality-v2.sql"));
+        assertNotNull(getClass().getResource("/db/upgrade/monitoring-control-rule-id-v3.sql"));
     }
 
     @Test
@@ -235,13 +236,14 @@ class MyBatisMonitoringRepositoryTest {
 
         ControlCommand command = new ControlCommand(
             "control-key", alert.getAlertId(), "alice", ControlActionType.LOCK,
-            Instant.parse("2026-07-22T02:00:00Z"));
+            Instant.parse("2026-07-22T02:00:00Z"), "AUTH-01");
         ControlRecord control = new ControlRecord(command,
             ControlExecution.succeeded(command.getIdempotencyKey()), receivedAt);
         repository.saveControl(control);
         ControlRecord storedControl = repository.findControl(command.getIdempotencyKey()).get();
         assertEquals(ControlStatus.SUCCEEDED, storedControl.getExecution().getStatus());
         assertEquals(command.getAction(), storedControl.getCommand().getAction());
+        assertEquals("AUTH-01", storedControl.getCommand().getRuleId());
         assertEquals(command.getExpiresAt(), storedControl.getCommand().getExpiresAt());
 
         ControlCommand fallbackCommand = new ControlCommand(

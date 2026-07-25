@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.spring3.autoconfigure;
 
 import io.github.jasper.monitoring.api.IdentityContext;
+import io.github.jasper.monitoring.api.EventEnricher;
 import io.github.jasper.monitoring.api.IdentityContextProvider;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.AuthorizationDecision;
@@ -29,9 +30,13 @@ import io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepositoryRegistrar;
 import io.github.jasper.monitoring.spring.support.ConfiguredTrustedProxyResolver;
 import io.github.jasper.monitoring.spring.support.FrontendSignalRecorder;
 import io.github.jasper.monitoring.spring.support.MdcTraceBridge;
+import io.github.jasper.monitoring.spring.support.control.GenericIpControlHandler;
+import io.github.jasper.monitoring.spring.support.control.IpControlState;
+import io.github.jasper.monitoring.spring.support.control.LocalIpControlState;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -85,10 +90,13 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ControlHandlerRegistry abnormalAccessControlHandlerRegistry(ObjectProvider<ControlHandler> handlers,
+                                                                        ObjectProvider<GenericIpControlHandler> genericHandlers,
                                                                         ListableBeanFactory beanFactory) {
         List<ControlHandler> values = new ArrayList<ControlHandler>();
         for (ControlHandler handler : handlers) {
-            values.add(handler);
+            if (!(handler instanceof GenericIpControlHandler)) {
+                values.add(handler);
+            }
         }
         Set<ControlActionType> annotatedActions = EnumSet.noneOf(ControlActionType.class);
         for (String beanName : beanFactory.getBeanNamesForType(Object.class, false, false)) {
@@ -105,7 +113,87 @@ public class AbnormalAccessMonitorAutoConfiguration {
             }
             values.add(handler);
         }
-        return new ControlHandlerRegistry(values, DefaultControlActionTrigger.defaults());
+        List<ControlHandler> genericValues = new ArrayList<ControlHandler>();
+        for (GenericIpControlHandler handler : genericHandlers) {
+            genericValues.add(handler);
+        }
+        return new ControlHandlerRegistry(values, genericValues, DefaultControlActionTrigger.defaults());
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    @ConditionalOnClass(name = "org.springframework.web.filter.OncePerRequestFilter")
+    @ConditionalOnProperty(prefix = "abnormal.access.monitor.ip-control", name = "enabled", havingValue = "true")
+    static class GenericIpControlConfiguration {
+        GenericIpControlConfiguration(AbnormalAccessMonitorProperties properties) {
+            validate(properties);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(IpControlState.class)
+        LocalIpControlState abnormalAccessLocalIpControlState(AbnormalAccessMonitorProperties properties) {
+            AbnormalAccessMonitorProperties.IpControl config = properties.getIpControl();
+            return new LocalIpControlState(config.getCapacity(), config.getPermitsPerWindow(), config.getWindow());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(GenericIpControlHandler.class)
+        GenericIpControlHandler abnormalAccessGenericIpControlHandler(IpControlState state,
+                                                                       AbnormalAccessMonitorProperties properties) {
+            AbnormalAccessMonitorProperties.IpControl config = properties.getIpControl();
+            return new GenericIpControlHandler(state, new HashSet<String>(config.getRuleIds()),
+                config.getMaxTtl(), Clock.systemUTC());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(IpControlFilter.class)
+        IpControlFilter abnormalAccessIpControlFilter(IpControlState state,
+                                                       TrustedProxyResolver trustedProxyResolver,
+                                                       AbnormalAccessMonitorProperties properties) {
+            AbnormalAccessMonitorProperties.IpControl config = properties.getIpControl();
+            return new IpControlFilter(state, trustedProxyResolver, config.getProtectedPaths(),
+                config.getExcludedPaths(), Clock.systemUTC());
+        }
+
+        private static void validate(AbnormalAccessMonitorProperties properties) {
+            if (properties.getMode() != io.github.jasper.monitoring.api.MonitoringMode.ENFORCE) {
+                throw new IllegalStateException("ip-control requires abnormal.access.monitor.mode=ENFORCE");
+            }
+            AbnormalAccessMonitorProperties.IpControl config = properties.getIpControl();
+            requireNonEmptyText(config.getProtectedPaths(), "protected-paths");
+            requireTextEntries(config.getExcludedPaths(), "excluded-paths");
+            requireNonEmptyText(config.getRuleIds(), "rule-ids");
+            if (config.getPermitsPerWindow() <= 0) {
+                throw new IllegalStateException("ip-control permits-per-window must be positive");
+            }
+            if (config.getWindow() == null || config.getWindow().isZero() || config.getWindow().isNegative()) {
+                throw new IllegalStateException("ip-control window must be positive");
+            }
+            if (config.getMaxTtl() == null || config.getMaxTtl().isZero() || config.getMaxTtl().isNegative()) {
+                throw new IllegalStateException("ip-control max-ttl must be positive");
+            }
+            if (config.getCapacity() <= 0) {
+                throw new IllegalStateException("ip-control capacity must be positive");
+            }
+        }
+
+        private static void requireNonEmptyText(List<String> values, String name) {
+            if (values == null || values.isEmpty()) {
+                throw new IllegalStateException("ip-control " + name + " must not be empty");
+            }
+            requireTextEntries(values, name);
+        }
+
+        private static void requireTextEntries(List<String> values, String name) {
+            if (values == null) {
+                throw new IllegalStateException("ip-control " + name + " must not be null");
+            }
+            for (String value : values) {
+                if (value == null || value.trim().isEmpty()) {
+                    throw new IllegalStateException("ip-control " + name + " must contain only non-blank values");
+                }
+            }
+        }
     }
 
     @Bean
@@ -170,8 +258,8 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ResourceAccessGuard abnormalAccessResourceAccessGuard(ResourceScopeAuthorizer authorizer,
-                                                                   SecurityMonitor monitor) {
-        return new ResourceAccessGuard(authorizer, monitor, Clock.systemUTC());
+                                                                   ActionEventRecorder recorder) {
+        return new ResourceAccessGuard(authorizer, recorder, Clock.systemUTC());
     }
 
     @Bean
@@ -196,8 +284,13 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ActionEventRecorder abnormalAccessActionEventRecorder(SecurityMonitor monitor,
-                                                                  MonitoringActionRegistry actions) {
-        return new ActionEventRecorder(monitor, Clock.systemUTC(), actions);
+                                                                  MonitoringActionRegistry actions,
+                                                                  ObjectProvider<EventEnricher> enrichers) {
+        List<EventEnricher> values = new ArrayList<EventEnricher>();
+        for (EventEnricher enricher : enrichers) {
+            values.add(enricher);
+        }
+        return new ActionEventRecorder(monitor, Clock.systemUTC(), actions, values);
     }
 
     @Configuration(proxyBeanMethods = false)
