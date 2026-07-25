@@ -128,10 +128,34 @@ interface BuiltInActionType extends ActionType {
 }
 ```
 
-内置 action 的公开类型可以被宿主引用，但外部代码无法实现 `BuiltInActionType`。业务分类不使用接口继承表达；事件类型、资源类型和规则标签属于 `ActionDefinition`。
+内置 action 的公开类型可以被宿主引用，但外部代码无法直接实现 `BuiltInActionType`。该接口只表达库所有权，不承载事实、规则或失败策略。
+
+action 的业务能力使用独立的契约接口组合：
 
 ```java
-@MonitorAction(BuiltInActions.ReportExport.class)
+public interface ActionContract {
+}
+
+public interface ExportActionContract extends ActionContract {
+}
+```
+
+action 类型是不可继承的具体类型；内置与自定义 action 都可以实现同一个公开契约：
+
+```java
+public final class ReportExportAction
+        implements ActionType, BuiltInActionType, ExportActionContract {
+}
+
+public final class ScheduledExportAction
+        implements ActionType, ExportActionContract {
+}
+```
+
+这种结构将“action 身份”和“可继承业务要求”分开。`ActionType` 负责名义身份，`ActionContract` 负责事实、规则和最低失败策略。action 不通过 Java 类继承传播语义。
+
+```java
+@MonitorAction(ReportExportAction.class)
 public ExportResult export(ExportRequest request) {
     // business implementation
 }
@@ -140,7 +164,8 @@ public ExportResult export(ExportRequest request) {
 自定义 action 实现公开接口，并通过贡献者注册：
 
 ```java
-public final class OrderRefundAction implements ActionType {
+public final class OrderRefundAction
+        implements ActionType, PrivilegedMutationActionContract {
 }
 
 public final class OrderActionContributor implements ActionContributor {
@@ -156,7 +181,40 @@ public final class OrderActionContributor implements ActionContributor {
 }
 ```
 
-### 5.2 ActionDefinition
+### 5.2 ActionContractDefinition
+
+`ActionContractDefinition` 是一组可继承业务要求的唯一所有者，至少包含：
+
+- 必需和可选 `FactType`。
+- 每项事实允许用于满足契约的 `FactSource`。
+- 显式参与的 `RuleType`。
+- 最低运行时失败策略。
+
+内置 action 与继承该契约的自定义 action 自动获得同一组规则前置条件。例如：
+
+```java
+contracts.register(ExportActionContract.class,
+    ActionContractDefinition.builder()
+        .require(ResourceIdFact.class,
+            FactSource.TRUSTED_REQUEST, FactSource.HOST_PROVIDER)
+        .require(DataCountFact.class,
+            FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+        .participateIn(ExportThresholdRule.class)
+        .minimumFailurePolicy(ActionFailurePolicy.FAIL_CLOSED)
+        .build());
+```
+
+契约接口可以继承其他契约，也可以由一个 action 同时组合多个契约。有效要求按以下规则合并：
+
+- 必需和可选事实取并集；任一契约要求必需时，最终为必需。
+- 允许来源取交集，避免组合后放宽信任边界。
+- 参与规则取并集。
+- 失败策略取更严格值。
+- 产生空来源集合或不兼容定义时，启动失败。
+
+子 action 可以增加事实、规则和更严格策略，不能删除或降低继承要求。不需要这些语义的 action 不应实现对应契约。
+
+### 5.3 ActionDefinition
 
 `ActionDefinition` 是 action 全局静态语义的唯一所有者，至少包含：
 
@@ -164,18 +222,20 @@ public final class OrderActionContributor implements ActionContributor {
 - `SecurityEventType`。
 - 逻辑资源类型。
 - 规则选择标签。
-- 显式参与的 `RuleType` 集合。
-- 必需和可选事实集合。
-- 允许的事实来源。
+- action 自身追加的 `RuleType` 集合。
+- action 自身追加的必需和可选事实集合。
+- action 自身追加的事实来源约束。
 - 运行时失败策略。
 
-`@MonitorAction` 不再声明 `eventType`、`resourceType`、`ruleTags`、静态属性或 Provider 类型。同一个 action 可以被多个方法引用，但只能注册一份定义。不同贡献者重复注册相同类型或编码，即使内容一致，也属于配置冲突。
+编译后的有效 action 定义是 `ActionDefinition` 与全部 `ActionContractDefinition` 的严格合并结果。`@MonitorAction` 不再声明 `eventType`、`resourceType`、`ruleTags`、静态属性或 Provider 类型。同一个 action 可以被多个方法引用，但只能注册一份定义。不同贡献者重复注册相同类型或编码，即使内容一致，也属于配置冲突。
 
 持久化编码必须匹配小写 `domain:verb` 结构；domain 和 verb 只允许字母、数字及内部连字符，整体长度不超过 128。目录将其转换为不可变 `ActionId`，类型令牌和 `ActionId` 必须保持一对一关系。
 
-### 5.3 ActionCatalog
+### 5.4 ActionCatalog
 
-启动阶段先加载内置定义，再执行宿主 `ActionContributor`。完成扫描和交叉校验后目录冻结。运行期间只能通过 action 类型令牌获取不可变的 `RegisteredAction`，不能隐式创建 action 或按字符串查找未注册定义。
+启动阶段先加载内置 action 与 contract 定义，再执行宿主贡献者。完成契约展开、扫描和交叉校验后目录冻结。运行期间只能通过 action 类型令牌获取包含有效契约的不可变 `RegisteredAction`，不能隐式创建 action 或按字符串查找未注册定义。
+
+`@MonitorAction` 的值必须是已注册、具体且不可继承的 action 类型。接口、抽象类和 `ActionContract` 不能直接作为方法 action。
 
 ## 6. 类型化事实契约
 
@@ -265,11 +325,43 @@ public ExportResult export(
 
 Spring 支持层使用 `BeanWrapper` 验证和访问受限 Bean 属性路径。路径在启动阶段验证并编译成绑定描述，不在每次请求时重复解析。禁止 `class`、静态成员、任意方法调用和不受支持的集合访问。
 
-### 6.5 ActionFactProvider
+### 6.5 FactBinding 与 ActionFactProvider
 
-动态事实提供器由宿主配置决定，不由业务方法注解引用。每个 Provider 声明支持的 action 类型和负责的 fact 类型。启动阶段预绑定 Provider，校验 action 存在、事实已声明、来源合法且没有重复所有者。
+动态事实提供器由宿主配置决定，不由业务方法注解引用。Provider 不声明支持哪些 action，也不拥有 action 与事实的关系：
 
-Provider 只能产生 `ActionFacts`，不能设置 action、身份、请求、执行结果或耗时。参数绑定和 Provider 同时负责同一 fact 时启动失败，不使用执行顺序覆盖。
+```java
+public interface ActionFactProvider {
+    ActionFacts provide(ActionExecution execution);
+}
+```
+
+独立的 `FactBinding` 拥有 action、事实和 Provider 之间的具体提供关系。宿主通过 `ActionFactBindingContributor` 注册绑定：
+
+```java
+bindings.forAction(ReportExportAction.class)
+    .using(reportExportFactProvider)
+    .provides(DataCountFact.class, SensitivityFact.class);
+```
+
+只有确实能服务整个契约的 Provider 才允许显式绑定到契约：
+
+```java
+bindings.forContract(ExportActionContract.class)
+    .using(exportFactProvider)
+    .provides(DataCountFact.class);
+```
+
+继承规则固定为：
+
+```text
+ActionContract 的事实要求自动继承
+具体 action 的 Provider 绑定默认不继承
+只有显式 contract binding 才应用于全部契约实现 action
+```
+
+启动阶段把参数注解、可信上下文、具体 action binding 和 contract binding 统一编译成 `ActionBinding`，并校验 action 存在、事实已声明、来源合法且没有重复所有者。
+
+Provider 只能产生 `FactBinding.provides(...)` 声明范围内的 `ActionFacts`，不能设置 action、身份、请求、执行结果或耗时。参数绑定和 Provider 同时负责同一 fact 时启动失败，不使用执行顺序覆盖。Provider 运行时返回未声明事实时，拒绝该事实并记录稳定的 Provider 契约违规问题。
 
 ## 7. 规则契约
 
@@ -287,7 +379,7 @@ interface BuiltInRuleType extends RuleType {
 }
 ```
 
-`ActionDefinition` 显式列出参与的 `RuleType`。规则引擎不再通过运行时事件 Predicate 猜测 action 是否适用；它只评估当前 action 已声明参与且前置事实完整的规则。规则稳定 ID 只由对应 `RuleDefinition` 提供。
+`ActionContractDefinition` 和 `ActionDefinition` 显式列出参与的 `RuleType`。规则引擎不再通过运行时事件 Predicate 猜测 action 是否适用；它只评估当前 action 的有效契约已声明参与且前置事实完整的规则。规则稳定 ID 只由对应 `RuleDefinition` 提供。
 
 `DetectionRule` 至少公开：
 
@@ -305,18 +397,20 @@ evaluate(event, history)
 `RuleCatalogValidator` 校验：
 
 ```text
-ActionDefinition 声明的事实
+ActionContractDefinition 继承的事实
+→ ActionDefinition 追加的事实
 → ActionBinding 可提供的事实
 → FactDefinition 允许的来源
-→ ActionDefinition 显式参与的 RuleType
+→ 有效 action 定义参与的 RuleType
 → DetectionRule 要求的事实与来源
 ```
 
 以下情况阻止启动：
 
-- action 声明会参与某条规则，但未声明规则必需事实。
+- action 契约或定义声明会参与某条规则，但有效定义未包含规则必需事实。
 - 必需事实没有参数绑定、可信上下文来源或 Provider。
 - Provider 来源不满足规则要求。
+- 具体 action binding 被错误继承到其他 action。
 - 规则 ID、action 编码或 fact 稳定键重复。
 
 运行时必需事实取值为空时，事件标记为 `INCOMPLETE`，只跳过依赖该事实的规则；无关规则继续执行并记录稳定诊断。
@@ -327,6 +421,7 @@ ActionDefinition 声明的事实
 
 ```text
 ActionDefinition  全局静态语义
+ActionContract    可继承、可组合的事实和规则要求
 ActionBinding     Spring 方法与 action 的已编译绑定
 ActionExecution   一次方法执行的只读视图
 ActionFacts       经过来源验证的补充事实
@@ -383,14 +478,15 @@ Spring Method
 
 `SpringMonitoringRuntimeCompiler` 是 Spring 宿主装配的唯一入口，执行顺序固定为：
 
-1. 加载内置 action、fact、rule 和 control 定义。
+1. 加载内置 action、action contract、fact、rule 和 control 定义。
 2. 执行宿主贡献者。
 3. 扫描 Spring Bean 的类型、方法和接口注解。
-4. 解析最具体方法、参数事实和 Provider。
-5. 校验代理条件、类型、来源、规则事实覆盖率和控制覆盖率。
-6. 生成不可变 `ActionBinding`。
-7. 冻结全部目录。
-8. 发布不可变 `MonitoringRuntime`。
+4. 展开 action contract 继承与组合，计算有效 action 定义。
+5. 解析最具体方法、参数事实和显式 FactBinding。
+6. 校验代理条件、类型、来源、Provider 所有权、规则事实覆盖率和控制覆盖率。
+7. 生成不可变 `ActionBinding`。
+8. 冻结全部目录。
+9. 发布不可变 `MonitoringRuntime`。
 
 非 Spring 对象、消息消费者和定时任务不进行全 classpath 猜测扫描，必须显式注册并通过程序式记录入口使用 action 类型令牌。
 
@@ -543,6 +639,7 @@ Boot 2/3 Starter 只保留：
 ### 18.1 API 契约
 
 - action/fact 类型令牌和目录唯一性。
+- action contract 的继承、组合、严格合并与冲突。
 - `FactType<T>` 值类型约束。
 - `ActionDefinition` 必需字段和显式失败策略。
 - 内置 action、fact 和 rule 的参数化完整性测试。
@@ -569,7 +666,7 @@ Boot 2/3 Starter 只保留：
 ### 18.4 Spring Support 与 Starter
 
 - Bean、接口、继承方法和代理方法扫描。
-- 参数路径、Provider 覆盖率和重复所有者。
+- 参数路径、具体 action binding、contract binding、Provider 覆盖率和重复所有者。
 - 全量启动错误聚合。
 - Boot 2/3 各一套自动配置和真实 HTTP 验收测试。
 
@@ -589,7 +686,8 @@ Boot 2/3 Starter 只保留：
 ### 阶段一：类型化契约与启动编译
 
 - 重构 `api` 包。
-- 建立 action/fact 类型、定义、目录和贡献接口。
+- 建立 action、action contract、fact 类型、定义、目录和贡献接口。
+- 建立具体 action binding、contract binding 与纯取值 Provider 契约。
 - 建立 `SpringMonitoringRuntimeCompiler`。
 - 实现严格扫描、交叉校验和错误聚合。
 
@@ -618,15 +716,17 @@ Boot 2/3 Starter 只保留：
 
 ## 20. 验收标准
 
-1. 所有 `@MonitorAction` 都引用已注册 `ActionType`，不存在运行时隐式 action。
-2. 所有内置规则事实都使用 `FactType<T>`，规则源码不直接读取字符串属性名。
-3. action、fact、rule 和 control 目录在应用启动前完成校验并冻结。
-4. 同一事实只有一个允许的运行时提供者，来源冲突无法通过启动。
-5. `SecurityEvent` 只能由 `SecurityEventAssembler` 从明确来源构建。
-6. 生产代码不存在内存仓储或无数据库回退。
-7. ENFORCE 启动校验覆盖所有启用规则可能产生的控制动作。
-8. 前端信号不能决定服务端 action、身份、结果或自动控制。
-9. Boot 2 只使用 `javax.servlet`，Boot 3 只使用 `jakarta.servlet`，公共行为无复制实现。
-10. Maven 插件生成的新模板符合新的分离式宿主 SPI。
-11. ArchUnit 和重复代码检查进入 `verify` 生命周期。
-12. `mvn clean verify -DskipTests=false` 通过，两个真实 Web 集成模块通过验收。
+1. 所有 `@MonitorAction` 都引用已注册的具体 `ActionType`，不存在运行时隐式 action。
+2. 内置和自定义 action 通过 `ActionContract` 继承事实、规则和最低失败策略，子 action 无法削弱约束。
+3. 所有内置规则事实都使用 `FactType<T>`，规则源码不直接读取字符串属性名。
+4. action、action contract、fact、rule 和 control 目录在应用启动前完成校验并冻结。
+5. 同一事实只有一个允许的运行时提供者，来源冲突无法通过启动。
+6. Provider 不决定 action 语义；事实要求属于 action contract，提供关系属于 FactBinding。
+7. `SecurityEvent` 只能由 `SecurityEventAssembler` 从明确来源构建。
+8. 生产代码不存在内存仓储或无数据库回退。
+9. ENFORCE 启动校验覆盖所有启用规则可能产生的控制动作。
+10. 前端信号不能决定服务端 action、身份、结果或自动控制。
+11. Boot 2 只使用 `javax.servlet`，Boot 3 只使用 `jakarta.servlet`，公共行为无复制实现。
+12. Maven 插件生成的新模板符合新的分离式宿主 SPI。
+13. ArchUnit 和重复代码检查进入 `verify` 生命周期。
+14. `mvn clean verify -DskipTests=false` 通过，两个真实 Web 集成模块通过验收。
