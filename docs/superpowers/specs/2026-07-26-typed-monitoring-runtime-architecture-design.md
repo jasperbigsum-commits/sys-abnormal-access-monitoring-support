@@ -29,6 +29,7 @@
 7. Boot 2 与 Boot 3 只保留 `javax.servlet` 与 `jakarta.servlet` 的必要差异。
 8. 使用现有框架或成熟第三方能力替换属性路径、IP/CIDR 等容易出错的自研实现。
 9. 每个运行阶段都有明确的错误所有者和失败策略。
+10. `integration-audit` 以真实宿主方式实施新规范，并成为 Boot 2/3 的统一验收门禁。
 
 ## 3. 非目标
 
@@ -85,6 +86,10 @@ spring-support
 spring2-starter / spring3-starter
 ├─ autoconfigure
 └─ web
+
+integration-audit
+├─ spring2-web
+└─ spring3-web
 ```
 
 依赖方向固定为：
@@ -105,6 +110,7 @@ api <- web-contract <- spring-support
 - `mybatis` 是 `core` 持久化端口的唯一生产实现。
 - `spring-support` 不出现 `javax.servlet` 或 `jakarta.servlet`。
 - Starter 只处理 Boot 自动配置和对应 Servlet 命名空间。
+- `integration-audit` 只能作为公开 Starter 的下游消费者，不能被任何生产模块反向依赖。
 
 ## 5. 统一 action 类型
 
@@ -679,7 +685,148 @@ Boot 2/3 Starter 只保留：
 - `mvn clean verify -DskipTests=false` 是最终验收命令。
 - 分别运行 Spring 2 与 Spring 3 真实集成应用验收。
 
-## 19. 实施分解
+## 19. 集成审计实施与评估规范
+
+### 19.1 模块定位
+
+`integration-audit` 不再只是可运行示例，而是新公开规范的正式黑盒验收模块。它同时承担三项职责：
+
+1. 展示宿主系统应如何接入 action contract、typed fact、MyBatis、身份、授权和控制。
+2. 通过真实 HTTP、Spring 容器和数据库验证组件行为，而不是调用内部实现模拟成功。
+3. 对 Spring Boot 2 与 Spring Boot 3 执行同一份验收矩阵，证明除 Servlet 命名空间外语义一致。
+
+继续保留两个现有子模块，不新增 Maven 模块：
+
+```text
+integration-audit
+├─ spring2-web
+└─ spring3-web
+```
+
+父目录提供共享的验收测试源码和测试数据，由两个子模块分别在各自依赖树中编译运行。子模块只保留应用启动类、`javax`/`jakarta` 适配和极薄的测试入口，不复制业务场景断言。
+
+### 19.2 宿主使用规范
+
+两个审计应用必须按真实宿主方式使用新契约：
+
+- 生产源码只依赖正式 Starter 和宿主实际需要的 ORM、Web、Shiro 依赖，不为访问内部类而直接依赖 `core`。
+- 使用 Starter 的标准 MyBatis 装配和 schema 前置条件，不手工调用内部 Registrar 或自行复制建表逻辑。
+- 每个 HTTP 用例使用具体 `ActionType`；禁止字符串 action。
+- 内置和自定义 action 通过 `ActionContract` 继承事实、规则和最低失败策略。
+- 参数事实使用 `@ActionFact(FactType.class)`；动态事实通过显式 `FactBinding` 绑定 Provider。
+- Provider 不声明 action 支持范围，也不直接出现在 `@MonitorAction` 中。
+- Shiro 只提供宿主身份和权限结论；监测组件不替代 Shiro 授权。
+- 控制动作通过冻结的 `ControlCatalog` 显式绑定，不使用旧 `@ControlTrigger` 反射适配或 fallback handler。
+- 前端信号只能作为 `CLIENT_SUPPLEMENTAL` 事实进入已注册的服务端 action。
+- 测试数据只使用保留地址、哈希标识和虚构账号，不包含 cookie、token 或原始敏感值。
+
+### 19.3 必须覆盖的使用场景
+
+两个应用都必须实现以下宿主场景：
+
+```text
+内置登录失败 action
+内置敏感导出 action
+继承导出契约的自定义 action
+不继承内置契约的独立自定义 action
+资源范围授权拒绝 action
+程序式非 MVC action
+前端补充信号 action
+宿主控制 handler
+```
+
+敏感导出场景必须同时展示：
+
+- `ResourceIdFact` 由受限参数路径提供。
+- `DataCountFact` 由 action-specific `FactBinding` 提供。
+- `SensitivityFact` 由显式 contract binding 或可信宿主 Provider 提供。
+- 派生自定义导出 action 自动继承导出规则和 `FAIL_CLOSED` 下限。
+- 具体 action Provider 不会被错误继承到另一个导出 action。
+
+程序式非 MVC 场景必须使用 action 类型令牌和同一 `MonitoringRuntime`，不能绕过目录直接构造事件。
+
+### 19.4 共享验收矩阵
+
+每个用例拥有稳定 ID，并由 Boot 2/3 共享测试契约执行。最低矩阵如下：
+
+| ID | 场景 | 必须验证的证据 |
+| --- | --- | --- |
+| `AUD-BOOT-001` | 合法配置启动 | 所有目录冻结，MyBatis schema 可用 |
+| `AUD-BOOT-002` | 未注册 action | 启动失败并定位 Bean 与方法 |
+| `AUD-BOOT-003` | 缺少必需 FactBinding | 启动失败并报告 action、contract、fact |
+| `AUD-BOOT-004` | 重复事实提供者 | 启动失败，不使用 Provider 顺序覆盖 |
+| `AUD-BOOT-005` | 非法事实来源 | 启动失败并报告来源约束 |
+| `AUD-BOOT-006` | contract 合并冲突 | 启动失败，不生成部分运行时 |
+| `AUD-BOOT-007` | 缺少 MyBatis/schema | 启动失败，不回退内存仓储 |
+| `AUD-BOOT-008` | ENFORCE 控制覆盖不足 | 启动失败并列出缺失控制类型 |
+| `AUD-ACT-001` | 内置 action HTTP 调用 | 类型、编码、身份、请求和 outcome 正确 |
+| `AUD-ACT-002` | 自定义 action 注册 | 自定义类型与稳定编码一对一 |
+| `AUD-ACT-003` | 派生 action 契约继承 | 事实、规则和失败策略不可削弱 |
+| `AUD-ACT-004` | 程序式 action | 与注解 action 使用同一目录和事件组装器 |
+| `AUD-FACT-001` | 参数事实提取 | 类型、值、来源和路径绑定正确 |
+| `AUD-FACT-002` | action-specific Provider | 只应用于显式 action binding |
+| `AUD-FACT-003` | contract Provider | 应用于全部契约实现且输出范围受限 |
+| `AUD-FACT-004` | Provider 返回未声明事实 | 拒绝事实并记录稳定质量问题 |
+| `AUD-FACT-005` | 运行时必需事实为空 | 事件为 INCOMPLETE，只跳过相关规则 |
+| `AUD-RULE-001` | 五次登录失败 | 产生预期告警和控制计划 |
+| `AUD-RULE-002` | 大量敏感导出 | 类型化事实触发预期导出规则 |
+| `AUD-RULE-003` | 无关规则 | 缺失某事实时仍正常评估 |
+| `AUD-AUTH-001` | Shiro 已认证主体 | 服务端身份进入事件且不可被覆盖 |
+| `AUD-AUTH-002` | 资源范围拒绝 | 宿主授权结论权威，拒绝事件可审计 |
+| `AUD-OUT-001` | HTTP 成功 | 框架 outcome 优先于 Provider |
+| `AUD-OUT-002` | HTTP 拒绝 | 403/异常不能被 Provider 改写为成功 |
+| `AUD-CTL-001` | 控制首次执行 | PENDING 原子占位后进入成功终态 |
+| `AUD-CTL-002` | 幂等重放 | 相同幂等键不重复产生宿主效果 |
+| `AUD-CTL-003` | 控制失败 | 事件与告警保留，失败结果可查询 |
+| `AUD-FE-001` | 合法前端信号 | 只追加允许的 CLIENT_SUPPLEMENTAL 事实 |
+| `AUD-FE-002` | 前端伪造 action/身份/outcome | 伪造字段被拒绝或忽略 |
+| `AUD-FAIL-001` | OBSERVE_ONLY 系统故障 | 业务继续，分类故障可观测 |
+| `AUD-FAIL-002` | FAIL_CLOSED 系统故障 | 业务失败并返回稳定不可用分类 |
+| `AUD-DB-001` | 事件与事实持久化 | 标准列、扩展事实、类型和来源可回读 |
+| `AUD-DB-002` | 事务回滚 | 部分事件、告警或关联记录不残留 |
+
+实现计划可以增加场景，但不能删除或合并上述验收语义。
+
+### 19.5 测试用例标准
+
+共享验收测试必须遵循以下标准：
+
+- 测试名描述可观察行为，不描述内部方法。
+- 每个测试关联一个或多个稳定验收 ID；全部 ID 必须在两个子模块中执行。
+- 使用 Given/When/Then 结构，但不添加重复叙述性注释。
+- 每个用例独立重置数据库和宿主控制状态，禁止依赖执行顺序。
+- 时间窗口使用可控 `Clock`，禁止 `Thread.sleep` 和依赖机器当前时间。
+- HTTP 用例按场景同时断言适用的响应、数据库证据、事实来源、规则结果和控制结果；只断言 Bean 存在不算验收。
+- 启动失败用例断言稳定错误码及位置，不绑定完整异常文案。
+- 安全用例必须包含低信任来源无法覆盖高信任事实的负向断言。
+- 并发幂等用例使用受控并发屏障，不使用概率性循环。
+- 测试不能替换 MyBatis 为 fake，也不能直接调用 Mapper 插入期望结果。
+- Boot 2/3 允许不同的启动和 Servlet 适配代码，但共享业务断言必须完全一致。
+- 测试失败输出不得包含原始请求体、凭证、session 或敏感字段值。
+
+### 19.6 评估产物与门禁
+
+`integration-audit/README.md` 维护“规范要求 → 宿主实现 → 验收 ID”的可追踪矩阵。共享测试在 `target` 下生成机器可读验收汇总，至少包含版本、验收 ID、通过/失败和耗时，不提交生成结果。
+
+必须执行：
+
+```bash
+mvn -pl integration-audit/spring2-web -am verify
+mvn -pl integration-audit/spring3-web -am verify
+mvn -pl integration-audit -am verify
+mvn clean verify -DskipTests=false
+```
+
+依赖检查还必须证明：
+
+- Boot 2 运行时不存在 `jakarta.servlet` 适配引用。
+- Boot 3 运行时不存在 `javax.servlet` 适配引用。
+- 两个审计应用生产源码不导入 `core`、MyBatis 内部实现包或 Starter 内部包。
+- 两个应用执行了完全相同的共享验收 ID 集合。
+
+任何共享验收 ID 在任一 Boot 版本缺失或跳过，都视为 reactor 验证失败。
+
+## 20. 实施分解
 
 本次重构分四个阶段实施，最终一次性交付，不保留兼容层。
 
@@ -704,17 +851,19 @@ Boot 2/3 Starter 只保留：
 - 更新基线 schema；由于项目未投入使用，不保留旧结构兼容层。
 - 实现控制覆盖率、PENDING 幂等占位和明确终态。
 
-### 阶段四：Spring 适配与外围收敛
+### 阶段四：Spring 适配、集成审计与外围收敛
 
 - 抽取 Boot 2/3 公共执行内核。
 - 收紧前端信号。
+- 将 `integration-audit` 改造为新规范的真实宿主，并实现共享验收矩阵。
+- 删除审计应用对旧字符串 action、旧属性注解、反射控制和手工内部 MyBatis 初始化的使用。
 - 重写 Maven 资源模板。
 - 迁移重复测试并加入架构、重复代码检查。
 - 更新中英文文档和集成审计应用。
 
 每个阶段结束时运行 focused tests 和完整 reactor。临时迁移代码只能存在于阶段内部，阶段四结束时不存在旧公开类型、过渡适配器或双轨数据模型。
 
-## 20. 验收标准
+## 21. 验收标准
 
 1. 所有 `@MonitorAction` 都引用已注册的具体 `ActionType`，不存在运行时隐式 action。
 2. 内置和自定义 action 通过 `ActionContract` 继承事实、规则和最低失败策略，子 action 无法削弱约束。
@@ -730,3 +879,5 @@ Boot 2/3 Starter 只保留：
 12. Maven 插件生成的新模板符合新的分离式宿主 SPI。
 13. ArchUnit 和重复代码检查进入 `verify` 生命周期。
 14. `mvn clean verify -DskipTests=false` 通过，两个真实 Web 集成模块通过验收。
+15. `integration-audit` 的全部共享验收 ID 在 Boot 2 与 Boot 3 中均执行且通过。
+16. 集成审计应用只使用公开规范，不依赖旧 API 或内部实现捷径。
