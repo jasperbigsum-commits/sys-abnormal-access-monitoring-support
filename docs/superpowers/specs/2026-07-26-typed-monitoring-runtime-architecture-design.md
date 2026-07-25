@@ -31,6 +31,7 @@
 9. 每个运行阶段都有明确的错误所有者和失败策略。
 10. `integration-audit` 以真实宿主方式实施新规范，并成为 Boot 2/3 的统一验收门禁。
 11. 文档按项目关联角色组织，每项规范只有一个事实来源，删除历史镜像和生成物重复。
+12. 提供前端无关、可直接由宿主 Controller 调用的管理应用服务，并在服务内部强制执行授权、事务和审计。
 
 ## 3. 非目标
 
@@ -51,6 +52,7 @@ api
    ├─ identity
    ├─ authorization
    ├─ control
+   ├─ management
    ├─ rule
    └─ error
 
@@ -65,7 +67,8 @@ core
    │  ├─ monitoring
    │  ├─ alert
    │  ├─ authorization
-   │  └─ control
+   │  ├─ control
+   │  └─ management
    └─ port
 
 mybatis
@@ -511,6 +514,8 @@ AlertRepository
 ControlRepository
 WhitelistRepository
 NotificationDeliveryRepository
+ManagementQueryRepository
+ManagementAuditRepository
 MonitoringTransaction
 ```
 
@@ -523,7 +528,7 @@ MonitoringTransaction
 - MyBatis 实现负责加入可用的宿主事务或创建明确的监测事务，不允许隐式混用多个 Session。
 - 查询历史必须至少按系统和规则最大时间窗口限定，不再无条件读取全局一天事件。
 
-标准事实映射到明确列；自定义事实以稳定 fact key、值类型和规范化值存入扩展事实表。PO、Mapper 和领域转换按聚合拆分，不继续集中在单个大型 Repository 类。
+`ManagementQueryRepository` 提供管理视图所需的有界查询，不复用运行时规则历史扫描接口。`ManagementAuditRepository` 只允许追加脱敏审计记录。标准事实映射到明确列；自定义事实以稳定 fact key、值类型和规范化值存入扩展事实表。PO、Mapper 和领域转换按聚合拆分，不继续集中在单个大型 Repository 类。
 
 ## 11. 控制执行
 
@@ -533,7 +538,7 @@ MonitoringTransaction
 
 `ENFORCE` 的校验按启用规则实际可能产生的控制动作计算覆盖率，而不是只检查是否存在任意 Handler。需要人工审批的动作进入审批工作流，不伪装成立即执行成功。
 
-幂等状态机为：
+自动控制的幂等状态机为：
 
 ```text
 不存在
@@ -541,6 +546,8 @@ MonitoringTransaction
 → 调用宿主幂等 Handler
 → SUCCEEDED | FAILED | SKIPPED
 ```
+
+需要人工审批的控制先创建 `AWAITING_APPROVAL`，只能由管理服务转换为 `PENDING` 或 `REJECTED`。`FAILED` 可以在授权后转换回 `PENDING` 重试，但每次执行尝试必须追加保存，不能覆盖原结果。自动和人工路径共用同一控制记录、幂等键、Handler 目录和尝试历史，不建立第二套控制执行模型。
 
 唯一键解决并发占位。宿主 Handler 必须使用同一幂等键抵抗“外部效果已发生但结果尚未回写”的重试场景。执行来源和状态使用明确字段，不再从 control ID 前缀推断。
 
@@ -628,7 +635,150 @@ Boot 2/3 Starter 只保留：
 
 不得通过模板或生成代码复制完整 Starter。两个 Starter 的公共行为由 `spring-support` 测试覆盖，各 Starter 只验证命名空间和真实 Web 集成。
 
-## 17. 工具与第三方库边界
+## 17. 管理侧应用服务
+
+### 17.1 服务边界与所有权
+
+管理能力按领域拆分为五个公开接口，不提供包含全部操作的巨型门面：
+
+```text
+SecurityEventQueryService
+AlertManagementService
+RuleCatalogService
+WhitelistManagementService
+ControlManagementService
+```
+
+职责分配如下：
+
+- `api.management` 定义服务接口、不可变命令、查询条件、分页结果、管理视图和授权 SPI。
+- `core.application.management` 负责授权、输入校验、用例编排、事务、状态机和审计。
+- `core.port` 提供按事件、告警、规则视图、白名单和控制审计拆分的窄持久化端口。
+- `mybatis` 是这些端口的唯一生产查询和写入实现。
+- `spring-support` 装配标准管理服务 Bean；Starter 只处理配置条件和 Boot 版本入口。
+
+管理服务不暴露 MyBatis Mapper、PO、领域实体、Spring `Pageable`、Servlet 类型或 HTTP 响应。Starter 不提供 Controller、固定 URL、统一 JSON 包装和页面模型。宿主只负责认证适配、HTTP 模型转换、响应格式和自己的前端。
+
+### 17.2 严格授权边界
+
+每个公开方法的第一个参数固定为可信 `ManagementActor`。该对象只能由宿主认证适配器从服务端认证态创建，至少包含稳定操作人 ID 和宿主系统标识。命令不能接收 `operatorId`、`approvedBy` 等可伪造操作人字段。
+
+服务在读取数据或执行命令前调用：
+
+```java
+ManagementAuthorizer.authorize(actor, operation, resource)
+```
+
+`ManagementOperation` 使用细粒度常量：
+
+```text
+EVENT_READ
+ALERT_READ
+ALERT_ACKNOWLEDGE
+ALERT_INVESTIGATE
+ALERT_CLOSE
+ALERT_MARK_FALSE_POSITIVE
+RULE_READ
+WHITELIST_READ
+WHITELIST_GRANT
+WHITELIST_REVOKE
+CONTROL_READ
+CONTROL_APPROVE
+CONTROL_REJECT
+CONTROL_RETRY
+```
+
+不提供模糊的 `ADMIN` 或 `WRITE` 权限。列表查询在访问持久化端口之前授权；详情和命令同时校验用例权限及目标资源范围。服务不能先读取记录再由 Controller 过滤，也不能用“查无数据”掩盖已经发生的越权读取。
+
+### 17.3 查询、分页与视图
+
+统一调用形式为：
+
+```java
+service.method(ManagementActor actor, QueryOrCommand request)
+```
+
+公共查询模型遵循以下约束：
+
+- `ManagementPageRequest` 的页码从零开始，页大小限定为 `1..200`。
+- `ManagementPage<T>` 是包含 items、page、size 和 totalElements 的不可变结果。
+- 每个查询只暴露自己的有限排序枚举，禁止客户端传入数据库列名。
+- 排序必须确定，并以记录 ID 作为最终排序键。
+- 事件和控制查询必须提供有上限的时间范围，禁止无界扫描。
+- 管理视图是不可变快照，不直接返回可变领域对象或内部规则实现。
+
+服务用例如下：
+
+| 服务 | 查询 | 命令 |
+| --- | --- | --- |
+| `SecurityEventQueryService` | `search`、`get` | 无 |
+| `AlertManagementService` | `search`、`get`；详情包含处置时间线 | `acknowledge`、`startInvestigation`、`close`、`markFalsePositive` |
+| `RuleCatalogService` | `search`、`get`；返回冻结后的有效定义、事实要求和控制能力 | 无 |
+| `WhitelistManagementService` | `search`、`get` | `grant`、`revoke` |
+| `ControlManagementService` | `search`、`get`；返回计划、审批、执行和尝试历史 | `approve`、`reject`、`retryFailed` |
+
+内置与宿主贡献的有效规则在启动后冻结，`RuleCatalogService` 因此只有查询能力。不得保留“修改数据库启停标记但不影响运行时”的虚假规则管理接口。
+
+### 17.4 命令、事务与控制审批
+
+告警、白名单和控制命令必须携带 `expectedVersion`，MyBatis 使用版本条件更新并在零行更新时报告冲突，防止覆盖并发处置。关闭告警、误报、白名单授权或撤销、控制审批、拒绝和重试都要求非空原因。证据摘要和审批引用必须限制长度，不接收或持久化任意附件、原始请求体和敏感载荷。
+
+每次管理调用都追加 `ManagementAuditRecord`，至少记录服务端生成的审计 ID、actor ID、宿主系统、操作、资源类型、非敏感资源标识、授权结果、用例结果和服务端时间。查询条件、事件事实、证据正文、控制目标原值和异常消息不进入管理审计。
+
+审计顺序固定：授权拒绝先写拒绝记录再抛出；授权查询在结果返回前写成功记录；纯数据库命令将状态变更和成功审计放入同一事务，校验或冲突失败使用独立审计事务。控制审批将 `PENDING` 和审批审计一并提交后才调用 Handler，终态、尝试记录和完成审计在后续事务提交。任何副作用之前的审计写入失败都终止调用；外部效果后的终态事务失败保留 `PENDING`，由幂等恢复流程收敛，不能向宿主伪报成功。
+
+管理端只能处理规则已产生的控制计划，不能任意构造控制动作：
+
+1. `approve` 在事务内校验版本和状态，将 `AWAITING_APPROVAL` 原子更新为 `PENDING` 并追加审批记录。
+2. 事务提交后才调用既定宿主 Handler，随后在新事务中写入 `SUCCEEDED` 或 `FAILED`。
+3. `reject` 产生独立 `REJECTED` 终态和不可变审批记录。
+4. `retryFailed` 只接受 `FAILED` 控制，沿用控制幂等键并追加执行尝试，不覆盖历史失败。
+5. 进程在外部效果后、终态落库前失败时，由 PENDING 恢复流程使用同一幂等键重试。
+
+不存在 `execute(action, target)` 之类管理入口。外部控制调用不包含在数据库事务内，数据库状态和审批审计不得因 Handler 失败回滚。
+
+### 17.5 错误契约与 Javadoc
+
+管理服务使用稳定分类异常：
+
+```text
+ManagementValidationException    查询或命令格式无效
+ManagementAccessDeniedException  ManagementAuthorizer 拒绝
+ManagementNotFoundException      授权通过后目标不存在
+ManagementConflictException      版本冲突、非法状态转换或重复审批
+MonitoringSystemException        MyBatis、事务或运行目录不可用
+```
+
+全部异常实现 `MonitoringFailure` 并携带稳定错误码。异常消息不得包含 SQL、参数值、规则定义、控制目标、证据正文或越权资源详情。控制 Handler 返回的业务失败保存为 `FAILED` 结果；只有管理系统本身不可完成用例时抛出系统异常。
+
+HTTP 映射只是宿主建议：validation 为 400、access denied 为 403、not found 为 404、conflict 为 409、system unavailable 为 503。未认证的 401 由宿主认证层处理。组件不定义 HTTP 异常处理器或响应 JSON。
+
+公共 Javadoc 使用简洁英文。每个接口和方法必须写明用途、所需授权动作、输入边界、排序规则、事务边界、外部副作用、返回语义、稳定异常和敏感信息限制。命令还必须说明状态前置条件、乐观锁以及成功后形成的审计记录。
+
+### 17.6 Spring 装配与宿主接入
+
+`monitoring.management.enabled` 是显式开关，默认关闭。启用时必须存在：
+
+- `ManagementAuthorizer`。
+- MyBatis 管理查询和写入端口。
+- `MonitoringTransaction`。
+- 已冻结的规则与控制目录。
+- 服务端 `Clock`。
+
+缺少任何依赖都聚合为启动配置错误；不提供全允许 Authorizer、空列表或内存回退。标准管理服务启用时不允许并存第二套同接口实现。宿主要完全自定义时先关闭标准管理服务。
+
+宿主 Controller 只执行以下转换：
+
+```text
+服务端认证态 -> ManagementActor
+HTTP 请求 -> 管理查询或命令
+管理视图 -> 宿主响应
+分类异常 -> 宿主错误协议
+```
+
+Controller 不负责事务、状态转换、规则存在性验证、授权补偿或审计记录，也不能导入 `core`、MyBatis、Mapper、PO 或 Starter 内部类型。
+
+## 18. 工具与第三方库边界
 
 - 使用 Spring `BeanWrapper` 替换自研 Bean 属性路径反射器。
 - IP literal 和 CIDR 采用支持“禁止 DNS 解析”和规范化输出的成熟库，替换自研解析逻辑；具体库和版本在实施计划中根据 Java 8 与依赖树验证后确定。
@@ -639,56 +789,62 @@ Boot 2/3 Starter 只保留：
 - 不为简单空白判断和集合复制引入大型通用依赖，不创建万能工具类。
 - 移除未使用依赖，包括未实际使用的 Lombok。
 
-## 18. 测试设计
+## 19. 测试设计
 
 所有行为变更遵循测试先行，并先观察目标测试因缺少新行为而失败。
 
-### 18.1 API 契约
+### 19.1 API 契约
 
 - action/fact 类型令牌和目录唯一性。
 - action contract 的继承、组合、严格合并与冲突。
 - `FactType<T>` 值类型约束。
 - `ActionDefinition` 必需字段和显式失败策略。
 - 内置 action、fact 和 rule 的参数化完整性测试。
+- 管理 Actor、细粒度操作、查询边界、不可变视图和分类异常契约。
 
-### 18.2 Core
+### 19.2 Core
 
 - 每条规则的事实和来源前置条件。
 - 缺少事实时只跳过相关规则。
 - `SecurityEventAssembler` 的来源所有权与冲突行为。
 - 告警生命周期和控制计划。
 - 规则异常分类与 action 失败策略。
+- 管理授权先于数据访问，命令状态机、乐观锁和审计操作人不可伪造。
+- 授权拒绝、查询和命令形成脱敏管理审计，审计失败时不泄漏数据或继续副作用。
 
-### 18.3 MyBatis
+### 19.3 MyBatis
 
 - H2 完整仓储集成测试。
 - 事务提交、回滚和嵌套参与。
 - 并发控制幂等键和状态迁移。
 - 标准事实列与扩展事实表映射。
 - 事件、告警、处置、白名单、通知和控制恢复。
+- 管理分页确定性、版本条件更新、审批记录和控制尝试历史。
+- 管理审计只追加、字段脱敏及写入失败回滚。
 - schema 与 Mapper 一致性。
 
 生产内存仓储删除后，core 单元测试只能使用测试源码中的最小 fake；持久化语义必须由 MyBatis + H2 验证。
 
-### 18.4 Spring Support 与 Starter
+### 19.4 Spring Support 与 Starter
 
 - Bean、接口、继承方法和代理方法扫描。
 - 参数路径、具体 action binding、contract binding、Provider 覆盖率和重复所有者。
 - 全量启动错误聚合。
+- 管理服务显式启用、严格依赖校验和无宽松 Authorizer 回退。
 - Boot 2/3 各一套自动配置和真实 HTTP 验收测试。
 
 当前两套大型重复 action 测试迁移到 `spring-support`。Starter 中只保留版本差异测试。
 
-### 18.5 架构与完整验证
+### 19.5 架构与完整验证
 
 - ArchUnit 禁止逆向依赖和框架泄漏。
 - 重复代码检查对 Boot namespace 适配使用精确排除。
 - `mvn clean verify -DskipTests=false` 是最终验收命令。
 - 分别运行 Spring 2 与 Spring 3 真实集成应用验收。
 
-## 19. 集成审计实施与评估规范
+## 20. 集成审计实施与评估规范
 
-### 19.1 模块定位
+### 20.1 模块定位
 
 `integration-audit` 不再只是可运行示例，而是新公开规范的正式黑盒验收模块。它同时承担三项职责：
 
@@ -706,7 +862,7 @@ integration-audit
 
 父目录提供共享的验收测试源码和测试数据，由两个子模块分别在各自依赖树中编译运行。子模块只保留应用启动类、`javax`/`jakarta` 适配和极薄的测试入口，不复制业务场景断言。
 
-### 19.2 宿主使用规范
+### 20.2 宿主使用规范
 
 两个审计应用必须按真实宿主方式使用新契约：
 
@@ -721,7 +877,7 @@ integration-audit
 - 前端信号只能作为 `CLIENT_SUPPLEMENTAL` 事实进入已注册的服务端 action。
 - 测试数据只使用保留地址、哈希标识和虚构账号，不包含 cookie、token 或原始敏感值。
 
-### 19.3 必须覆盖的使用场景
+### 20.3 必须覆盖的使用场景
 
 两个应用都必须实现以下宿主场景：
 
@@ -734,6 +890,8 @@ integration-audit
 程序式非 MVC action
 前端补充信号 action
 宿主控制 handler
+管理 Actor 与 Authorizer
+使用五个公共管理服务的宿主 Controller
 ```
 
 敏感导出场景必须同时展示：
@@ -746,7 +904,7 @@ integration-audit
 
 程序式非 MVC 场景必须使用 action 类型令牌和同一 `MonitoringRuntime`，不能绕过目录直接构造事件。
 
-### 19.4 共享验收矩阵
+### 20.4 共享验收矩阵
 
 每个用例拥有稳定 ID，并由 Boot 2/3 共享测试契约执行。最低矩阵如下：
 
@@ -785,10 +943,23 @@ integration-audit
 | `AUD-FAIL-002` | FAIL_CLOSED 系统故障 | 业务失败并返回稳定不可用分类 |
 | `AUD-DB-001` | 事件与事实持久化 | 标准列、扩展事实、类型和来源可回读 |
 | `AUD-DB-002` | 事务回滚 | 部分事件、告警或关联记录不残留 |
+| `AUD-MGMT-BOOT-001` | 缺少管理 Authorizer | 启用管理服务时启动失败，不安装宽松默认值 |
+| `AUD-MGMT-AUTH-001` | 列表与详情拒绝 | 拒绝发生在持久化读取前 |
+| `AUD-MGMT-AUTH-002` | 跨资源范围操作 | 不泄漏目标是否存在或目标内容 |
+| `AUD-MGMT-AUDIT-001` | 管理调用审计 | 允许、拒绝、查询和命令均形成脱敏只追加记录 |
+| `AUD-MGMT-EVT-001` | 事件管理查询 | 分页、过滤、固定排序和时间上限正确 |
+| `AUD-MGMT-ALT-001` | 告警管理闭环 | 生命周期完整且处置历史只追加 |
+| `AUD-MGMT-ALT-002` | 告警并发处置 | 过期 expectedVersion 返回稳定冲突 |
+| `AUD-MGMT-RULE-001` | 规则目录管理视图 | 有效规则可查询且不存在修改入口 |
+| `AUD-MGMT-WL-001` | 白名单管理 | 授权、到期、撤销及操作人审计正确 |
+| `AUD-MGMT-CTL-001` | 控制审批 | PENDING 提交后才调用既定 Handler |
+| `AUD-MGMT-CTL-002` | 控制拒绝与重试 | 终态及每次尝试不可覆盖，幂等键不变 |
+| `AUD-MGMT-ERR-001` | 管理错误映射 | 稳定分类可映射且不泄漏敏感内容 |
+| `AUD-MGMT-HOST-001` | 宿主管理 Controller | 生产源码只依赖公共管理契约 |
 
 实现计划可以增加场景，但不能删除或合并上述验收语义。
 
-### 19.5 测试用例标准
+### 20.5 测试用例标准
 
 共享验收测试必须遵循以下标准：
 
@@ -798,6 +969,7 @@ integration-audit
 - 每个用例独立重置数据库和宿主控制状态，禁止依赖执行顺序。
 - 时间窗口使用可控 `Clock`，禁止 `Thread.sleep` 和依赖机器当前时间。
 - HTTP 用例按场景同时断言适用的响应、数据库证据、事实来源、规则结果和控制结果；只断言 Bean 存在不算验收。
+- 管理 HTTP 用例使用真实宿主 Authorizer、H2 和 MyBatis；不得 mock Mapper 或直接插入期望管理结果。
 - 启动失败用例断言稳定错误码及位置，不绑定完整异常文案。
 - 安全用例必须包含低信任来源无法覆盖高信任事实的负向断言。
 - 并发幂等用例使用受控并发屏障，不使用概率性循环。
@@ -805,7 +977,7 @@ integration-audit
 - Boot 2/3 允许不同的启动和 Servlet 适配代码，但共享业务断言必须完全一致。
 - 测试失败输出不得包含原始请求体、凭证、session 或敏感字段值。
 
-### 19.6 评估产物与门禁
+### 20.6 评估产物与门禁
 
 `integration-audit/README.md` 维护“规范要求 → 宿主实现 → 验收 ID”的可追踪矩阵。共享测试在 `target` 下生成机器可读验收汇总，至少包含版本、验收 ID、通过/失败和耗时，不提交生成结果。
 
@@ -827,9 +999,9 @@ mvn clean verify -DskipTests=false
 
 任何共享验收 ID 在任一 Boot 版本缺失或跳过，都视为 reactor 验证失败。
 
-## 20. 文档信息架构与治理
+## 21. 文档信息架构与治理
 
-### 20.1 关联角色与权责
+### 21.1 关联角色与权责
 
 文档不再按形成时间或技术名词平铺，而是按使用者完成的任务组织。角色是职责而非具体人员：
 
@@ -852,7 +1024,7 @@ Validated by: 对应测试或验收 ID
 
 不填写容易过期的个人姓名和人工“最后更新日期”；变更历史由 Git 提供。实际责任人由仓库权限和后续 CODEOWNERS 配置管理，不在正文复制。
 
-### 20.2 目标目录
+### 21.2 目标目录
 
 最终公开文档控制在以下结构，不再为同一主题维护中英文全文镜像：
 
@@ -863,6 +1035,7 @@ docs/README.md                    按角色和任务导航
 docs/integrators/
 ├─ getting-started.md             最短可运行接入
 ├─ actions-and-facts.md           ActionContract、FactBinding、程序式入口
+├─ management-services.md         管理服务、授权 SPI 与可编译 Controller 示例
 └─ frontend-signals.md            前端补充证据边界
 docs/security/
 ├─ security-model.md              身份、授权、来源和失败策略
@@ -883,13 +1056,13 @@ integration-audit/README.md       规范到验收 ID 的可追踪矩阵
 
 `docs/superpowers` 只作为重构期间的内部设计与实施材料，不出现在公开导航。重构完成后，仍有效的架构决定提炼为 ADR；临时计划不复制到公开手册，Git 历史承担归档职责。
 
-### 20.3 现有文档迁移
+### 21.3 现有文档迁移
 
 | 现有文件 | 处理方式 | 唯一去向 |
 | --- | --- | --- |
 | `README.md` | 重写并压缩 | 项目定位、最短构建命令、角色导航 |
 | `README.en.md` | 重写并压缩 | 英文概览和公开入口链接 |
-| `docs/集成指南.md` | 拆解后删除 | `integrators/*`、`security/*`、`operators/*` |
+| `docs/集成指南.md` | 拆解后删除 | `integrators/*`、`security/*`、`operators/*`，包括管理服务接入规范 |
 | `docs/integration-guide.en.md` | 删除全文镜像 | `README.en.md` 保留精简入口 |
 | `docs/集成审计与基础项目验收.md` | 合并后删除 | `integration-audit/README.md` |
 | 中英文错误规范 | 合并后删除原文件 | `reference/errors.md` |
@@ -902,7 +1075,7 @@ integration-audit/README.md       规范到验收 ID 的可追踪矩阵
 
 过期文档不移动到仓库内 `archive` 目录。Git 已提供历史恢复能力，保留一份失效副本只会继续参与搜索并误导使用者。
 
-### 20.4 单一事实来源
+### 21.4 单一事实来源
 
 每类信息只能有一个权威来源：
 
@@ -913,12 +1086,13 @@ integration-audit/README.md       规范到验收 ID 的可追踪矩阵
 | 数据表与索引 | `monitoring-schema.sql` | `database.md` 解释生命周期，不复制完整 DDL |
 | 错误码 | 错误码类型 | 生成或测试校验 `reference/errors.md` |
 | 接入示例 | `integration-audit` 可编译宿主源码 | 文档链接到示例，仅保留一个最短片段 |
+| 管理服务方法与约束 | `api.management` 接口和 Javadoc | `management-services.md` 解释接入流程，不复制完整接口清单 |
 | 验收要求 | integration audit ID 矩阵 | 其他文档引用 ID，不复制验收清单 |
 | 架构决定 | ADR | README 和手册只链接，不复述评审过程 |
 
 生成型参考必须在 `verify` 阶段重新生成到 `target` 并与已提交版本比较。代码目录变化但参考未更新时构建失败。
 
-### 20.5 精简规则
+### 21.5 精简规则
 
 - `README.md` 目标不超过 120 行，只回答“是什么、如何构建、下一步读什么”。
 - 每份角色手册目标不超过 250 行；超出时先删除重复，再判断是否按独立任务拆分。
@@ -931,7 +1105,7 @@ integration-audit/README.md       规范到验收 ID 的可追踪矩阵
 - 公共 Java API 的 Javadoc 保持简洁英文技术说明；叙述性项目手册以中文为唯一正式版本。
 - 英文 README 只维护稳定概览，不承诺与全部中文手册逐段镜像。
 
-### 20.6 文档测试与门禁
+### 21.6 文档测试与门禁
 
 文档作为代码进入 `verify`：
 
@@ -945,7 +1119,7 @@ integration-audit/README.md       规范到验收 ID 的可追踪矩阵
 
 文档验收不以“文件存在”为标准，而以目标角色能否沿导航完成任务、示例是否编译、参考是否与代码一致为标准。
 
-## 21. 实施分解
+## 22. 实施分解
 
 本次重构分四个阶段实施，最终一次性交付，不保留兼容层。
 
@@ -969,10 +1143,12 @@ integration-audit/README.md       规范到验收 ID 的可追踪矩阵
 - 拆分持久化职责并由 MyBatis 唯一实现。
 - 更新基线 schema；由于项目未投入使用，不保留旧结构兼容层。
 - 实现控制覆盖率、PENDING 幂等占位和明确终态。
+- 实现管理查询、乐观锁、审批审计和控制尝试历史的 MyBatis 端口。
 
 ### 阶段四：Spring 适配、集成审计、文档与外围收敛
 
 - 抽取 Boot 2/3 公共执行内核。
+- 自动装配五个管理应用服务，并实现严格 ManagementAuthorizer 边界。
 - 收紧前端信号。
 - 将 `integration-audit` 改造为新规范的真实宿主，并实现共享验收矩阵。
 - 删除审计应用对旧字符串 action、旧属性注解、反射控制和手工内部 MyBatis 初始化的使用。
@@ -983,7 +1159,7 @@ integration-audit/README.md       规范到验收 ID 的可追踪矩阵
 
 每个阶段结束时运行 focused tests 和完整 reactor。临时迁移代码只能存在于阶段内部，阶段四结束时不存在旧公开类型、过渡适配器或双轨数据模型。
 
-## 22. 验收标准
+## 23. 验收标准
 
 1. 所有 `@MonitorAction` 都引用已注册的具体 `ActionType`，不存在运行时隐式 action。
 2. 内置和自定义 action 通过 `ActionContract` 继承事实、规则和最低失败策略，子 action 无法削弱约束。
@@ -1005,3 +1181,7 @@ integration-audit/README.md       规范到验收 ID 的可追踪矩阵
 18. 公开文档不存在旧 API、内存回退、字符串 action 或反射控制示例。
 19. 目录与错误码参考由代码生成或校验，文档漂移会使 `verify` 失败。
 20. 仓库不跟踪生成 PDF、临时评审稿或过期文档副本。
+21. 五个管理服务通过公开、框架无关的契约提供完整查询和受控命令，不泄露 Mapper、PO 或 Spring Web 类型。
+22. 所有管理用例在读取或写入前执行细粒度宿主授权，操作人不能由命令伪造，缺少 Authorizer 时严格启动失败。
+23. 管理查询和命令使用乐观锁、明确事务边界和脱敏不可变审计历史，管理端不能任意构造控制动作或修改冻结规则。
+24. Boot 2/3 集成审计通过相同管理 Controller 场景和全部 `AUD-MGMT-*` 验收 ID。
