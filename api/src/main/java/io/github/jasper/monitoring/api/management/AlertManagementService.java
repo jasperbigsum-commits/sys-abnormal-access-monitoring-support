@@ -1,4 +1,11 @@
 package io.github.jasper.monitoring.api.management;
 import io.github.jasper.monitoring.api.management.command.*; import io.github.jasper.monitoring.api.management.model.AlertView; import io.github.jasper.monitoring.api.management.query.*;
 /** Alert queries and versioned disposition commands. Every method requires authorization in actor scope; mutations are transactional and replay-safe. */
-public interface AlertManagementService { /** ALERT_READ before bounded query; sanitized immutable page. */ ManagementPage<AlertView> search(ManagementActor actor, AlertQuery query); /** ALERT_READ before lookup; stable not-found/conflict errors. */ AlertView get(ManagementActor actor, String alertId); /** ALERT_ACKNOWLEDGE, expectedVersion and bounded reason; idempotent mutation. */ AlertView acknowledge(ManagementActor actor, AlertAcknowledgeCommand command); /** ALERT_INVESTIGATE, expectedVersion and bounded reason. */ AlertView startInvestigation(ManagementActor actor, VersionedReasonCommand command); /** ALERT_CLOSE, expectedVersion and bounded reason. */ AlertView close(ManagementActor actor, VersionedReasonCommand command); /** ALERT_MARK_FALSE_POSITIVE, expectedVersion and bounded reason. */ AlertView markFalsePositive(ManagementActor actor, VersionedReasonCommand command); }
+public interface AlertManagementService {
+    ManagementPage<AlertView> search(ManagementAuthorizer authorizer, ManagementActor actor, AlertQuery query);
+    AlertView get(ManagementAuthorizer authorizer, ManagementActor actor, String alertId);
+    AlertView acknowledge(ManagementAuthorizer authorizer, ManagementActor actor, AlertAcknowledgeCommand command);
+    AlertView startInvestigation(ManagementAuthorizer authorizer, ManagementActor actor, VersionedReasonCommand command);
+    AlertView close(ManagementAuthorizer authorizer, ManagementActor actor, VersionedReasonCommand command);
+    AlertView markFalsePositive(ManagementAuthorizer authorizer, ManagementActor actor, VersionedReasonCommand command);
+}

@@ -1,4 +1,9 @@
 package io.github.jasper.monitoring.api.management;
 import io.github.jasper.monitoring.api.management.command.*; import io.github.jasper.monitoring.api.management.model.WhitelistView; import io.github.jasper.monitoring.api.management.query.*;
 /** Versioned whitelist lifecycle boundary. Authorization precedes reads/writes; reasons are bounded and sensitive evidence is excluded. */
-public interface WhitelistManagementService { /** Requires WHITELIST_READ before bounded query. */ ManagementPage<WhitelistView> search(ManagementActor actor, WhitelistQuery query); /** Requires WHITELIST_READ before lookup. */ WhitelistView get(ManagementActor actor, String id); /** Requires WHITELIST_GRANT; expectedVersion/idempotency key and reason are mandatory. */ WhitelistView grant(ManagementActor actor, WhitelistGrantCommand command); /** Requires WHITELIST_REVOKE; expectedVersion/idempotency key and reason are mandatory. */ WhitelistView revoke(ManagementActor actor, WhitelistRevokeCommand command); }
+public interface WhitelistManagementService {
+    ManagementPage<WhitelistView> search(ManagementAuthorizer authorizer, ManagementActor actor, WhitelistQuery query);
+    WhitelistView get(ManagementAuthorizer authorizer, ManagementActor actor, String id);
+    WhitelistView grant(ManagementAuthorizer authorizer, ManagementActor actor, WhitelistGrantCommand command);
+    WhitelistView revoke(ManagementAuthorizer authorizer, ManagementActor actor, WhitelistRevokeCommand command);
+}
