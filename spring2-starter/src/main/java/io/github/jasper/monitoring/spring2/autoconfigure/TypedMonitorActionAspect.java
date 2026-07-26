@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 import org.springframework.aop.support.StaticMethodMatcherPointcutAdvisor;
+import org.springframework.http.ResponseEntity;
 
 /** AOP entry point for the strict typed action annotation. */
 public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutAdvisor
@@ -56,8 +57,22 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
             }
             throw failure;
         }
-        monitor(binding, suppliedFacts, ActionOutcome.success(elapsed(startedAt)));
+        monitor(binding, suppliedFacts, outcome(result, elapsed(startedAt)));
         return result;
+    }
+
+    private static ActionOutcome outcome(Object value, long elapsed) {
+        if (value instanceof ResponseEntity) {
+            int status = ((ResponseEntity<?>) value).getStatusCode().value();
+            if (status == 401 || status == 403) {
+                return ActionOutcome.denied("HTTP_ACCESS_DENIED", elapsed);
+            }
+            if (status >= 400) {
+                return ActionOutcome.failure("HTTP_REQUEST_FAILED",
+                    ActionOutcome.ExceptionClassification.UNKNOWN, elapsed);
+            }
+        }
+        return ActionOutcome.success(elapsed);
     }
 
     private void monitor(MonitorActionContractValidator.MethodBinding binding,
