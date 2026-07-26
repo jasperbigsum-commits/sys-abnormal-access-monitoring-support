@@ -23,6 +23,12 @@ public interface DetectionRule<R extends RuleType> extends LegacyDetectionRule {
         return definition().getType();
     }
 
+    /** Returns the stable identifier owned by the typed definition. */
+    @Override
+    default String getRuleId() {
+        return definition().getId();
+    }
+
     /** Evaluates through the typed context without consulting an external policy. */
     default Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
         return evaluate(context.getEvent(), context.getHistory());
