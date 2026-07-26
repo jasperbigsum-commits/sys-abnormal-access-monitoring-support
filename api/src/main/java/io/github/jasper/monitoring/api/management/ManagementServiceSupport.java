@@ -5,10 +5,9 @@ import java.util.Objects;
 /**
  * Shared guard for host implementations of management services.
  *
- * <p>Controller adapters should call {@link #authorize(ManagementAuthorizer,
- * ManagementActor, ManagementOperation, String, String)} before reading or
- * mutating a repository. This utility deliberately contains no web or
- * persistence dependency; it only standardizes the authorization boundary.</p>
+ * <p>Management service implementations use this guard with their trusted,
+ * constructor-injected authorizer. Controller adapters must never select or
+ * supply an authorizer.</p>
  */
 public final class ManagementServiceSupport {
     private ManagementServiceSupport() {
