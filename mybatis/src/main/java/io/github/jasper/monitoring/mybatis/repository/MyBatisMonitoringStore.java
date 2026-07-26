@@ -16,11 +16,13 @@ import io.github.jasper.monitoring.core.port.MonitoringTransaction;
 import io.github.jasper.monitoring.core.port.ManagementAuditRepository;
 import io.github.jasper.monitoring.core.port.ManagementQueryRepository;
 import io.github.jasper.monitoring.core.port.NotificationDeliveryRepository;
+import io.github.jasper.monitoring.core.port.RuleObservationRepository;
 import io.github.jasper.monitoring.core.port.WhitelistRepository;
 import io.github.jasper.monitoring.mybatis.MyBatisMonitoringStoreRegistrar;
 import io.github.jasper.monitoring.mybatis.mapper.ControlMapper;
 import io.github.jasper.monitoring.mybatis.mapper.EventMapper;
 import io.github.jasper.monitoring.mybatis.mapper.NotificationDeliveryMapper;
+import io.github.jasper.monitoring.mybatis.mapper.RuleObservationMapper;
 import io.github.jasper.monitoring.mybatis.mapper.AlertMapper;
 import io.github.jasper.monitoring.mybatis.mapper.WhitelistMapper;
 import io.github.jasper.monitoring.mybatis.po.AlertDispositionPo;
@@ -29,7 +31,9 @@ import io.github.jasper.monitoring.mybatis.po.SecurityAlertPo;
 import io.github.jasper.monitoring.mybatis.po.SecurityEventPo;
 import io.github.jasper.monitoring.mybatis.po.SecurityEventInputIssuePo;
 import io.github.jasper.monitoring.mybatis.po.SecurityEventFactPo;
+import io.github.jasper.monitoring.mybatis.po.RuleObservationPo;
 import io.github.jasper.monitoring.core.domain.EventFact;
+import io.github.jasper.monitoring.core.domain.rule.RuleObservation;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -43,7 +47,7 @@ import org.apache.ibatis.exceptions.PersistenceException;
  */
 public final class MyBatisMonitoringStore implements EventRepository, AlertRepository, ControlRepository,
     WhitelistRepository, NotificationDeliveryRepository, MonitoringTransaction,
-    ManagementQueryRepository, ManagementAuditRepository {
+    ManagementQueryRepository, ManagementAuditRepository, RuleObservationRepository {
     private final SqlSessionManager sessions;
     private final MyBatisManagementRepository management;
 
@@ -95,6 +99,10 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
     @Override public void add(WhitelistEntry entry) { write(s -> s.getMapper(WhitelistMapper.class).insert(entry.getRuleId(), entry.getSubject(), entry.getExpiresAt())); }
     @Override public void record(String deliveryId, String channel, String aggregateId, String status) {
         write(s -> s.getMapper(NotificationDeliveryMapper.class).insert(deliveryId, channel, aggregateId, status));
+    }
+    @Override public void save(RuleObservation observation) {
+        Objects.requireNonNull(observation, "observation");
+        write(s -> s.getMapper(RuleObservationMapper.class).insert(observationRow(observation)));
     }
     @Override public <T> T required(io.github.jasper.monitoring.core.port.TransactionWork<T> work) {
         if (sessions.isManagedSessionStarted()) return work.execute();
@@ -153,6 +161,7 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
     private static SecurityEventPo eventRow(SecurityEvent event) { SecurityEventPo row = new SecurityEventPo(); row.setEventId(event.getEventId()); row.setSystemId(event.getSystemId()); row.setEventType(event.getEventType()); row.setOccurredAt(event.getOccurredAt()); row.setReceivedAt(event.getReceivedAt()); row.setUserId(event.getUserId()); row.setAccountType(event.getAccountType()); row.setSourceIp(event.getSourceIp()); row.setDeviceIdHash(event.getDeviceIdHash()); row.setSessionIdHash(event.getSessionIdHash()); row.setRequestId(event.getRequestId()); row.setTraceId(event.getTraceId()); row.setAction(event.getAction()); row.setResult(event.getResult()); row.setReasonCode(event.getReasonCode()); row.setResourceType(event.getResourceType()); row.setResourceId(event.getResourceId()); row.setOrgScope(event.getOrgScope()); row.setDataCount(event.getDataCount()); row.setLatencyMs(event.getLatencyMs()); row.setDataCountKnown(event.hasDataCount()); row.setLatencyMsKnown(event.hasLatencyMs()); row.setInputStatus(event.getInputStatus()); return row; }
     private static SecurityEventInputIssuePo inputIssueRow(String eventId, int index, io.github.jasper.monitoring.api.EventInputIssue issue) { SecurityEventInputIssuePo row = new SecurityEventInputIssuePo(); row.setEventId(eventId); row.setIssueIndex(index); row.setRuleId(issue.getRuleId()); row.setFactName(issue.getFactName()); row.setIssueCode(issue.getIssueCode()); row.setSourceType(issue.getSourceType()); return row; }
     private static SecurityEventFactPo factRow(String eventId, EventFact fact) { SecurityEventFactPo row = new SecurityEventFactPo(); row.setEventId(eventId); row.setFactKey(fact.getKey()); row.setValueType(fact.getValueType()); row.setValueText(fact.getValueText()); row.setSourceType(fact.getSource()); return row; }
+    private static RuleObservationPo observationRow(RuleObservation observation) { RuleObservationPo row = new RuleObservationPo(); row.setObservationId(observation.getObservationId()); row.setRuleId(observation.getRuleId()); row.setEventId(observation.getEventId()); row.setSubject(observation.getSubject()); row.setObservedAt(observation.getObservedAt()); return row; }
     private static java.util.List<EventFact> factsOf(java.util.List<SecurityEventFactPo> rows) { java.util.List<EventFact> result = new java.util.ArrayList<EventFact>(); for (SecurityEventFactPo row : rows) result.add(new EventFact(row.getFactKey(), row.getValueType(), row.getValueText(), row.getSourceType())); return result; }
     private static SecurityAlertPo alertRow(SecurityAlert alert) { SecurityAlertPo row = new SecurityAlertPo(); row.setAlertId(alert.getAlertId()); row.setRuleId(alert.getRuleId()); row.setRiskLevel(alert.getRiskLevel()); row.setFingerprint(alert.getFingerprint()); row.setSubject(alert.getSubject()); row.setStatus(alert.getStatus()); row.setFirstSeen(alert.getFirstSeen()); row.setLastSeen(alert.getLastSeen()); row.setEventCount(alert.getEventCount()); row.setVersion(alert.getVersion()); return row; }
     private static Optional<SecurityAlert> alertOf(SecurityAlertPo row) { return row == null ? Optional.<SecurityAlert>empty() : Optional.of(new SecurityAlert(row.getAlertId(), row.getRuleId(), row.getRiskLevel(), row.getFingerprint(), row.getSubject(), row.getStatus(), row.getFirstSeen(), row.getLastSeen(), row.getEventCount(), row.getVersion())); }

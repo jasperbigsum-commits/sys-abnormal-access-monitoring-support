@@ -22,8 +22,11 @@ import io.github.jasper.monitoring.core.domain.ControlRecord;
 import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.domain.WhitelistEntry;
 import io.github.jasper.monitoring.core.domain.EventFact;
+import io.github.jasper.monitoring.core.domain.rule.RuleObservation;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.core.port.EventRepository;
+import io.github.jasper.monitoring.mybatis.mapper.RuleObservationMapper;
+import io.github.jasper.monitoring.mybatis.po.RuleObservationPo;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -39,6 +42,29 @@ import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.junit.jupiter.api.Test;
 
 class MyBatisMonitoringStoreTest {
+    @Test
+    void roundTripsObserveOnlyRuleMatch() throws Exception {
+        DataSource dataSource = dataSource("store-rule-observation");
+        executeSchema(dataSource);
+        SqlSessionFactory factory = factory(dataSource);
+        MyBatisMonitoringStore store = new MyBatisMonitoringStore(factory);
+        Instant at = Instant.parse("2026-07-26T01:00:00Z");
+        store.save(event("event-observation", "orders", at));
+
+        store.save(RuleObservation.of("observation-1", "AUTH-01", "event-observation",
+            "alice", at));
+
+        try (org.apache.ibatis.session.SqlSession session = factory.openSession()) {
+            RuleObservationPo stored = session.getMapper(RuleObservationMapper.class)
+                .find("observation-1");
+            assertEquals("observation-1", stored.getObservationId());
+            assertEquals("AUTH-01", stored.getRuleId());
+            assertEquals("event-observation", stored.getEventId());
+            assertEquals("alice", stored.getSubject());
+            assertEquals(at, stored.getObservedAt());
+        }
+    }
+
     @Test
     void roundTripsAllNarrowPersistencePorts() throws Exception {
         DataSource dataSource = dataSource("store-narrow-ports");

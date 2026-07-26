@@ -37,7 +37,6 @@ import io.github.jasper.monitoring.core.application.control.ControlHandlerRegist
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
 import io.github.jasper.monitoring.core.domain.rule.DefaultRuleCatalog;
 import io.github.jasper.monitoring.core.port.NotificationChannel;
-import io.github.jasper.monitoring.core.port.RuleObservationRepository;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisControlExecutionStore;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisMonitoringStore;
 import io.github.jasper.monitoring.spring.support.ConfiguredTrustedProxyResolver;
@@ -172,11 +171,8 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnMissingBean(MonitoringService.RuleEvaluationPort.class)
     public TypedRuleEvaluationService abnormalAccessTypedRuleEvaluationService(
             MyBatisMonitoringStore store, AbnormalAccessMonitorProperties properties,
-            ControlExecutionService controls, NotificationChannel notifications,
-            ObjectProvider<RuleObservationRepository> observationRepositories) {
-        RuleObservationRepository observations = observationRepositories.getIfAvailable(
-            () -> observation -> { });
-        return new TypedRuleEvaluationService(store, store, store, store, observations,
+            ControlExecutionService controls, NotificationChannel notifications) {
+        return new TypedRuleEvaluationService(store, store, store, store, store,
             DefaultRuleCatalog.typedRules(),
             properties.getMode(), controls, notifications, Clock.systemUTC());
     }

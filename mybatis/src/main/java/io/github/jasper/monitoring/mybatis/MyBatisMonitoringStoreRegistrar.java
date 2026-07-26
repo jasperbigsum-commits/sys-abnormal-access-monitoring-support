@@ -6,6 +6,7 @@ import io.github.jasper.monitoring.mybatis.mapper.EventMapper;
 import io.github.jasper.monitoring.mybatis.mapper.ManagementAuditMapper;
 import io.github.jasper.monitoring.mybatis.mapper.ManagementQueryMapper;
 import io.github.jasper.monitoring.mybatis.mapper.NotificationDeliveryMapper;
+import io.github.jasper.monitoring.mybatis.mapper.RuleObservationMapper;
 import io.github.jasper.monitoring.mybatis.mapper.WhitelistMapper;
 import java.util.Objects;
 import org.apache.ibatis.session.Configuration;
@@ -29,6 +30,7 @@ public final class MyBatisMonitoringStoreRegistrar {
         add(configuration, ControlMapper.class);
         add(configuration, WhitelistMapper.class);
         add(configuration, NotificationDeliveryMapper.class);
+        add(configuration, RuleObservationMapper.class);
         add(configuration, ManagementAuditMapper.class);
         add(configuration, ManagementQueryMapper.class);
     }
