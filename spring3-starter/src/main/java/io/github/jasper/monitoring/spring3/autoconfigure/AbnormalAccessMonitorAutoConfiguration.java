@@ -4,6 +4,7 @@ import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.IdentityContextProvider;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
+import io.github.jasper.monitoring.api.MonitoringMode;
 import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
@@ -109,7 +110,12 @@ public class AbnormalAccessMonitorAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public ControlCatalog<ControlHandler> abnormalAccessControlCatalog(ControlHandlerRegistry handlers) {
+    public ControlCatalog<ControlHandler> abnormalAccessControlCatalog(ControlHandlerRegistry handlers,
+            AbnormalAccessMonitorProperties properties) {
+        if (properties.getMode() == MonitoringMode.ENFORCE && handlers.isEmpty()) {
+            throw new MonitoringConfigurationException(MonitoringErrorCode.ENFORCEMENT_HANDLER_REQUIRED,
+                "ENFORCE mode requires at least one executable ControlHandler");
+        }
         ControlCatalog.Builder<ControlHandler> catalog = ControlCatalog.builder();
         for (ControlType type : ControlType.values()) {
             java.util.Optional<ControlHandler> handler = handlers.find(ControlActionType.valueOf(type.name()));
