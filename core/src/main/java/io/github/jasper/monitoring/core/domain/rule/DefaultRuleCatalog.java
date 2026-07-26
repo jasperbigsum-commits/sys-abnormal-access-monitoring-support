@@ -12,6 +12,7 @@ import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.rule.RuleCatalog;
 import io.github.jasper.monitoring.api.rule.RuleDefinition;
 import io.github.jasper.monitoring.api.rule.RuleMode;
@@ -121,27 +122,27 @@ public final class DefaultRuleCatalog {
     private static List<RuleRegistration> registrations() {
         List<DetectionRule> legacy = initialRules();
         List<RuleRegistration> result = new java.util.ArrayList<RuleRegistration>(legacy.size());
-        result.add(registration(Auth01.class, legacy.get(0), "AUTH-01", RiskLevel.MEDIUM));
-        result.add(registration(Auth02.class, legacy.get(1), "AUTH-02", RiskLevel.HIGH));
-        result.add(registration(Auth03.class, legacy.get(2), "AUTH-03", RiskLevel.HIGH));
-        result.add(registration(Sess01.class, legacy.get(3), "SESS-01", RiskLevel.MEDIUM));
-        result.add(registration(Authz01.class, legacy.get(4), "AUTHZ-01", RiskLevel.HIGH));
-        result.add(registration(Authz02.class, legacy.get(5), "AUTHZ-02", RiskLevel.HIGH));
-        result.add(registration(Data01.class, legacy.get(6), "DATA-01", RiskLevel.MEDIUM));
-        result.add(registration(Data02.class, legacy.get(7), "DATA-02", RiskLevel.HIGH));
-        result.add(registration(Data03.class, legacy.get(8), "DATA-03", RiskLevel.MEDIUM));
-        result.add(registration(Expt01.class, legacy.get(9), "EXPT-01", RiskLevel.HIGH));
-        result.add(registration(Expt02.class, legacy.get(10), "EXPT-02", RiskLevel.HIGH));
-        result.add(registration(Priv01.class, legacy.get(11), "PRIV-01", RiskLevel.HIGH));
-        result.add(registration(Priv02.class, legacy.get(12), "PRIV-02", RiskLevel.HIGH));
-        result.add(registration(Secu01.class, legacy.get(13), "SECU-01", RiskLevel.HIGH));
+        result.add(registration(Auth01.class, legacy.get(0), "AUTH-01", RiskLevel.MEDIUM, BuiltInActions.LoginFailure.class));
+        result.add(registration(Auth02.class, legacy.get(1), "AUTH-02", RiskLevel.HIGH, BuiltInActions.LoginFailure.class));
+        result.add(registration(Auth03.class, legacy.get(2), "AUTH-03", RiskLevel.HIGH, BuiltInActions.LoginFailure.class));
+        result.add(registration(Sess01.class, legacy.get(3), "SESS-01", RiskLevel.MEDIUM, BuiltInActions.SessionConcurrent.class));
+        result.add(registration(Authz01.class, legacy.get(4), "AUTHZ-01", RiskLevel.HIGH, BuiltInActions.AccessDenied.class));
+        result.add(registration(Authz02.class, legacy.get(5), "AUTHZ-02", RiskLevel.HIGH, BuiltInActions.Query.class));
+        result.add(registration(Data01.class, legacy.get(6), "DATA-01", RiskLevel.MEDIUM, BuiltInActions.Query.class));
+        result.add(registration(Data02.class, legacy.get(7), "DATA-02", RiskLevel.HIGH, BuiltInActions.Query.class));
+        result.add(registration(Data03.class, legacy.get(8), "DATA-03", RiskLevel.MEDIUM, BuiltInActions.SensitiveView.class));
+        result.add(registration(Expt01.class, legacy.get(9), "EXPT-01", RiskLevel.HIGH, BuiltInActions.ReportExport.class));
+        result.add(registration(Expt02.class, legacy.get(10), "EXPT-02", RiskLevel.HIGH, BuiltInActions.ReportExport.class));
+        result.add(registration(Priv01.class, legacy.get(11), "PRIV-01", RiskLevel.HIGH, BuiltInActions.PrivilegeChange.class));
+        result.add(registration(Priv02.class, legacy.get(12), "PRIV-02", RiskLevel.HIGH, BuiltInActions.PrivilegeChange.class));
+        result.add(registration(Secu01.class, legacy.get(13), "SECU-01", RiskLevel.HIGH, BuiltInActions.SecurityChange.class));
         return result;
     }
 
-    private static <R extends RuleType> RuleRegistration registration(Class<R> type, DetectionRule legacy,
-                                                                        String id, RiskLevel risk) {
+    private static <R extends RuleType, A extends ActionType> RuleRegistration registration(Class<R> type, DetectionRule legacy,
+                                                                        String id, RiskLevel risk, Class<A> actionType) {
         RuleDefinition<R> definition = RuleDefinition.builder(type, id)
-            .appliesTo(BuiltInActions.SensitiveView.class)
+            .appliesTo(actionType)
             .historyWindow(Duration.ofDays(1)).threshold(1L).risk(risk)
             .mode(RuleMode.OBSERVE).source(RuleSource.INTERNAL)
             .control(ControlActionType.RECORD).build();

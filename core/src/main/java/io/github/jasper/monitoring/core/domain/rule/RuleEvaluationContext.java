@@ -51,8 +51,9 @@ public final class RuleEvaluationContext {
     public <R extends RuleType> Evaluation evaluate(DetectionRule<R> rule) {
         Objects.requireNonNull(rule, "rule");
         RuleDefinition<R> definition = Objects.requireNonNull(rule.definition(), "rule definition");
-        if (!actionDefinition.getRuleTypes().contains(definition.getType())
-                || !definitionApplies(definition)) {
+        if (!definitionApplies(definition)
+                || (!actionDefinition.getRuleTypes().isEmpty()
+                    && !actionDefinition.getRuleTypes().contains(definition.getType()))) {
             return Evaluation.skipped(Status.SKIPPED_NOT_APPLICABLE,
                 "RULE_ACTION_NOT_APPLICABLE");
         }
