@@ -34,6 +34,18 @@ class MyBatisMonitoringStoreTest {
         assertEquals(0, events.findSince("billing", at.minusSeconds(1)).size());
     }
 
+    @Test
+    void roundTripsNotificationDeliveryState() throws Exception {
+        DataSource dataSource = dataSource("store-notification");
+        executeSchema(dataSource);
+        MyBatisMonitoringStore store = new MyBatisMonitoringStore(factory(dataSource));
+        store.record("delivery-1", "email", "alert-1", "PENDING");
+        try (java.sql.Connection connection = dataSource.getConnection(); java.sql.PreparedStatement statement = connection.prepareStatement("SELECT status FROM notification_delivery WHERE delivery_id = ?")) {
+            statement.setString(1, "delivery-1");
+            try (java.sql.ResultSet result = statement.executeQuery()) { result.next(); assertEquals("PENDING", result.getString(1)); }
+        }
+    }
+
     private SecurityEvent event(String id, String system, Instant at) {
         return SecurityEvent.builder().eventId(id).systemId(system).eventType(SecurityEventType.EXPORT)
             .occurredAt(at).receivedAt(at).sourceIp("203.0.113.1").requestId(id + "-request")

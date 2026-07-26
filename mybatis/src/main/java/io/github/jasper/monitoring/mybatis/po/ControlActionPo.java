@@ -30,4 +30,5 @@ public final class ControlActionPo {
     private String failureReason;
     /** 控制动作执行完成的时间。 */
     private Instant executedAt;
+    private long version;
 }

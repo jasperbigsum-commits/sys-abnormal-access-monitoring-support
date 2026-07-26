@@ -28,4 +28,5 @@ public final class SecurityAlertPo {
     private Instant lastSeen;
     /** 已关联的安全事件数量。 */
     private int eventCount;
+    private long version;
 }

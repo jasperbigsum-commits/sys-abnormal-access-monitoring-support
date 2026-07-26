@@ -4,6 +4,11 @@ import java.util.Objects;
 import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
+import io.github.jasper.monitoring.mybatis.mapper.EventMapper;
+import io.github.jasper.monitoring.mybatis.mapper.AlertMapper;
+import io.github.jasper.monitoring.mybatis.mapper.ControlMapper;
+import io.github.jasper.monitoring.mybatis.mapper.WhitelistMapper;
+import io.github.jasper.monitoring.mybatis.mapper.NotificationDeliveryMapper;
 
 /**
  * Registers this module without mapper scanning or a framework dependency.
@@ -38,6 +43,11 @@ public final class MyBatisMonitoringRepositoryRegistrar {
         if (!configuration.hasMapper(MonitoringAdministrationMapper.class)) {
             configuration.addMapper(MonitoringAdministrationMapper.class);
         }
+        if (!configuration.hasMapper(EventMapper.class)) configuration.addMapper(EventMapper.class);
+        if (!configuration.hasMapper(AlertMapper.class)) configuration.addMapper(AlertMapper.class);
+        if (!configuration.hasMapper(ControlMapper.class)) configuration.addMapper(ControlMapper.class);
+        if (!configuration.hasMapper(WhitelistMapper.class)) configuration.addMapper(WhitelistMapper.class);
+        if (!configuration.hasMapper(NotificationDeliveryMapper.class)) configuration.addMapper(NotificationDeliveryMapper.class);
     }
 
     /**
