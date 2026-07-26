@@ -3,6 +3,7 @@ package io.github.jasper.monitoring.api.event;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.SecurityEventResult;
+import io.github.jasper.monitoring.api.action.ActionType;
 
 /**
  * Read-only context for one monitored action execution.
@@ -12,29 +13,31 @@ import io.github.jasper.monitoring.api.SecurityEventResult;
  */
 public interface ActionExecution {
 
-    default MonitoringRequestContext getRequestContext() { return null; }
+    Class<? extends ActionType> getActionType();
+    MonitoringRequestContext getRequestContext();
+    IdentityContext getIdentityContext();
+    ActionOutcome getOutcome();
 
-    default IdentityContext getIdentityContext() { return null; }
-
-    default ActionOutcome getOutcome() { return null; }
-
-    static ActionExecution of(MonitoringRequestContext request, IdentityContext identity,
+    static ActionExecution of(Class<? extends ActionType> actionType, MonitoringRequestContext request, IdentityContext identity,
                               ActionOutcome outcome) {
-        return new ImmutableActionExecution(request, identity, outcome);
+        return new ImmutableActionExecution(actionType, request, identity, outcome);
     }
 
     final class ImmutableActionExecution implements ActionExecution {
         private final MonitoringRequestContext request;
         private final IdentityContext identity;
         private final ActionOutcome outcome;
+        private final Class<? extends ActionType> actionType;
 
-        private ImmutableActionExecution(MonitoringRequestContext request, IdentityContext identity,
+        private ImmutableActionExecution(Class<? extends ActionType> actionType, MonitoringRequestContext request, IdentityContext identity,
                                          ActionOutcome outcome) {
+            this.actionType = java.util.Objects.requireNonNull(actionType, "actionType");
             this.request = java.util.Objects.requireNonNull(request, "request");
             this.identity = java.util.Objects.requireNonNull(identity, "identity");
             this.outcome = java.util.Objects.requireNonNull(outcome, "outcome");
         }
 
+        @Override public Class<? extends ActionType> getActionType() { return actionType; }
         @Override public MonitoringRequestContext getRequestContext() { return request; }
         @Override public IdentityContext getIdentityContext() { return identity; }
         @Override public ActionOutcome getOutcome() { return outcome; }

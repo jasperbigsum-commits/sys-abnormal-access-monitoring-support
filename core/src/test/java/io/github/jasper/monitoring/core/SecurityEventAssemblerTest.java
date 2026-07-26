@@ -6,6 +6,7 @@ import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.action.ActionDefinition;
 import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
+import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.api.fact.FactType;
@@ -30,7 +31,7 @@ class SecurityEventAssemblerTest {
         MonitoringRequestContext request = MonitoringRequestContext.builder().method("GET").path("/reports")
             .sourceIp("10.0.0.1").requestId("req-1").build();
         IdentityContext identity = new IdentityContext("alice", null, Collections.singleton("analyst"), "session-hash");
-        ActionExecution execution = ActionExecution.of(request, identity, ActionOutcome.denied("server-denied"));
+        ActionExecution execution = ActionExecution.of(ExportAction.class, request, identity, ActionOutcome.denied("server-denied"));
         SecurityEventAssembler.AssemblyResult result = new SecurityEventAssembler("demo", fixedClock())
             .assemble(ACTION, execution, ActionFacts.builder().build());
         assertEquals(SecurityEventResult.DENIED, result.getEvent().getResult());
@@ -45,7 +46,7 @@ class SecurityEventAssemblerTest {
             .require(RequiredFact.class, FactSource.HOST_PROVIDER)
             .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
         SecurityEventAssembler.AssemblyResult result = new SecurityEventAssembler("demo", fixedClock())
-            .assemble(action, ActionExecution.of(request(), IdentityContext.anonymous(), ActionOutcome.success()),
+            .assemble(action, ActionExecution.of(ExportAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success()),
                 ActionFacts.builder().build());
         assertTrue(result.getIssues().stream().anyMatch(issue -> "MISSING_FACT".equals(issue.getCode())));
     }
@@ -57,4 +58,5 @@ class SecurityEventAssemblerTest {
 
     private static Clock fixedClock() { return Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC); }
     static final class RequiredFact implements FactType<String> { }
+    static final class ExportAction implements ActionType { }
 }

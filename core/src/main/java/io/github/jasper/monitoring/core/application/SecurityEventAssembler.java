@@ -13,6 +13,7 @@ import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.event.ObservationIssue;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactType;
+import io.github.jasper.monitoring.api.rule.RuleType;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import java.time.Clock;
 import java.time.Instant;
@@ -61,17 +62,27 @@ public final class SecurityEventAssembler {
                 Collections.singleton("action-" + action.getCode().replace(':', '-')));
         SecurityEvent event = SecurityEvent.from(draft.build(), systemId, UUID.randomUUID().toString(),
             Instant.now(clock), validation);
-        return new AssemblyResult(event, observations);
+        java.util.Set<Class<? extends RuleType>> ineligible = new java.util.LinkedHashSet<Class<? extends RuleType>>();
+        if (!inputIssues.isEmpty()) ineligible.addAll(action.getRuleTypes());
+        return new AssemblyResult(event, facts, observations, ineligible);
     }
 
     public static final class AssemblyResult {
         private final SecurityEvent event;
+        private final ActionFacts facts;
         private final List<ObservationIssue> issues;
-        private AssemblyResult(SecurityEvent event, List<ObservationIssue> issues) {
+        private final java.util.Set<Class<? extends RuleType>> ineligibleRuleTypes;
+        private AssemblyResult(SecurityEvent event, ActionFacts facts, List<ObservationIssue> issues,
+                               java.util.Set<Class<? extends RuleType>> ineligibleRuleTypes) {
             this.event = event;
+            this.facts = facts;
             this.issues = Collections.unmodifiableList(new ArrayList<ObservationIssue>(issues));
+            this.ineligibleRuleTypes = Collections.unmodifiableSet(
+                new java.util.LinkedHashSet<Class<? extends RuleType>>(ineligibleRuleTypes));
         }
         public SecurityEvent getEvent() { return event; }
+        public ActionFacts getFacts() { return facts; }
         public List<ObservationIssue> getIssues() { return issues; }
+        public java.util.Set<Class<? extends RuleType>> getIneligibleRuleTypes() { return ineligibleRuleTypes; }
     }
 }

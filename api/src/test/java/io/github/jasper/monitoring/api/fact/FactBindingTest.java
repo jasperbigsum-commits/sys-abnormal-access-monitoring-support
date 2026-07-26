@@ -2,6 +2,10 @@ package io.github.jasper.monitoring.api.fact;
 
 import io.github.jasper.monitoring.api.action.ActionContract;
 import io.github.jasper.monitoring.api.action.ActionType;
+import io.github.jasper.monitoring.api.IdentityContext;
+import io.github.jasper.monitoring.api.MonitoringRequestContext;
+import io.github.jasper.monitoring.api.SecurityEventResult;
+import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import org.junit.jupiter.api.Test;
 
@@ -41,6 +45,10 @@ class FactBindingTest {
     @Test
     void providerReceivesTheSameExecutionContext() {
         ActionExecution execution = new ActionExecution() {
+            @Override public Class<? extends ActionType> getActionType() { return FirstExport.class; }
+            @Override public MonitoringRequestContext getRequestContext() { return null; }
+            @Override public IdentityContext getIdentityContext() { return null; }
+            @Override public ActionOutcome getOutcome() { return ActionOutcome.of(SecurityEventResult.SUCCESS); }
         };
         ActionExecution[] observed = new ActionExecution[1];
         ActionFactProvider provider = current -> {
