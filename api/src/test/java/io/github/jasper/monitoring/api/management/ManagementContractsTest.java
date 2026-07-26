@@ -58,6 +58,25 @@ class ManagementContractsTest {
     }
 
     @Test
+    void generatedCommandKeyRemainsBoundedForMaximumResourceId() {
+        String resourceId = repeated('r', 256);
+
+        String key = AlertCloseCommand.of(resourceId, 2L, "close").getIdempotencyKey();
+
+        assertTrue(key.length() <= 128);
+        assertTrue(key.startsWith("alert-close:"));
+        assertNotEquals(key, AlertCloseCommand.of(repeated('s', 256), 2L, "close").getIdempotencyKey());
+    }
+
+    private static String repeated(char value, int count) {
+        StringBuilder result = new StringBuilder(count);
+        for (int i = 0; i < count; i++) {
+            result.append(value);
+        }
+        return result.toString();
+    }
+
+    @Test
     void queriesAreTypedAndDoNotExposeRawMaps() {
         assertNotNull(AlertQuery.of(ManagementPageRequest.of(0, 20, AlertQuery.Sort.CREATED_AT)));
     }
