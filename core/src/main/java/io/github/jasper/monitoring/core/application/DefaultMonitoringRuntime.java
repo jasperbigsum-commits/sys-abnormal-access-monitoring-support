@@ -7,6 +7,7 @@ import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactBinding;
 import io.github.jasper.monitoring.api.fact.FactType;
+import io.github.jasper.monitoring.api.fact.FactSource;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -39,27 +40,35 @@ public final class DefaultMonitoringRuntime implements MonitoringRuntimePort {
         Objects.requireNonNull(action, "action");
         Map<Class<? extends FactType<?>>, Object> values =
             new LinkedHashMap<Class<? extends FactType<?>>, Object>();
+        add(values, execution.getSuppliedFacts(), action, execution.getSuppliedFactSource(), null);
         for (FactBinding binding : bindings) {
             if (!binding.appliesTo(execution.getActionType())) {
                 continue;
             }
             ActionFacts contribution = Objects.requireNonNull(binding.getProvider().provide(execution),
                 "Fact provider returned null");
-            for (Map.Entry<Class<? extends FactType<?>>, Object> entry : contribution.asMap().entrySet()) {
-                Class<? extends FactType<?>> factType = entry.getKey();
-                if (!binding.getDeclaredFacts().contains(factType)) {
-                    throw new IllegalStateException("Fact provider returned an undeclared fact: " + factType.getName());
-                }
-                if (!action.getRequiredFacts().contains(factType)
-                    && !action.getOptionalFacts().contains(factType)) {
-                    throw new IllegalStateException("Fact is not declared by action: " + factType.getName());
-                }
-                if (values.put(factType, entry.getValue()) != null) {
-                    throw new IllegalStateException("Multiple providers returned the same fact: " + factType.getName());
-                }
-            }
+            add(values, contribution, action, FactSource.HOST_PROVIDER, binding);
         }
         return facts(values);
+    }
+
+    private static void add(Map<Class<? extends FactType<?>>, Object> values, ActionFacts contribution,
+            ActionDefinition action, FactSource source, FactBinding binding) {
+        for (Map.Entry<Class<? extends FactType<?>>, Object> entry : contribution.asMap().entrySet()) {
+            Class<? extends FactType<?>> factType = entry.getKey();
+            if (binding != null && !binding.getDeclaredFacts().contains(factType)) {
+                throw new IllegalStateException("Fact provider returned an undeclared fact: " + factType.getName());
+            }
+            if (!action.getRequiredFacts().contains(factType) && !action.getOptionalFacts().contains(factType)) {
+                throw new IllegalStateException("Fact is not declared by action: " + factType.getName());
+            }
+            if (!action.getAllowedSources(factType).contains(source)) {
+                throw new IllegalStateException("Fact source is not approved by action: " + factType.getName());
+            }
+            if (values.put(factType, entry.getValue()) != null) {
+                throw new IllegalStateException("Multiple sources returned the same fact: " + factType.getName());
+            }
+        }
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

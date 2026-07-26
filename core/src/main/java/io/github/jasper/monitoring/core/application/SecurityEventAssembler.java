@@ -14,6 +14,7 @@ import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.event.ObservationIssue;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactType;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.rule.RuleType;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import java.time.Clock;
@@ -52,6 +53,12 @@ public final class SecurityEventAssembler {
             .userId(identity.getUserId()).accountType(identity.getAccountType()).roleIds(identity.getRoleIds())
             .sessionIdHash(identity.getSessionIdHash()).resourceType(action.getResourceType())
             .occurredAt(Instant.now(clock)).reasonCode(outcome.getReasonCode()).latencyMs(outcome.getLatencyMs());
+        String resourceId = facts.get(BuiltInFacts.ResourceId.class);
+        Long dataCount = facts.get(BuiltInFacts.DataCount.class);
+        String sensitivity = facts.get(BuiltInFacts.Sensitivity.class);
+        if (resourceId != null) draft.resourceId(resourceId);
+        if (dataCount != null) draft.dataCount(dataCount.longValue());
+        if (sensitivity != null) draft.attribute("sensitivity", sensitivity);
         List<ObservationIssue> observations = new ArrayList<ObservationIssue>();
         List<EventInputIssue> inputIssues = new ArrayList<EventInputIssue>();
         for (Class<? extends FactType<?>> fact : action.getRequiredFacts()) {

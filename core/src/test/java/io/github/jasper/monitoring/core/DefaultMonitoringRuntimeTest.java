@@ -44,6 +44,31 @@ class DefaultMonitoringRuntimeTest {
             () -> runtime.collect(execution(), catalog.require(QueryAction.class)));
     }
 
+    @Test
+    void acceptsSuppliedFactsOnlyFromActionApprovedSource() {
+        ActionCatalog catalog = catalog();
+        ActionExecution supplied = ActionExecution.of(QueryAction.class, execution().getRequestContext(),
+            IdentityContext.anonymous(), ActionOutcome.success(1L),
+            ActionFacts.builder().put(ResourceFact.class, "report-2").build(), FactSource.HOST_PROVIDER);
+
+        ActionFacts facts = new DefaultMonitoringRuntime(catalog, Collections.<FactBinding>emptyList())
+            .collect(supplied, catalog.require(QueryAction.class));
+
+        assertEquals("report-2", facts.get(ResourceFact.class));
+    }
+
+    @Test
+    void rejectsSuppliedFactFromUnapprovedSource() {
+        ActionCatalog catalog = catalog();
+        ActionExecution supplied = ActionExecution.of(QueryAction.class, execution().getRequestContext(),
+            IdentityContext.anonymous(), ActionOutcome.success(1L),
+            ActionFacts.builder().put(ResourceFact.class, "report-2").build(), FactSource.CLIENT_SUPPLEMENTAL);
+
+        assertThrows(IllegalStateException.class, () ->
+            new DefaultMonitoringRuntime(catalog, Collections.<FactBinding>emptyList())
+                .collect(supplied, catalog.require(QueryAction.class)));
+    }
+
     private static ActionCatalog catalog() {
         ActionCatalog catalog = new ActionCatalog();
         catalog.register(QueryAction.class, ActionDefinition.builder("data:query")

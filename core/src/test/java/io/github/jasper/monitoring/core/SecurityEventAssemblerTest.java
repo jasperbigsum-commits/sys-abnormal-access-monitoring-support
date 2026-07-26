@@ -10,6 +10,7 @@ import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.api.fact.FactType;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
@@ -22,6 +23,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SecurityEventAssemblerTest {
+    @Test
+    void writesApprovedBuiltInFactsToStandardEventFields() {
+        ActionFacts facts = ActionFacts.builder().put(BuiltInFacts.ResourceId.class, "report-7")
+            .put(BuiltInFacts.DataCount.class, 12L).put(BuiltInFacts.Sensitivity.class, "HIGH").build();
+        SecurityEventAssembler.AssemblyResult result = new SecurityEventAssembler("demo", fixedClock())
+            .assemble(ExportAction.class, ACTION, ActionExecution.of(ExportAction.class, request(),
+                IdentityContext.anonymous(), ActionOutcome.success(1L)), facts);
+
+        assertEquals("report-7", result.getEvent().getResourceId());
+        assertEquals(12L, result.getEvent().getDataCount());
+        assertEquals("HIGH", result.getEvent().getAttribute("sensitivity"));
+    }
     private static final ActionDefinition ACTION = ActionDefinition.builder("demo:export")
         .eventType(SecurityEventType.EXPORT).resourceType("report")
         .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
