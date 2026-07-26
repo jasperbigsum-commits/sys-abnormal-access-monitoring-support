@@ -26,8 +26,11 @@ public interface ControlMapper {
                       @Param("status") String status, @Param("failureReason") String failureReason,
                       @Param("attemptedAt") java.time.Instant attemptedAt);
 
-    @Update("UPDATE control_action SET status = #{status}, failure_reason = #{failureReason}, executed_at = #{executedAt}, version = version + 1 WHERE idempotency_key = #{idempotencyKey} AND status = 'PENDING'")
-    int completeReservation(@Param("idempotencyKey") String idempotencyKey, @Param("status") String status,
-                            @Param("failureReason") String failureReason,
-                            @Param("executedAt") java.time.Instant executedAt);
+    @Update("UPDATE control_action SET status = #{targetStatus}, failure_reason = #{failureReason}, executed_at = #{executedAt}, version = version + 1 WHERE idempotency_key = #{idempotencyKey} AND status = #{expectedStatus} AND version = #{expectedVersion}")
+    int transition(@Param("idempotencyKey") String idempotencyKey, @Param("expectedVersion") long expectedVersion,
+                   @Param("expectedStatus") String expectedStatus, @Param("targetStatus") String targetStatus,
+                   @Param("failureReason") String failureReason, @Param("executedAt") java.time.Instant executedAt);
+
+    @Select("SELECT COALESCE(MAX(attempt_no), 0) FROM control_action_attempt WHERE control_id = #{controlId}")
+    int maxAttempt(@Param("controlId") String controlId);
 }

@@ -1,7 +1,7 @@
 package io.github.jasper.monitoring.mybatis.po;
 
 import io.github.jasper.monitoring.api.ControlActionType;
-import io.github.jasper.monitoring.api.ControlStatus;
+import io.github.jasper.monitoring.api.control.ControlStatus;
 import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;

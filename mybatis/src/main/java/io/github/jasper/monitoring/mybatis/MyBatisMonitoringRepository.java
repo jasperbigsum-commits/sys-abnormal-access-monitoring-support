@@ -6,7 +6,7 @@ import io.github.jasper.monitoring.mybatis.po.SecurityEventPo;
 import io.github.jasper.monitoring.mybatis.po.SecurityAlertPo;
 import io.github.jasper.monitoring.mybatis.po.ControlActionPo;
 import io.github.jasper.monitoring.mybatis.po.AlertDispositionPo;
-import io.github.jasper.monitoring.api.ControlStatus;
+import io.github.jasper.monitoring.api.control.ControlStatus;
 import io.github.jasper.monitoring.api.EventFactSource;
 import io.github.jasper.monitoring.api.EventInputIssue;
 import io.github.jasper.monitoring.api.EventInputIssueCode;
@@ -386,11 +386,6 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
     private static ControlRecord toControlRecord(ControlActionPo row) {
         ControlCommand command = new ControlCommand(row.getIdempotencyKey(), row.getAlertId(), row.getSubject(),
             row.getAction(), row.getExpiresAt(), row.getRuleId());
-        if (row.getStatus() != ControlStatus.SUCCEEDED && row.getStatus() != ControlStatus.FAILED
-            && row.getStatus() != ControlStatus.SKIPPED) {
-            throw new MonitoringPersistenceException(MonitoringErrorCode.PERSISTENCE_OPERATION_FAILED,
-                "Persisted control status is invalid");
-        }
         ControlExecution execution = ControlExecution.restored(row.getControlId(), row.getIdempotencyKey(),
             row.getStatus(), row.getFailureReason());
         return new ControlRecord(command, execution, row.getExecutedAt());

@@ -9,11 +9,11 @@ import java.util.Set;
 /** Immutable startup catalogue of control types and their host handler bindings. */
 public final class ControlCatalog<H> {
     private final Map<ControlType, H> handlers;
-    private final boolean enforce;
+    private final Set<ControlType> required;
 
-    private ControlCatalog(Map<ControlType, H> handlers, boolean enforce) {
+    private ControlCatalog(Map<ControlType, H> handlers, Set<ControlType> required) {
         this.handlers = Collections.unmodifiableMap(new EnumMap<ControlType, H>(handlers));
-        this.enforce = enforce;
+        this.required = Collections.unmodifiableSet(new java.util.HashSet<ControlType>(required));
     }
 
     public H require(ControlType type) {
@@ -28,21 +28,24 @@ public final class ControlCatalog<H> {
 
     public static final class Builder<H> {
         private final Map<ControlType, H> handlers = new EnumMap<ControlType, H>(ControlType.class);
-        private boolean enforce;
-        public Builder<H> enforce(boolean value) { enforce = value; return this; }
+        private final java.util.Set<ControlType> required = new java.util.HashSet<ControlType>();
+        /** Validates only control types emitted by enabled rules. */
+        public Builder<H> enforce(Set<ControlType> types) { required.clear(); required.addAll(Objects.requireNonNull(types, "types")); return this; }
+        /** Compatibility switch; callers should prefer {@link #enforce(Set)}. */
+        public Builder<H> enforce(boolean value) { if (value) required.addAll(java.util.Arrays.asList(ControlType.values())); return this; }
         public Builder<H> bind(ControlType type, H handler) {
             Objects.requireNonNull(type, "type"); Objects.requireNonNull(handler, "handler");
             if (handlers.containsKey(type)) throw new IllegalArgumentException("Duplicate control handler: " + type);
             handlers.put(type, handler); return this;
         }
         public ControlCatalog<H> freeze() {
-            if (enforce) {
-                for (ControlType type : ControlType.values()) {
-                    if (!type.requiresApproval() && !handlers.containsKey(type))
+            if (!required.isEmpty()) {
+                for (ControlType type : required) {
+                    if (!handlers.containsKey(type))
                         throw new IllegalStateException("ENFORCE requires handler for " + type);
                 }
             }
-            return new ControlCatalog<H>(handlers, enforce);
+            return new ControlCatalog<H>(handlers, required);
         }
     }
 }

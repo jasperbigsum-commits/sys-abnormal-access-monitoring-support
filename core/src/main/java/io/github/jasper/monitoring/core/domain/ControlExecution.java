@@ -2,7 +2,7 @@ package io.github.jasper.monitoring.core.domain;
 
 
 import io.github.jasper.monitoring.api.ControlActionType;
-import io.github.jasper.monitoring.api.ControlStatus;
+import io.github.jasper.monitoring.api.control.ControlStatus;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -49,6 +49,9 @@ public final class ControlExecution {
      * @return 跳过且非重放的执行结果
      */
     public static ControlExecution skipped(String key, String reason) { return new ControlExecution(key, key, ControlStatus.SKIPPED, reason, false); }
+    public static ControlExecution pending(String key) { return new ControlExecution(key, key, ControlStatus.PENDING, null, false); }
+    public static ControlExecution awaitingApproval(String key) { return new ControlExecution(key, key, ControlStatus.AWAITING_APPROVAL, null, false); }
+    public static ControlExecution rejected(String key, String reason) { return new ControlExecution(key, key, ControlStatus.REJECTED, reason, false); }
     /**
      * 创建由框架默认触发器返回的可重试跳过结果。
      *

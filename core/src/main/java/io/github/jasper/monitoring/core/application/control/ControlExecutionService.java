@@ -1,11 +1,11 @@
 package io.github.jasper.monitoring.core.application.control;
 
-import io.github.jasper.monitoring.api.ControlStatus;
 import io.github.jasper.monitoring.api.control.ControlCatalog;
+import io.github.jasper.monitoring.api.control.ControlStatus;
 import io.github.jasper.monitoring.api.control.ControlType;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
-import io.github.jasper.monitoring.core.domain.control.ControlAttempt;
+import io.github.jasper.monitoring.core.domain.control.StoredControl;
 import io.github.jasper.monitoring.core.port.ControlExecutionStore;
 import io.github.jasper.monitoring.core.port.ControlHandler;
 import java.time.Clock;
@@ -13,7 +13,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Executes a durable control reservation without holding a database transaction over host code. */
+/** Durable control state machine. Host code is invoked only after PENDING commits. */
 public final class ControlExecutionService {
     private final ControlExecutionStore store;
     private final ControlCatalog<ControlHandler> catalog;
@@ -26,32 +26,73 @@ public final class ControlExecutionService {
     }
 
     public ControlExecution execute(ControlCommand command) {
-        Objects.requireNonNull(command, "command");
-        Optional<ControlExecution> existing = store.find(command.getIdempotencyKey());
-        if (existing.isPresent() && existing.get().getStatus() != ControlStatus.FAILED) return existing.get().replay();
-        if (!store.reserve(command)) {
-            return store.find(command.getIdempotencyKey()).map(ControlExecution::replay)
-                .orElseGet(() -> ControlExecution.skipped(command.getIdempotencyKey(), "RESERVATION_CONFLICT"));
-        }
-        Instant now = Instant.now(clock);
-        store.appendAttempt(new ControlAttempt(command.getIdempotencyKey(), 1,
-            io.github.jasper.monitoring.api.control.ControlStatus.PENDING, null, now));
-        ControlExecution result;
-        try {
-            ControlType type = ControlType.valueOf(command.getAction().name());
-            ControlHandler handler = catalog.require(type);
-            result = handler.execute(command);
-            if (result == null) result = ControlExecution.failed(command.getIdempotencyKey(), "HANDLER_RETURNED_NULL");
-        } catch (RuntimeException ex) {
-            result = ControlExecution.failed(command.getIdempotencyKey(), "CONTROL_HANDLER_FAILED");
-        }
-        store.complete(command.getIdempotencyKey(), result);
-        store.appendAttempt(new ControlAttempt(command.getIdempotencyKey(), 2,
-            toStatus(result.getStatus()), result.getFailureReason(), Instant.now(clock)));
-        return result;
+        ControlType type = ControlType.from(command.getAction());
+        if (type.requiresApproval()) return createAwaitingApproval(command);
+        return executeAutomatic(command, false);
     }
 
-    private static io.github.jasper.monitoring.api.control.ControlStatus toStatus(ControlStatus status) {
-        return io.github.jasper.monitoring.api.control.ControlStatus.valueOf(status.name());
+    public ControlExecution retry(ControlCommand command) { return executeAutomatic(command, true); }
+
+    /** Recovers a committed PENDING reservation after a worker lost the terminal write. */
+    public ControlExecution recover(ControlCommand command) {
+        StoredControl pending = require(command.getIdempotencyKey(), ControlStatus.PENDING);
+        return invoke(command, pending);
     }
+
+    public ControlExecution approve(ControlCommand command) {
+        StoredControl awaiting = require(command.getIdempotencyKey(), ControlStatus.AWAITING_APPROVAL);
+        StoredControl pending = store.transition(command.getIdempotencyKey(), awaiting.version(),
+            ControlStatus.AWAITING_APPROVAL, ControlStatus.PENDING, null, now());
+        return invoke(command, pending);
+    }
+
+    public ControlExecution reject(String idempotencyKey, String reason) {
+        StoredControl awaiting = require(idempotencyKey, ControlStatus.AWAITING_APPROVAL);
+        return store.transition(idempotencyKey, awaiting.version(), ControlStatus.AWAITING_APPROVAL,
+            ControlStatus.REJECTED, reason, now()).execution();
+    }
+
+    private ControlExecution createAwaitingApproval(ControlCommand command) {
+        if (store.reserve(command, ControlStatus.AWAITING_APPROVAL, now()))
+            return ControlExecution.awaitingApproval(command.getIdempotencyKey());
+        return store.find(command.getIdempotencyKey()).get().execution().replay();
+    }
+
+    private ControlExecution executeAutomatic(ControlCommand command, boolean retry) {
+        Optional<StoredControl> existing = store.find(command.getIdempotencyKey());
+        StoredControl pending;
+        if (!existing.isPresent()) {
+            if (!store.reserve(command, ControlStatus.PENDING, now()))
+                return store.find(command.getIdempotencyKey()).get().execution().replay();
+            pending = store.find(command.getIdempotencyKey()).get();
+        } else if (retry && existing.get().status() == ControlStatus.FAILED) {
+            pending = store.transition(command.getIdempotencyKey(), existing.get().version(), ControlStatus.FAILED,
+                ControlStatus.PENDING, null, now());
+        } else {
+            return existing.get().execution().replay();
+        }
+        return invoke(command, pending);
+    }
+
+    private ControlExecution invoke(ControlCommand command, StoredControl pending) {
+        ControlExecution result;
+        try {
+            result = catalog.require(ControlType.from(command.getAction())).execute(command);
+            if (result == null) result = ControlExecution.failed(command.getIdempotencyKey(), "HANDLER_RETURNED_NULL");
+        } catch (RuntimeException exception) {
+            result = ControlExecution.failed(command.getIdempotencyKey(), "CONTROL_HANDLER_FAILED");
+        }
+        if (result.getStatus() != ControlStatus.SUCCEEDED && result.getStatus() != ControlStatus.FAILED
+            && result.getStatus() != ControlStatus.SKIPPED)
+            result = ControlExecution.failed(command.getIdempotencyKey(), "INVALID_HANDLER_STATUS");
+        return store.transition(command.getIdempotencyKey(), pending.version(), ControlStatus.PENDING,
+            result.getStatus(), result.getFailureReason(), now()).execution();
+    }
+
+    private StoredControl require(String key, ControlStatus status) {
+        StoredControl value = store.find(key).orElseThrow(() -> new IllegalStateException("Unknown control: " + key));
+        if (value.status() != status) throw new IllegalStateException("Expected " + status + " but was " + value.status());
+        return value;
+    }
+    private Instant now() { return Instant.now(clock); }
 }
