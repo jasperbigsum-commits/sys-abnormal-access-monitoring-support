@@ -16,11 +16,15 @@ import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
-import io.github.jasper.monitoring.core.infrastructure.memory.InMemoryMonitoringRepository;
+import io.github.jasper.monitoring.core.domain.SecurityEvent;
+import io.github.jasper.monitoring.core.port.EventRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -29,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 class MonitoringServiceTest {
     @Test
     void persistsEventBeforeEvaluatingRules() {
-        InMemoryMonitoringRepository repository = new InMemoryMonitoringRepository();
+        RecordingEventRepository repository = new RecordingEventRepository();
         AtomicBoolean persisted = new AtomicBoolean(false);
         ActionDefinition action = ActionDefinition.builder("demo:query").eventType(SecurityEventType.QUERY)
             .resourceType("report").failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
@@ -43,7 +47,7 @@ class MonitoringServiceTest {
                 public ActionFacts collect(ActionExecution execution, ActionDefinition definition) { return ActionFacts.builder().build(); }
             },
             (type, definition, event, facts, ineligible, issues) ->
-                persisted.set(!repository.findEventsSince(Instant.EPOCH).isEmpty()));
+                persisted.set(!repository.findSince("demo", Instant.EPOCH).isEmpty()));
         service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(1L)));
         assertTrue(persisted.get());
     }
@@ -52,7 +56,7 @@ class MonitoringServiceTest {
     void rejectsExecutionWhenTypedActionIsNotRegistered() {
         ActionCatalog catalog = new ActionCatalog();
         catalog.freeze();
-        MonitoringService service = new MonitoringService(new InMemoryMonitoringRepository(),
+        MonitoringService service = new MonitoringService(new RecordingEventRepository(),
             new SecurityEventAssembler("demo", Clock.systemUTC()),
             new MonitoringRuntimePort() {
                 public ActionDefinition resolve(Class<? extends ActionType> type) { return catalog.require(type); }
@@ -73,7 +77,7 @@ class MonitoringServiceTest {
         ActionFacts facts = ActionFacts.builder().build();
         final ActionFacts[] seen = new ActionFacts[1];
         final java.util.Set<?>[] ineligible = new java.util.Set<?>[1];
-        MonitoringService service = new MonitoringService(new InMemoryMonitoringRepository(),
+        MonitoringService service = new MonitoringService(new RecordingEventRepository(),
             new SecurityEventAssembler("demo", Clock.systemUTC()),
             new MonitoringRuntimePort() {
                 public ActionDefinition resolve(Class<? extends ActionType> type) { return catalog.require(type); }
@@ -95,4 +99,18 @@ class MonitoringServiceTest {
     static final class QueryAction implements ActionType { }
     static final class RequiredFact implements FactType<String> { }
     static final class QueryRule implements RuleType { }
+
+    static final class RecordingEventRepository implements EventRepository {
+        private final List<SecurityEvent> events = new ArrayList<SecurityEvent>();
+        @Override public void save(SecurityEvent event) { events.add(event); }
+        @Override public Optional<SecurityEvent> findEvent(String eventId) {
+            for (SecurityEvent event : events) {
+                if (event.getEventId().equals(eventId)) return Optional.of(event);
+            }
+            return Optional.empty();
+        }
+        @Override public List<SecurityEvent> findSince(String systemId, Instant since) {
+            return new ArrayList<SecurityEvent>(events);
+        }
+    }
 }
