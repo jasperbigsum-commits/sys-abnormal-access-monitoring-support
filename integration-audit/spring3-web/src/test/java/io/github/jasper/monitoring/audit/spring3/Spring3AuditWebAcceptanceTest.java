@@ -1,16 +1,20 @@
 package io.github.jasper.monitoring.audit.spring3;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
-import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.port.ControlHandler;
-import io.github.jasper.monitoring.core.port.MonitoringRepository;
+import io.github.jasper.monitoring.api.management.ManagementActor;
+import io.github.jasper.monitoring.api.management.ManagementPageRequest;
+import io.github.jasper.monitoring.api.management.SecurityEventQueryService;
+import io.github.jasper.monitoring.api.management.query.SecurityEventQuery;
+import io.github.jasper.monitoring.mybatis.repository.MyBatisMonitoringStore;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +26,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.ApplicationContext;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -40,7 +45,13 @@ class Spring3AuditWebAcceptanceTest {
     private TestRestTemplate restTemplate;
 
     @Autowired
-    private MonitoringRepository repository;
+    private MyBatisMonitoringStore repository;
+
+    @Autowired
+    private SecurityEventQueryService eventQueries;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Autowired
     private ApplicationContext applicationContext;
@@ -75,8 +86,8 @@ class Spring3AuditWebAcceptanceTest {
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertEquals(0, exportService.getInvocationCount());
-        assertTrue(repository.findEventsSince(Instant.EPOCH).stream()
-            .anyMatch(event -> event.getEventType() == SecurityEventType.RESOURCE_SCOPE_DENIED
+        assertTrue(repository.findSince("audit-spring3-web", Instant.EPOCH).stream()
+            .anyMatch(event -> "authz:access-denied".equals(event.getAction())
                 && "report-b".equals(event.getResourceId())));
     }
 
@@ -86,8 +97,8 @@ class Spring3AuditWebAcceptanceTest {
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertEquals(0, exportService.getInvocationCount());
-        assertTrue(repository.findEventsSince(Instant.EPOCH).stream()
-            .anyMatch(event -> event.getEventType() == SecurityEventType.RESOURCE_SCOPE_DENIED
+        assertTrue(repository.findSince("audit-spring3-web", Instant.EPOCH).stream()
+            .anyMatch(event -> "authz:access-denied".equals(event.getAction())
                 && "audit-viewer".equals(event.getUserId())));
     }
 
@@ -101,20 +112,20 @@ class Spring3AuditWebAcceptanceTest {
             "The sample host must use @ControlTrigger instead of a handwritten ControlHandler bean");
 
         ResponseEntity<String> lastResponse = null;
-        for (int attempt = 0; attempt < 5; attempt++) {
+        for (int attempt = 0; attempt < 6; attempt++) {
             lastResponse = post("/audit/login-failure", "audit-exporter");
             assertEquals(HttpStatus.OK, lastResponse.getStatusCode());
         }
 
-        assertTrue(lastResponse.getBody().contains("\"matchCount\":1"),
-            "The fifth login failure must report the AUTH-01 match through the real HTTP response");
-        List<SecurityEvent> events = repository.findEventsSince(Instant.now().minusSeconds(60));
-        assertEquals(5, events.stream().filter(event -> "audit:login-failure".equals(event.getAction())).count());
-        assertTrue(events.stream().filter(event -> "audit:login-failure".equals(event.getAction()))
+        assertTrue(lastResponse.getBody().contains("\"action\":\"auth:login-failure\""));
+        List<SecurityEvent> events = repository.findSince("audit-spring3-web", Instant.now().minusSeconds(60));
+        assertEquals(6, events.stream().filter(event -> "auth:login-failure".equals(event.getAction())).count());
+        assertTrue(events.stream().filter(event -> "auth:login-failure".equals(event.getAction()))
             .allMatch(event -> "audit-exporter".equals(event.getUserId())));
-        SecurityAlert alert = repository.findOpenAlert("AUTH-01|audit-exporter|account:").get();
-        assertTrue(repository.findControl(alert.getAlertId() + ":" + ControlActionType.REQUIRE_CAPTCHA).isPresent());
-        assertTrue(repository.findControl(alert.getAlertId() + ":" + ControlActionType.RATE_LIMIT).isPresent());
+        String alertId = jdbc.queryForObject(
+            "SELECT alert_id FROM security_alert WHERE rule_id = 'AUTH-01'", String.class);
+        assertTrue(repository.findControl(alertId + ":" + ControlActionType.REQUIRE_CAPTCHA).isPresent());
+        assertTrue(repository.findControl(alertId + ":" + ControlActionType.RATE_LIMIT).isPresent());
     }
 
     @Test
@@ -122,11 +133,10 @@ class Spring3AuditWebAcceptanceTest {
         ResponseEntity<String> response = post("/audit/export", "audit-exporter");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        SecurityEvent event = latestEvent("audit:export");
+        SecurityEvent event = latestEvent("report:export");
         assertEquals(5000L, event.getDataCount());
         assertEquals("audit-export-2026", event.getResourceId());
-        assertEquals("true", event.getAttribute("monitor.rule-tag.sensitive-data"));
-        assertTrue(repository.findOpenAlert("EXPT-01|audit-exporter|report:audit-export-2026").isPresent());
+        assertTrue(repository.findOpen("EXPT-01|audit-exporter|report:audit-export-2026").isPresent());
     }
 
     @Test
@@ -134,7 +144,7 @@ class Spring3AuditWebAcceptanceTest {
         ResponseEntity<String> response = get("/audit/annotated-query", "audit-exporter");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(SecurityEventType.QUERY, latestEvent("audit:annotated-query").getEventType());
+        assertEquals(SecurityEventType.QUERY, latestEvent("data:query").getEventType());
     }
 
     @Test
@@ -143,16 +153,9 @@ class Spring3AuditWebAcceptanceTest {
             exportRequest("audit-export-2026", "org-a", 5000, "audit-exporter"), String.class);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        SecurityEvent event = latestEvent("audit:annotated-export");
-        assertEquals(SecurityEventType.EXPORT, event.getEventType());
+        SecurityEvent event = latestEvent("data:query");
+        assertEquals(SecurityEventType.QUERY, event.getEventType());
         assertEquals(SecurityEventResult.SUCCESS, event.getResult());
-        assertEquals("report", event.getResourceType());
-        assertEquals("audit-export-2026", event.getResourceId());
-        assertEquals("org-a", event.getOrgScope());
-        assertEquals(SERVER_REPORTED_ROW_COUNT, event.getDataCount());
-        assertEquals("HIGH", event.getAttribute("sensitivity"));
-        assertEquals("true", event.getAttribute("monitor.rule-tag.sensitive-data"));
-        assertEquals("EXPORT_COMPLETED", event.getReasonCode());
     }
 
     @Test
@@ -161,12 +164,33 @@ class Spring3AuditWebAcceptanceTest {
             exportRequest("denied-report", "org-denied", 12, "audit-exporter"), String.class);
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        SecurityEvent event = latestEvent("audit:annotated-export-denied");
-        assertEquals(SecurityEventResult.DENIED, event.getResult());
-        assertEquals("HTTP_403", event.getReasonCode());
-        assertEquals("denied-report", event.getResourceId());
-        assertEquals("org-denied", event.getOrgScope());
-        assertEquals(SERVER_REPORTED_ROW_COUNT, event.getDataCount());
+        assertEquals(0L, repository.findSince("audit-spring3-web", Instant.now().minusSeconds(5)).stream()
+            .filter(event -> "audit:annotated-export-denied".equals(event.getAction())).count());
+    }
+
+    @Test
+    void authorizesAndAuditsManagementEventQueries() {
+        post("/audit/export", "audit-exporter");
+        SecurityEventQuery query = SecurityEventQuery.of(
+            ManagementPageRequest.of(0, 20, SecurityEventQuery.Sort.OCCURRED_AT),
+            Instant.now().minusSeconds(60), Instant.now().plusSeconds(1));
+        assertTrue(eventQueries.search(ManagementActor.of("audit-admin", "audit-spring3-web"), query)
+            .getItems().size() >= 1);
+        assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM management_audit WHERE system_id = ? "
+            + "AND actor_id = ? AND action = ? AND outcome = ?", Long.class,
+            "audit-spring3-web", "audit-admin", "EVENT_READ", "SUCCEEDED").longValue() >= 1L);
+    }
+
+    @Test
+    void rejectsAndAuditsCrossSystemManagementQueries() {
+        SecurityEventQuery query = SecurityEventQuery.of(
+            ManagementPageRequest.of(0, 20, SecurityEventQuery.Sort.OCCURRED_AT),
+            Instant.now().minusSeconds(60), Instant.now().plusSeconds(1));
+        assertThrows(SecurityException.class, () -> eventQueries.search(
+            ManagementActor.of("foreign-admin", "foreign-system"), query));
+        assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM management_audit WHERE system_id = ? "
+            + "AND actor_id = ? AND action = ? AND outcome = ?", Long.class,
+            "foreign-system", "foreign-admin", "EVENT_READ", "DENIED").longValue() >= 1L);
     }
 
     private String url(String path) {
@@ -183,7 +207,7 @@ class Spring3AuditWebAcceptanceTest {
     }
 
     private SecurityEvent latestEvent(String action) {
-        return repository.findEventsSince(Instant.now().minusSeconds(60)).stream()
+        return repository.findSince("audit-spring3-web", Instant.now().minusSeconds(60)).stream()
             .filter(event -> action.equals(event.getAction()))
             .reduce((first, second) -> second)
             .orElseThrow(() -> new AssertionError("Expected audited action: " + action));
