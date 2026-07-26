@@ -28,13 +28,15 @@ public final class MonitoringService {
         ActionFacts facts = runtime.collect(execution, action);
         SecurityEventAssembler.AssemblyResult result = assembler.assemble(execution.getActionType(), action, execution, facts);
         repository.saveEvent(result.getEvent());
-        evaluator.evaluate(result.getEvent(), result.getFacts(), result.getIneligibleRuleTypes(), result.getIssues());
+        evaluator.evaluate(execution.getActionType(), action, result.getEvent(), result.getFacts(),
+            result.getIneligibleRuleTypes(), result.getIssues());
         return result;
     }
 
     @FunctionalInterface
     public interface RuleEvaluationPort {
-        void evaluate(SecurityEvent event, ActionFacts facts,
+        void evaluate(Class<? extends io.github.jasper.monitoring.api.action.ActionType> actionType,
+                      ActionDefinition action, SecurityEvent event, ActionFacts facts,
                       java.util.Set<Class<? extends io.github.jasper.monitoring.api.rule.RuleType>> ineligibleRuleTypes,
                       java.util.List<io.github.jasper.monitoring.api.event.ObservationIssue> issues);
     }
