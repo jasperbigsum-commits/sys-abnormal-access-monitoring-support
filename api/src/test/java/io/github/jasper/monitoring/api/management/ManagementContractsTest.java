@@ -36,6 +36,37 @@ class ManagementContractsTest {
     }
 
     @Test
+    void serviceSupportAuthorizesScopedResourceBeforeAdapterAccess() {
+        final ManagementActor actor = ManagementActor.of("operator", "host-a");
+        final ManagementOperation[] captured = new ManagementOperation[1];
+        final ManagementResource[] resource = new ManagementResource[1];
+        ManagementAuthorizer authorizer = (a, operation, authorizedResource) -> {
+            assertSame(actor, a);
+            captured[0] = operation;
+            resource[0] = authorizedResource;
+        };
+
+        assertSame(actor, ManagementServiceSupport.authorize(authorizer, actor,
+            ManagementOperation.ALERT_READ, "alert", "alert-1"));
+        assertEquals(ManagementOperation.ALERT_READ, captured[0]);
+        assertEquals("alert", resource[0].getType());
+        assertEquals("alert-1", resource[0].getId());
+        assertEquals("host-a", resource[0].getSystemScope());
+    }
+
+    @Test
+    void serviceSupportRejectsInvalidAdapterInputs() {
+        ManagementActor actor = ManagementActor.of("operator", "host-a");
+        ManagementAuthorizer authorizer = (a, operation, resource) -> { };
+        assertThrows(IllegalArgumentException.class, () -> ManagementServiceSupport.authorize(
+            authorizer, actor, ManagementOperation.ALERT_READ, " ", "alert-1"));
+        assertThrows(IllegalArgumentException.class, () -> ManagementServiceSupport.authorize(
+            authorizer, actor, ManagementOperation.ALERT_READ, "alert", " "));
+        assertThrows(NullPointerException.class, () -> ManagementServiceSupport.authorize(
+            null, actor, ManagementOperation.ALERT_READ, "alert", "alert-1"));
+    }
+
+    @Test
     void commandsCarryExpectedVersionAndReason() {
         AlertAcknowledgeCommand command = AlertAcknowledgeCommand.of("a", 3L, "triaged", "ack-3");
         assertEquals(3L, command.getExpectedVersion());
