@@ -3,10 +3,15 @@ package io.github.jasper.monitoring.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ControlStatus;
+import io.github.jasper.monitoring.api.ControlTrigger;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
 import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
 import io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
@@ -18,6 +23,34 @@ import java.util.Collections;
 import org.junit.jupiter.api.Test;
 
 class ControlHandlerRegistryTest {
+
+    @Test
+    void rejectsTwoExplicitHandlersForTheSameAction() {
+        assertThrows(MonitoringConfigurationException.class, () ->
+            new ControlHandlerRegistry(Arrays.asList(
+                handlerFor(ControlActionType.DENY), handlerFor(ControlActionType.DENY))));
+    }
+
+    @Test
+    void rejectsExplicitAndAnnotatedHandlersForTheSameAction() {
+        assertThrows(MonitoringConfigurationException.class, () ->
+            new ControlHandlerRegistry(Arrays.asList(handlerFor(ControlActionType.DENY),
+                new AnnotatedControlHandler(new AnnotatedDeny()))));
+    }
+
+    @Test
+    void rejectsGenericAndExplicitHandlersForTheSameAction() {
+        assertThrows(MonitoringConfigurationException.class, () ->
+            new ControlHandlerRegistry(Arrays.asList(handlerFor(ControlActionType.RATE_LIMIT)),
+                Arrays.asList(handlerFor(ControlActionType.RATE_LIMIT)),
+                DefaultControlActionTrigger.defaults()));
+    }
+
+    @Test
+    void rejectsInvalidAnnotatedHandlerSignature() {
+        assertThrows(MonitoringValidationException.class, () ->
+            new AnnotatedControlHandler(new InvalidAnnotatedDeny()));
+    }
 
     @Test
     void resolvesHostHandlerBeforeTheDefaultTriggerForTheSameAction() {
@@ -62,9 +95,9 @@ class ControlHandlerRegistryTest {
     }
 
     @Test
-    void resolvesHostBeforeGenericAndGenericBeforeDefault() {
+    void resolvesDistinctHostAndGenericBindingsBeforeDefault() {
         ControlHandler host = handlerFor(ControlActionType.DENY);
-        ControlHandler generic = handlerFor(ControlActionType.DENY, ControlActionType.RATE_LIMIT);
+        ControlHandler generic = handlerFor(ControlActionType.RATE_LIMIT);
         ControlHandlerRegistry registry = new ControlHandlerRegistry(Arrays.asList(host),
             Arrays.asList(generic), DefaultControlActionTrigger.defaults());
 
@@ -104,5 +137,15 @@ class ControlHandlerRegistryTest {
                 return ControlExecution.succeeded(command.getIdempotencyKey());
             }
         };
+    }
+
+    static final class AnnotatedDeny {
+        @ControlTrigger(ControlActionType.DENY)
+        public void deny(ControlCommand command) { }
+    }
+
+    static final class InvalidAnnotatedDeny {
+        @ControlTrigger(ControlActionType.DENY)
+        public void deny(String subject) { }
     }
 }

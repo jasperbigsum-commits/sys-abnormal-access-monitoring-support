@@ -2,6 +2,10 @@ package io.github.jasper.monitoring.spring2.autoconfigure;
 
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.rule.RuleCatalog;
+import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.core.domain.ControlCommand;
+import io.github.jasper.monitoring.core.domain.ControlExecution;
+import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
@@ -47,6 +51,14 @@ class TypedRuntimeAutoConfigurationTest {
             .run(context -> assertThat(context).hasNotFailed());
     }
 
+    @Test
+    void rejectsDuplicateExecutableControlHandlersAtStartup() {
+        new WebApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
+            .withUserConfiguration(PersistenceConfiguration.class, DuplicateControlConfiguration.class)
+            .run(context -> assertThat(context).hasFailed());
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class PersistenceConfiguration {
         @Bean SqlSessionFactory sqlSessionFactory() {
@@ -63,5 +75,22 @@ class TypedRuntimeAutoConfigurationTest {
             catalog.freeze();
             return catalog;
         }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class DuplicateControlConfiguration {
+        @Bean ControlHandler firstDenyHandler() { return denyHandler(); }
+        @Bean ControlHandler secondDenyHandler() { return denyHandler(); }
+    }
+
+    private static ControlHandler denyHandler() {
+        return new ControlHandler() {
+            @Override public boolean supports(ControlActionType action) {
+                return action == ControlActionType.DENY;
+            }
+            @Override public ControlExecution execute(ControlCommand command) {
+                return ControlExecution.succeeded(command.getIdempotencyKey());
+            }
+        };
     }
 }
