@@ -42,6 +42,8 @@ import io.github.jasper.monitoring.mybatis.repository.MyBatisControlExecutionSto
 import io.github.jasper.monitoring.mybatis.repository.MyBatisMonitoringStore;
 import io.github.jasper.monitoring.spring.support.ConfiguredTrustedProxyResolver;
 import io.github.jasper.monitoring.spring.support.FrontendSignalRecorder;
+import io.github.jasper.monitoring.spring.support.ActionFactExtractor;
+import io.github.jasper.monitoring.spring.support.MonitorActionContractValidator;
 import io.github.jasper.monitoring.spring.support.MdcTraceBridge;
 import io.github.jasper.monitoring.spring.support.control.GenericIpControlHandler;
 import io.github.jasper.monitoring.spring.support.control.IpControlState;
@@ -125,6 +127,21 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnMissingBean
     public RuleCatalog abnormalAccessRuleDefinitionCatalog() {
         return DefaultRuleCatalog.typedCatalog();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ActionFactExtractor abnormalAccessActionFactExtractor(FactCatalog facts) {
+        return new ActionFactExtractor(facts);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public MonitorActionContractValidator abnormalAccessMonitorActionContractValidator(
+            ActionCatalog actions, FactCatalog facts, ObjectProvider<FactBinding> bindings) {
+        List<FactBinding> values = new ArrayList<FactBinding>();
+        for (FactBinding binding : bindings) values.add(binding);
+        return new MonitorActionContractValidator(actions, facts, values);
     }
 
     @Bean
@@ -372,8 +389,9 @@ public class AbnormalAccessMonitorAutoConfiguration {
         @Bean("abnormalAccessTypedMonitorActionAspect")
         @ConditionalOnMissingBean(TypedMonitorActionAspect.class)
         TypedMonitorActionAspect abnormalAccessTypedMonitorActionAspect(MonitoringService monitoring,
-                MonitoringContextAccessor context) {
-            return new TypedMonitorActionAspect(monitoring, context);
+                MonitoringContextAccessor context, ActionFactExtractor facts,
+                MonitorActionContractValidator contracts) {
+            return new TypedMonitorActionAspect(monitoring, context, facts, contracts);
         }
     }
 

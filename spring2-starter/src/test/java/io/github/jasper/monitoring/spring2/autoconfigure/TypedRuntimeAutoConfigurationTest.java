@@ -3,6 +3,10 @@ package io.github.jasper.monitoring.spring2.autoconfigure;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.rule.RuleCatalog;
 import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.fact.ActionFact;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
 import io.github.jasper.monitoring.core.port.ControlHandler;
@@ -11,6 +15,8 @@ import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import io.github.jasper.monitoring.spring.support.FrontendSignalRecorder;
+import io.github.jasper.monitoring.spring.support.ActionFactExtractor;
+import io.github.jasper.monitoring.spring.support.MonitorActionContractValidator;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisControlExecutionStore;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisMonitoringStore;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -39,6 +45,8 @@ class TypedRuntimeAutoConfigurationTest {
                 assertThat(context).hasSingleBean(TypedMonitorActionAspect.class);
                 assertThat(context).hasSingleBean(ResourceAccessGuard.class);
                 assertThat(context).hasSingleBean(FrontendSignalRecorder.class);
+                assertThat(context).hasSingleBean(ActionFactExtractor.class);
+                assertThat(context).hasSingleBean(MonitorActionContractValidator.class);
             });
     }
 
@@ -56,6 +64,14 @@ class TypedRuntimeAutoConfigurationTest {
         new WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
             .withUserConfiguration(PersistenceConfiguration.class, DuplicateControlConfiguration.class)
+            .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    void rejectsActionFactNotOwnedByAnnotatedActionAtStartup() {
+        new WebApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
+            .withUserConfiguration(PersistenceConfiguration.class, InvalidActionFactConfiguration.class)
             .run(context -> assertThat(context).hasFailed());
     }
 
@@ -81,6 +97,18 @@ class TypedRuntimeAutoConfigurationTest {
     static class DuplicateControlConfiguration {
         @Bean ControlHandler firstDenyHandler() { return denyHandler(); }
         @Bean ControlHandler secondDenyHandler() { return denyHandler(); }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class InvalidActionFactConfiguration {
+        @Bean InvalidActionFactService invalidActionFactService() {
+            return new InvalidActionFactService();
+        }
+    }
+
+    static class InvalidActionFactService {
+        @MonitorAction(BuiltInActions.Query.class)
+        public void query(@ActionFact(BuiltInFacts.DataCount.class) Long count) { }
     }
 
     private static ControlHandler denyHandler() {
