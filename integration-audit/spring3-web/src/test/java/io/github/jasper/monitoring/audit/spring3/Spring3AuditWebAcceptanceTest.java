@@ -66,7 +66,7 @@ class Spring3AuditWebAcceptanceTest {
 
     @Test
     void usesMyBatisRepositoryForDurableAuditEvidence() {
-        assertTrue(repository instanceof MyBatisMonitoringRepository,
+        assertTrue(repository instanceof MyBatisMonitoringStore,
             "The integration host must persist audit evidence through MyBatis, never the memory adapter");
     }
 
