@@ -30,7 +30,7 @@ abnormal:
         trace-id-key: traceId
 ```
 
-With a configured `SqlSessionFactory`, the starter creates `MyBatisMonitoringRepository`. Without one it uses the in-memory repository, which is suitable only for local development and tests. The adapter supports compatible MyBatis 3.5.x core versions and does not force a MyBatis Boot Starter.
+The starter requires a configured `SqlSessionFactory` and creates `MyBatisMonitoringRepository`; without one the application context fails to start. The adapter supports compatible MyBatis 3.5.x core versions and does not force a MyBatis Boot Starter.
 
 ## Required host boundaries
 

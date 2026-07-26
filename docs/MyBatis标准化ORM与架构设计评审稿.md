@@ -13,7 +13,7 @@
 - `MonitoringSqlMapper` 为包私有运行时 Mapper；公开的 `MonitoringAdministrationMapper` 面向规则版本的查询、追加、动态启停，以及人工处置和审批白名单等管理侧 SQL。
 - `InstantTypeHandler` 统一将 `Instant` 映射为 JDBC `TIMESTAMP`；枚举按 MyBatis 默认枚举名称持久化为字符串。
 - DDL 定义了 9 张逻辑表、必要的主键/唯一键/查询索引；生产环境仍应将脚本转换为目标数据库的 Flyway/Liquibase 版本化迁移。
-- Starter 仅在宿主提供 `SqlSessionFactory` 时创建 MyBatis 仓储；缺失时回退为仅供开发/测试的内存仓储。DDL 未限定 Schema，表实际落点由 JDBC 连接的默认 Schema 决定，组件不会自动建库、建表或执行迁移。
+- Starter 要求宿主提供 `SqlSessionFactory` 并创建 MyBatis 仓储；缺失时应用上下文启动失败。DDL 未限定 Schema，表实际落点由 JDBC 连接的默认 Schema 决定，组件不会自动建库、建表或执行迁移。
 
 **本次评审需要做出的关键决策**：是否始终保持“一系统一监测 Schema”、持久化规则的加载/审批/热更新模型、`ENFORCE` 多实例下的控制幂等保证等级、告警/处置的聚合事务边界、目标数据库方言与数据留存方案。
 
@@ -166,7 +166,7 @@ classDiagram
 | `mybatis.po` | 包私有持久化对象集合 | `SecurityEventPo`、`SecurityEventAttributePo`、`SecurityAlertPo`、`AlertDispositionPo`、`ControlActionPo` 与规则版本查询投影；不进入 `api` 或核心领域层。 |
 | `MyBatisMonitoringRepository` | `MonitoringRepository` 的生产适配器 | 负责事务、映射、事件子表写入、查询重建和幂等控制记录。 |
 | `MonitoringAdministrationMapper` | 公共管理侧 Mapper | 查询规则版本、插入新版本、动态启停版本、追加人工处置、写入带原因/审批人的白名单。 |
-| Starter 仓储选择 | Boot 自动装配 | 存在 `SqlSessionFactory` 时注册 MyBatis 适配器；否则使用 `InMemoryMonitoringRepository`，该回退不具备进程重启后的审计留存能力。 |
+| Starter 仓储选择 | Boot 自动装配 | 必须存在 `SqlSessionFactory`，注册后创建 MyBatis 适配器；缺失时启动失败，不提供生产内存回退。 |
 
 领域到表的标准映射如下：
 
@@ -452,7 +452,7 @@ sequenceDiagram
 ### 5.3 启动装配逻辑
 
 1. Boot 2/Boot 3 Starter 读取 `abnormal.access.monitor.*` 配置，构造 `Clock`、MDC 追踪桥接、动作注册表、通知通道和宿主 SPI 的适配集合。
-2. 若应用上下文存在 `SqlSessionFactory`，Starter 通过 `MyBatisMonitoringRepositoryRegistrar` 注册 `InstantTypeHandler`、内部运行时 Mapper 和管理 Mapper，并创建 `MyBatisMonitoringRepository`；否则创建 `InMemoryMonitoringRepository`。后者只适用于本地开发或测试。
+2. 应用上下文必须存在 `SqlSessionFactory`。Starter 通过 `MyBatisMonitoringRepositoryRegistrar` 注册 `InstantTypeHandler`、内部运行时 Mapper 和管理 Mapper，并创建 `MyBatisMonitoringRepository`；缺失时上下文启动失败。
 3. Starter 收集 `DefaultRuleCatalog`、`DetectionRule` Bean 和 `InternalRuleContributor` 到 `InternalRuleRegistry`，创建监测器前冻结该快照；若配置为 `ENFORCE` 但没有任何 `ControlHandler`，构造阶段失败。
 4. 当注解采集开关启用时，MVC 拦截器只记录标注 `@MonitorAction` 的处理器；`@ControlTrigger` 标注的公开 Spring Bean 方法被适配为 `ControlHandler`。请求适配器把同一个 `traceId` 写入监测上下文和可选日志 MDC，并在请求结束恢复原值。这些机制只在接入层发生，`core` 不依赖 Servlet/Spring 类型。
 5. 宿主业务、前端端点或资源授权流程最终都收敛到 `SecurityMonitor.record(SecurityEventDraft)`；持久化、规则和控制接口由应用编排层统一调用。持久化规则的动态管理不会自动改变已冻结规则快照。
@@ -481,7 +481,7 @@ sequenceDiagram
 | R-08 审计完整性 | DDL 无外键；核心白名单写入依赖默认审批人 `SYSTEM`。 | 归档/删除可能留下孤儿数据；生产白名单审计不足。 | 明确是否加外键或由迁移任务维护一致性；生产审批使用管理 Mapper 写入真实原因和审批人。 |
 | R-09 字段边界与敏感数据 | `fingerprint` 由未规约字符串拼接，列长为 512；处置文本、控制失败原因和管理 Mapper 输入没有统一的长度/脱敏入口。 | 最大输入可能写入失败；审计库可能留下不应保存的敏感内容。 | 确认指纹改为固定长度哈希、扩大列或收紧长度契约；制定管理接口和宿主处理器的校验、脱敏与导出审批规范。 |
 | R-10 前端事件时间 | `FrontendSignalMapper` 直接采用浏览器 `occurred_at`；`FrontendSignalValidator` 已提供但不会由 Mapper 自动调用。 | 未校时的客户端时间可改变规则窗口，乱序事件还可能读到已落库的“未来”事件。 | 宿主端点必须在映射前校验时钟偏差并记录拒绝策略；评审是否改用服务器接收时间或引入事件时间上界。 |
-| R-11 存储落点与迁移 | 未配置 `SqlSessionFactory` 会回退内存仓储；DDL 表名未限定 Schema，Starter 不自动执行建表。 | 生产误配会丢失重启后的审计数据，或将表落到非预期默认 Schema。 | 在部署清单中强制数据源、Schema、迁移版本与启动自检；生产 profile 禁止或告警内存仓储回退。 |
+| R-11 存储落点与迁移 | 未配置 `SqlSessionFactory` 时启动失败；DDL 表名未限定 Schema，Starter 不自动执行建表。 | 迁移缺失或错误默认 Schema 会导致启动后首次持久化失败。 | 在部署清单中强制数据源、Schema、迁移版本与启动自检。 |
 
 ## 7. 验证依据与建议验收
 

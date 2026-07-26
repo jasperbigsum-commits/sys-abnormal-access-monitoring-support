@@ -20,9 +20,9 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 线程安全的测试和本地开发仓储实现。
+ * 线程安全的单元测试仓储实现。
  *
- * <p>生产部署应使用 MyBatis 实现，确保审计数据可在进程重启后保留，并获得数据库层的并发幂等保障。</p>
+ * <p>该类型仅由测试 classifier 发布，不属于生产制品。</p>
  */
 public final class InMemoryMonitoringRepository implements MonitoringRepository {
     private final List<SecurityEvent> events = new ArrayList<SecurityEvent>();
