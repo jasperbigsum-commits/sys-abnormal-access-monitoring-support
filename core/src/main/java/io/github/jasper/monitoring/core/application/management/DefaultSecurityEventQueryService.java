@@ -30,7 +30,7 @@ public final class DefaultSecurityEventQueryService extends AbstractManagementSe
     @Override public SecurityEventView get(final ManagementActor actor, final String eventId) {
         access.require(actor, ManagementOperation.EVENT_READ, "security-event", eventId);
         return transaction.required(() -> {
-            SecurityEventView view = require(queries.findEvent(actor.getSystemScope(), eventId), "security-event", eventId);
+            SecurityEventView view = require(queries.findEventView(actor.getSystemScope(), eventId), "security-event", eventId);
             success(actor, ManagementOperation.EVENT_READ, "security-event", eventId);
             return view;
         });

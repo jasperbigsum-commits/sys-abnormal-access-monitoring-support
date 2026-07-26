@@ -9,6 +9,8 @@ import io.github.jasper.monitoring.core.port.AlertRepository;
 import io.github.jasper.monitoring.core.port.ControlRepository;
 import io.github.jasper.monitoring.core.port.EventRepository;
 import io.github.jasper.monitoring.core.port.MonitoringTransaction;
+import io.github.jasper.monitoring.core.port.ManagementAuditRepository;
+import io.github.jasper.monitoring.core.port.ManagementQueryRepository;
 import io.github.jasper.monitoring.core.port.NotificationDeliveryRepository;
 import io.github.jasper.monitoring.core.port.WhitelistRepository;
 import io.github.jasper.monitoring.core.port.MonitoringRepository;
@@ -32,15 +34,18 @@ import org.apache.ibatis.session.SqlSessionManager;
  * the legacy repository only as an internal migration boundary.
  */
 public final class MyBatisMonitoringStore implements EventRepository, AlertRepository, ControlRepository,
-    WhitelistRepository, NotificationDeliveryRepository, MonitoringTransaction {
+    WhitelistRepository, NotificationDeliveryRepository, MonitoringTransaction,
+    ManagementQueryRepository, ManagementAuditRepository {
     private final MonitoringRepository legacy;
     private final SqlSessionManager sessions;
+    private final MyBatisManagementRepository management;
 
     public MyBatisMonitoringStore(SqlSessionFactory sqlSessionFactory) {
         Objects.requireNonNull(sqlSessionFactory, "sqlSessionFactory");
         MyBatisMonitoringRepositoryRegistrar.register(sqlSessionFactory);
         this.sessions = SqlSessionManager.newInstance(sqlSessionFactory);
         this.legacy = new MyBatisMonitoringRepository(this.sessions);
+        this.management = new MyBatisManagementRepository(this.sessions);
     }
 
     @Override public void save(SecurityEvent event) { legacy.saveEvent(event); }
@@ -78,6 +83,20 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
         catch (RuntimeException e) { sessions.rollback(); throw e; }
         finally { sessions.close(); }
     }
+    @Override public io.github.jasper.monitoring.api.management.ManagementPage<io.github.jasper.monitoring.api.management.model.SecurityEventView> searchEvents(String s,io.github.jasper.monitoring.api.management.query.SecurityEventQuery q){return management.searchEvents(s,q);}
+    @Override public Optional<io.github.jasper.monitoring.api.management.model.SecurityEventView> findEventView(String s,String id){return management.findEventView(s,id);}
+    @Override public io.github.jasper.monitoring.api.management.ManagementPage<io.github.jasper.monitoring.api.management.model.AlertView> searchAlerts(String s,io.github.jasper.monitoring.api.management.query.AlertQuery q){return management.searchAlerts(s,q);}
+    @Override public Optional<io.github.jasper.monitoring.api.management.model.AlertView> findAlertView(String s,String id){return management.findAlertView(s,id);}
+    @Override public boolean transitionAlert(String s,String id,long v,String status){return management.transitionAlert(s,id,v,status);}
+    @Override public io.github.jasper.monitoring.api.management.ManagementPage<io.github.jasper.monitoring.api.management.model.RuleView> searchRules(String s,io.github.jasper.monitoring.api.management.query.RuleQuery q){return management.searchRules(s,q);}
+    @Override public Optional<io.github.jasper.monitoring.api.management.model.RuleView> findRuleView(String s,String id){return management.findRuleView(s,id);}
+    @Override public io.github.jasper.monitoring.api.management.ManagementPage<io.github.jasper.monitoring.api.management.model.WhitelistView> searchWhitelists(String s,io.github.jasper.monitoring.api.management.query.WhitelistQuery q){return management.searchWhitelists(s,q);}
+    @Override public Optional<io.github.jasper.monitoring.api.management.model.WhitelistView> findWhitelistView(String s,String id){return management.findWhitelistView(s,id);}
+    @Override public boolean transitionWhitelist(String s,String id,long v,boolean a,String actor,String reason){return management.transitionWhitelist(s,id,v,a,actor,reason);}
+    @Override public io.github.jasper.monitoring.api.management.ManagementPage<io.github.jasper.monitoring.api.management.model.ControlView> searchControls(String s,io.github.jasper.monitoring.api.management.query.ControlQuery q){return management.searchControls(s,q);}
+    @Override public Optional<io.github.jasper.monitoring.api.management.model.ControlView> findControlView(String s,String id){return management.findControlView(s,id);}
+    @Override public boolean transitionControl(String s,String id,long v,String expected,String target,String reason){return management.transitionControl(s,id,v,expected,target,reason);}
+    @Override public void append(io.github.jasper.monitoring.core.domain.management.ManagementAuditRecord record){management.append(record);}
 
     private <T> T read(java.util.function.Function<org.apache.ibatis.session.SqlSession, T> work) {
         boolean owner = !sessions.isManagedSessionStarted();

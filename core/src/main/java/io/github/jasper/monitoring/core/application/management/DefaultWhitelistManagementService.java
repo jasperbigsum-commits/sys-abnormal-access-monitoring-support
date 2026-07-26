@@ -25,7 +25,7 @@ public final class DefaultWhitelistManagementService extends AbstractManagementS
     }
     @Override public WhitelistView get(final ManagementActor actor, final String id) {
         access.require(actor, ManagementOperation.WHITELIST_READ, "whitelist", id);
-        return transaction.required(() -> { WhitelistView view = require(queries.findWhitelist(actor.getSystemScope(), id), "whitelist", id);
+        return transaction.required(() -> { WhitelistView view = require(queries.findWhitelistView(actor.getSystemScope(), id), "whitelist", id);
             success(actor, ManagementOperation.WHITELIST_READ, "whitelist", id); return view; });
     }
     @Override public WhitelistView grant(ManagementActor actor, WhitelistGrantCommand command) {
@@ -40,7 +40,7 @@ public final class DefaultWhitelistManagementService extends AbstractManagementS
         access.require(actor, operation, "whitelist", id);
         return transaction.required(() -> { requireUpdated(queries.transitionWhitelist(actor.getSystemScope(), id,
                 command.getExpectedVersion(), active, actor.getActorId(), command.getReason()));
-            WhitelistView view = require(queries.findWhitelist(actor.getSystemScope(), id), "whitelist", id);
+            WhitelistView view = require(queries.findWhitelistView(actor.getSystemScope(), id), "whitelist", id);
             success(actor, operation, "whitelist", id); return view; });
     }
 }

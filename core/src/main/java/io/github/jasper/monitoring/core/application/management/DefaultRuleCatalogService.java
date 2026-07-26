@@ -26,7 +26,7 @@ public final class DefaultRuleCatalogService extends AbstractManagementService i
     @Override public RuleView get(final ManagementActor actor, final String ruleId) {
         access.require(actor, ManagementOperation.RULE_READ, "rule", ruleId);
         return transaction.required(() -> {
-            RuleView view = require(queries.findRule(actor.getSystemScope(), ruleId), "rule", ruleId);
+            RuleView view = require(queries.findRuleView(actor.getSystemScope(), ruleId), "rule", ruleId);
             success(actor, ManagementOperation.RULE_READ, "rule", ruleId);
             return view;
         });

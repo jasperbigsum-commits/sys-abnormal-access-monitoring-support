@@ -25,7 +25,7 @@ public final class DefaultControlManagementService extends AbstractManagementSer
     }
     @Override public ControlView get(final ManagementActor actor, final String id) {
         access.require(actor, ManagementOperation.CONTROL_READ, "control", id);
-        return transaction.required(() -> { ControlView view = require(queries.findControl(actor.getSystemScope(), id), "control", id);
+        return transaction.required(() -> { ControlView view = require(queries.findControlView(actor.getSystemScope(), id), "control", id);
             success(actor, ManagementOperation.CONTROL_READ, "control", id); return view; });
     }
     @Override public ControlView approve(ManagementActor actor, ControlApprovalCommand command) {
@@ -43,7 +43,7 @@ public final class DefaultControlManagementService extends AbstractManagementSer
         access.require(actor, operation, "control", id);
         return transaction.required(() -> { requireUpdated(queries.transitionControl(actor.getSystemScope(), id,
                 command.getExpectedVersion(), expected, target, command.getReason()));
-            ControlView view = require(queries.findControl(actor.getSystemScope(), id), "control", id);
+            ControlView view = require(queries.findControlView(actor.getSystemScope(), id), "control", id);
             success(actor, operation, "control", id); return view; });
     }
 }

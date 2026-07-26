@@ -16,17 +16,17 @@ import java.util.Optional;
 /** Database-backed management projections and optimistic state transitions. */
 public interface ManagementQueryRepository {
     ManagementPage<SecurityEventView> searchEvents(String scope, SecurityEventQuery query);
-    Optional<SecurityEventView> findEvent(String scope, String id);
+    Optional<SecurityEventView> findEventView(String scope, String id);
     ManagementPage<AlertView> searchAlerts(String scope, AlertQuery query);
-    Optional<AlertView> findAlert(String scope, String id);
+    Optional<AlertView> findAlertView(String scope, String id);
     boolean transitionAlert(String scope, String id, long version, String status);
     ManagementPage<RuleView> searchRules(String scope, RuleQuery query);
-    Optional<RuleView> findRule(String scope, String id);
+    Optional<RuleView> findRuleView(String scope, String id);
     ManagementPage<WhitelistView> searchWhitelists(String scope, WhitelistQuery query);
-    Optional<WhitelistView> findWhitelist(String scope, String id);
+    Optional<WhitelistView> findWhitelistView(String scope, String id);
     boolean transitionWhitelist(String scope, String id, long version, boolean active, String actorId, String reason);
     ManagementPage<ControlView> searchControls(String scope, ControlQuery query);
-    Optional<ControlView> findControl(String scope, String id);
+    Optional<ControlView> findControlView(String scope, String id);
     boolean transitionControl(String scope, String id, long version, String expectedStatus, String targetStatus,
                               String reason);
 }

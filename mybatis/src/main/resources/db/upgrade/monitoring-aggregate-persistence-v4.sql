@@ -17,4 +17,15 @@ CREATE TABLE IF NOT EXISTS notification_delivery (
     status VARCHAR(32) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (delivery_id), UNIQUE (channel, aggregate_id)
 );
+ALTER TABLE security_whitelist ADD COLUMN IF NOT EXISTS whitelist_id VARCHAR(128);
+ALTER TABLE security_whitelist ADD COLUMN IF NOT EXISTS system_id VARCHAR(128);
+ALTER TABLE security_whitelist ADD COLUMN IF NOT EXISTS status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE security_whitelist ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 1;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_security_whitelist_id ON security_whitelist (whitelist_id);
+CREATE TABLE IF NOT EXISTS management_audit (
+    audit_id VARCHAR(128) NOT NULL, system_id VARCHAR(128) NOT NULL, actor_id VARCHAR(128) NOT NULL,
+    action VARCHAR(128) NOT NULL, target_type VARCHAR(64) NOT NULL, target_id VARCHAR(128) NOT NULL,
+    outcome VARCHAR(32) NOT NULL, occurred_at TIMESTAMP NOT NULL, PRIMARY KEY (audit_id)
+);
+CREATE INDEX IF NOT EXISTS idx_management_audit_system_at ON management_audit (system_id, occurred_at, audit_id);
 CREATE INDEX IF NOT EXISTS idx_security_event_system_at ON security_event (system_id, occurred_at, event_id);

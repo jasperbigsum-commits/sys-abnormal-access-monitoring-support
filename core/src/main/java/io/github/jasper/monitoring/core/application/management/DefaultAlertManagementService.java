@@ -27,7 +27,7 @@ public final class DefaultAlertManagementService extends AbstractManagementServi
     }
     @Override public AlertView get(final ManagementActor actor, final String alertId) {
         access.require(actor, ManagementOperation.ALERT_READ, "alert", alertId);
-        return transaction.required(() -> { AlertView view = require(queries.findAlert(actor.getSystemScope(), alertId), "alert", alertId);
+        return transaction.required(() -> { AlertView view = require(queries.findAlertView(actor.getSystemScope(), alertId), "alert", alertId);
             success(actor, ManagementOperation.ALERT_READ, "alert", alertId); return view; });
     }
     @Override public AlertView acknowledge(ManagementActor actor, AlertAcknowledgeCommand command) {
@@ -51,7 +51,7 @@ public final class DefaultAlertManagementService extends AbstractManagementServi
                              final long version, final String status) {
         access.require(actor, operation, "alert", id);
         return transaction.required(() -> { requireUpdated(queries.transitionAlert(actor.getSystemScope(), id, version, status));
-            AlertView view = require(queries.findAlert(actor.getSystemScope(), id), "alert", id);
+            AlertView view = require(queries.findAlertView(actor.getSystemScope(), id), "alert", id);
             success(actor, operation, "alert", id); return view; });
     }
 }

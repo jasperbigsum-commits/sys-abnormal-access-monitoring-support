@@ -132,16 +132,21 @@ CREATE TABLE alert_disposition (
 CREATE INDEX idx_alert_disposition_alert_at ON alert_disposition (alert_id, created_at);
 
 CREATE TABLE security_whitelist (
+    whitelist_id VARCHAR(128) COMMENT '管理侧白名单标识',
+    system_id VARCHAR(128) COMMENT '管理授权所属系统范围',
     rule_id VARCHAR(128) NOT NULL COMMENT '适用规则标识',
     subject VARCHAR(256) NOT NULL COMMENT '豁免主体',
     reason VARCHAR(512) NOT NULL DEFAULT 'Created by monitoring repository' COMMENT '豁免原因',
     approved_by VARCHAR(128) NOT NULL DEFAULT 'SYSTEM' COMMENT '审批人标识',
     expires_at TIMESTAMP NOT NULL COMMENT '豁免到期时间',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' COMMENT '管理生命周期状态',
+    version BIGINT NOT NULL DEFAULT 1 COMMENT '乐观锁版本',
     PRIMARY KEY (rule_id, subject, expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全规则白名单表';
 
 CREATE INDEX idx_security_whitelist_lookup ON security_whitelist (rule_id, subject, expires_at);
+CREATE UNIQUE INDEX uk_security_whitelist_id ON security_whitelist (whitelist_id);
 
 CREATE TABLE control_action_attempt (
     control_id VARCHAR(128) NOT NULL,
@@ -168,7 +173,9 @@ CREATE TABLE management_audit (
     system_id VARCHAR(128) NOT NULL,
     actor_id VARCHAR(128) NOT NULL,
     action VARCHAR(128) NOT NULL,
+    target_type VARCHAR(64) NOT NULL,
     target_id VARCHAR(128) NOT NULL,
+    outcome VARCHAR(32) NOT NULL,
     occurred_at TIMESTAMP NOT NULL,
     PRIMARY KEY (audit_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理操作脱敏审计记录';

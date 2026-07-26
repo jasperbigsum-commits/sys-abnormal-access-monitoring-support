@@ -9,6 +9,8 @@ import io.github.jasper.monitoring.mybatis.mapper.AlertMapper;
 import io.github.jasper.monitoring.mybatis.mapper.ControlMapper;
 import io.github.jasper.monitoring.mybatis.mapper.WhitelistMapper;
 import io.github.jasper.monitoring.mybatis.mapper.NotificationDeliveryMapper;
+import io.github.jasper.monitoring.mybatis.mapper.ManagementAuditMapper;
+import io.github.jasper.monitoring.mybatis.mapper.ManagementQueryMapper;
 
 /**
  * Registers this module without mapper scanning or a framework dependency.
@@ -48,6 +50,8 @@ public final class MyBatisMonitoringRepositoryRegistrar {
         if (!configuration.hasMapper(ControlMapper.class)) configuration.addMapper(ControlMapper.class);
         if (!configuration.hasMapper(WhitelistMapper.class)) configuration.addMapper(WhitelistMapper.class);
         if (!configuration.hasMapper(NotificationDeliveryMapper.class)) configuration.addMapper(NotificationDeliveryMapper.class);
+        if (!configuration.hasMapper(ManagementAuditMapper.class)) configuration.addMapper(ManagementAuditMapper.class);
+        if (!configuration.hasMapper(ManagementQueryMapper.class)) configuration.addMapper(ManagementQueryMapper.class);
     }
 
     /**

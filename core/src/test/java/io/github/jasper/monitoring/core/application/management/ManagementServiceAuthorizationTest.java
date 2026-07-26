@@ -82,17 +82,17 @@ class ManagementServiceAuthorizationTest {
         private int reads;
         private int transitions;
         @Override public ManagementPage<SecurityEventView> searchEvents(String scope, SecurityEventQuery query) { reads++; return page(); }
-        @Override public Optional<SecurityEventView> findEvent(String scope, String id) { reads++; return Optional.of(SecurityEventView.of(id, scope)); }
+        @Override public Optional<SecurityEventView> findEventView(String scope, String id) { reads++; return Optional.of(SecurityEventView.of(id, scope)); }
         @Override public ManagementPage<AlertView> searchAlerts(String scope, AlertQuery query) { reads++; return page(); }
-        @Override public Optional<AlertView> findAlert(String scope, String id) { reads++; return Optional.of(AlertView.of(id, scope, 2)); }
+        @Override public Optional<AlertView> findAlertView(String scope, String id) { reads++; return Optional.of(AlertView.of(id, scope, 2)); }
         @Override public boolean transitionAlert(String scope, String id, long version, String status) { transitions++; return version == 1; }
         @Override public ManagementPage<RuleView> searchRules(String scope, RuleQuery query) { reads++; return page(); }
-        @Override public Optional<RuleView> findRule(String scope, String id) { reads++; return Optional.of(RuleView.of(id, scope)); }
+        @Override public Optional<RuleView> findRuleView(String scope, String id) { reads++; return Optional.of(RuleView.of(id, scope)); }
         @Override public ManagementPage<WhitelistView> searchWhitelists(String scope, WhitelistQuery query) { reads++; return page(); }
-        @Override public Optional<WhitelistView> findWhitelist(String scope, String id) { reads++; return Optional.of(WhitelistView.of(id, scope)); }
+        @Override public Optional<WhitelistView> findWhitelistView(String scope, String id) { reads++; return Optional.of(WhitelistView.of(id, scope)); }
         @Override public boolean transitionWhitelist(String scope, String id, long version, boolean active, String actorId, String reason) { transitions++; return true; }
         @Override public ManagementPage<ControlView> searchControls(String scope, ControlQuery query) { reads++; return page(); }
-        @Override public Optional<ControlView> findControl(String scope, String id) { reads++; return Optional.of(ControlView.of(id, scope, "PENDING", 2)); }
+        @Override public Optional<ControlView> findControlView(String scope, String id) { reads++; return Optional.of(ControlView.of(id, scope, "PENDING", 2)); }
         @Override public boolean transitionControl(String scope, String id, long version, String expected, String target, String reason) { transitions++; return true; }
         private static <T> ManagementPage<T> page() { return ManagementPage.of(Collections.<T>emptyList(), 0, 20, 0); }
     }
