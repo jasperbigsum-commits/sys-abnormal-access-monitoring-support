@@ -14,4 +14,20 @@ public interface ControlMapper {
     int insert(ControlActionPo control);
     @Update("UPDATE control_action SET status = #{status}, failure_reason = #{failureReason}, executed_at = #{executedAt}, version = version + 1 WHERE idempotency_key = #{idempotencyKey} AND version = #{version}")
     int update(ControlActionPo control);
+
+    @Insert("INSERT INTO control_action (control_id, idempotency_key, alert_id, rule_id, subject, action_type, expires_at, status, failure_reason, executed_at, version) VALUES (#{controlId}, #{idempotencyKey}, #{alertId}, #{ruleId}, #{subject}, #{action}, NULL, 'PENDING', NULL, #{executedAt}, 0)")
+    int reserve(@Param("controlId") String controlId, @Param("idempotencyKey") String idempotencyKey,
+                @Param("alertId") String alertId, @Param("ruleId") String ruleId,
+                @Param("subject") String subject, @Param("action") String action,
+                @Param("executedAt") java.time.Instant executedAt);
+
+    @Insert("INSERT INTO control_action_attempt (control_id, attempt_no, status, failure_reason, attempted_at) VALUES (#{controlId}, #{attemptNo}, #{status}, #{failureReason}, #{attemptedAt})")
+    int appendAttempt(@Param("controlId") String controlId, @Param("attemptNo") int attemptNo,
+                      @Param("status") String status, @Param("failureReason") String failureReason,
+                      @Param("attemptedAt") java.time.Instant attemptedAt);
+
+    @Update("UPDATE control_action SET status = #{status}, failure_reason = #{failureReason}, executed_at = #{executedAt}, version = version + 1 WHERE idempotency_key = #{idempotencyKey} AND status = 'PENDING'")
+    int completeReservation(@Param("idempotencyKey") String idempotencyKey, @Param("status") String status,
+                            @Param("failureReason") String failureReason,
+                            @Param("executedAt") java.time.Instant executedAt);
 }
