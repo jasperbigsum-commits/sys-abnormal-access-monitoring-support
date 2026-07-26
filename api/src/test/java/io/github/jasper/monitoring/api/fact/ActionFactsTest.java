@@ -9,6 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
@@ -54,22 +57,24 @@ class ActionFactsTest {
     }
 
     @Test
-    void rejectsStaticallyMismatchedValuesAtCompilation() {
+    void rejectsStaticallyMismatchedValuesAtCompilation() throws Exception {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         assertNotNull(compiler, "Tests must run on a JDK");
+        Path outputDirectory = Paths.get(System.getProperty("basedir"), "target", "test-compiler-output");
+        Files.createDirectories(outputDirectory);
+        Iterable<String> options = Arrays.asList("-classpath", System.getProperty("java.class.path"),
+            "-proc:none", "-d", outputDirectory.toString());
         DiagnosticCollector<JavaFileObject> validDiagnostics = new DiagnosticCollector<JavaFileObject>();
         JavaFileObject validSource = factPutSource("ValidFactPut", "5000L");
         Boolean validCompiled = compiler.getTask(null, null, validDiagnostics,
-            Arrays.asList("-classpath", System.getProperty("java.class.path"), "-proc:none"),
-            null, Collections.singletonList(validSource)).call();
+            options, null, Collections.singletonList(validSource)).call();
         assertTrue(validCompiled.booleanValue(), () -> diagnosticsText(validDiagnostics));
 
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<JavaFileObject>();
         JavaFileObject source = factPutSource("InvalidFactPut", "\"5000\"");
 
         Boolean compiled = compiler.getTask(null, null, diagnostics,
-            Arrays.asList("-classpath", System.getProperty("java.class.path"), "-proc:none"),
-            null, Collections.singletonList(source)).call();
+            options, null, Collections.singletonList(source)).call();
 
         assertFalse(compiled.booleanValue(), () -> diagnosticsText(diagnostics));
         assertTrue(diagnostics.getDiagnostics().stream()
