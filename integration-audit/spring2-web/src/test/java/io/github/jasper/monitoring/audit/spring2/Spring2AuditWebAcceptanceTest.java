@@ -65,6 +65,12 @@ class Spring2AuditWebAcceptanceTest {
     }
 
     @Test
+    void usesMyBatisRepositoryForDurableAuditEvidence() {
+        assertTrue(repository instanceof MyBatisMonitoringRepository,
+            "The integration host must persist audit evidence through MyBatis, never the memory adapter");
+    }
+
+    @Test
     void rejectsMissingAndUnknownFixturePrincipals() {
         assertEquals(HttpStatus.UNAUTHORIZED,
             restTemplate.getForEntity(url("/audit/reports/report-a"), String.class).getStatusCode());
