@@ -89,7 +89,7 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
         if (row == null) return null;
         return SecurityEvent.builder().eventId(row.getEventId()).systemId(row.getSystemId()).eventType(row.getEventType())
             .occurredAt(row.getOccurredAt()).receivedAt(row.getReceivedAt()).userId(row.getUserId()).accountType(row.getAccountType())
-            .sourceIp(row.getSourceIp()).requestId(row.getRequestId()).action(row.getAction()).result(row.getResult())
+            .sourceIp(row.getSourceIp()).deviceIdHash(row.getDeviceIdHash()).sessionIdHash(row.getSessionIdHash()).requestId(row.getRequestId()).traceId(row.getTraceId()).action(row.getAction()).result(row.getResult()).reasonCode(row.getReasonCode()).resourceType(row.getResourceType()).resourceId(row.getResourceId()).orgScope(row.getOrgScope())
             .dataCount(row.getDataCount()).dataCountKnown(row.isDataCountKnown()).latencyMs(row.getLatencyMs())
             .latencyMsKnown(row.isLatencyMsKnown()).inputStatus(row.getInputStatus()).build();
     }

@@ -1,13 +1,16 @@
 -- Host migration v4 for aggregate persistence. Fresh installations receive these objects from monitoring-schema.sql.
-ALTER TABLE security_alert ADD COLUMN version BIGINT NOT NULL DEFAULT 0;
-ALTER TABLE control_action ADD COLUMN version BIGINT NOT NULL DEFAULT 0;
+-- The IF NOT EXISTS clauses make this script repeatable on H2 and MySQL 8.0.29+.
+ALTER TABLE security_alert ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE control_action ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS security_event_fact (
     event_id VARCHAR(128) NOT NULL, fact_key VARCHAR(128) NOT NULL, value_type VARCHAR(32) NOT NULL,
-    value_text VARCHAR(2048) NOT NULL, source_type VARCHAR(64) NOT NULL, PRIMARY KEY (event_id, fact_key)
+    value_text VARCHAR(2048) NOT NULL, source_type VARCHAR(64) NOT NULL, PRIMARY KEY (event_id, fact_key),
+    CONSTRAINT fk_v4_event_fact_event FOREIGN KEY (event_id) REFERENCES security_event (event_id)
 );
 CREATE TABLE IF NOT EXISTS control_action_attempt (
     control_id VARCHAR(128) NOT NULL, attempt_no INTEGER NOT NULL, status VARCHAR(32) NOT NULL,
-    failure_reason VARCHAR(512), attempted_at TIMESTAMP NOT NULL, PRIMARY KEY (control_id, attempt_no)
+    failure_reason VARCHAR(512), attempted_at TIMESTAMP NOT NULL, PRIMARY KEY (control_id, attempt_no),
+    CONSTRAINT fk_v4_control_attempt_control FOREIGN KEY (control_id) REFERENCES control_action (control_id)
 );
 CREATE TABLE IF NOT EXISTS notification_delivery (
     delivery_id VARCHAR(128) NOT NULL, channel VARCHAR(128) NOT NULL, aggregate_id VARCHAR(128) NOT NULL,
