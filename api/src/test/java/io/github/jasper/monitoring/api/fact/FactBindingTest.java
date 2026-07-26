@@ -2,6 +2,7 @@ package io.github.jasper.monitoring.api.fact;
 
 import io.github.jasper.monitoring.api.action.ActionContract;
 import io.github.jasper.monitoring.api.action.ActionType;
+import io.github.jasper.monitoring.api.event.ActionExecution;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -9,6 +10,7 @@ import java.lang.reflect.Modifier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,7 +18,7 @@ class FactBindingTest {
 
     @Test
     void actionSpecificProviderDoesNotApplyToSiblingActions() {
-        ActionFactProvider provider = () -> ActionFacts.builder().build();
+        ActionFactProvider provider = execution -> ActionFacts.builder().build();
         FactBinding binding = FactBinding.forAction(FirstExport.class, provider, DataCountFact.class);
 
         assertTrue(binding.appliesTo(FirstExport.class));
@@ -29,11 +31,26 @@ class FactBindingTest {
     @Test
     void contractProviderExplicitlyAppliesToAllImplementations() {
         FactBinding binding = FactBinding.forContract(ExportContract.class,
-            () -> ActionFacts.builder().build(), DataCountFact.class);
+            execution -> ActionFacts.builder().build(), DataCountFact.class);
 
         assertTrue(binding.appliesTo(FirstExport.class));
         assertTrue(binding.appliesTo(SecondExport.class));
         assertFalse(binding.appliesTo(UnrelatedAction.class));
+    }
+
+    @Test
+    void providerReceivesTheSameExecutionContext() {
+        ActionExecution execution = new ActionExecution() {
+        };
+        ActionExecution[] observed = new ActionExecution[1];
+        ActionFactProvider provider = current -> {
+            observed[0] = current;
+            return ActionFacts.builder().build();
+        };
+
+        provider.provide(execution);
+
+        assertSame(execution, observed[0]);
     }
 
     @Test
