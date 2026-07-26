@@ -9,13 +9,24 @@ import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
+import io.github.jasper.monitoring.api.action.ActionCatalog;
+import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.control.ControlCatalog;
+import io.github.jasper.monitoring.api.control.ControlType;
+import io.github.jasper.monitoring.api.fact.FactBinding;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.core.application.ActionEventRecorder;
+import io.github.jasper.monitoring.core.application.DefaultMonitoringRuntime;
+import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
+import io.github.jasper.monitoring.core.application.MonitoringService;
+import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
+import io.github.jasper.monitoring.core.application.TypedRuleEvaluationService;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
 import io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger;
 import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
+import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
 import io.github.jasper.monitoring.core.domain.rule.DefaultRuleCatalog;
 import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
 import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
@@ -29,6 +40,8 @@ import io.github.jasper.monitoring.core.application.authorization.ResourceAccess
 import io.github.jasper.monitoring.core.application.SecurityMonitor;
 import io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepository;
 import io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepositoryRegistrar;
+import io.github.jasper.monitoring.mybatis.repository.MyBatisControlExecutionStore;
+import io.github.jasper.monitoring.mybatis.repository.MyBatisMonitoringStore;
 import io.github.jasper.monitoring.spring.support.ConfiguredTrustedProxyResolver;
 import io.github.jasper.monitoring.spring.support.FrontendSignalRecorder;
 import io.github.jasper.monitoring.spring.support.MdcTraceBridge;
@@ -72,6 +85,75 @@ public class AbnormalAccessMonitorAutoConfiguration {
     public MonitoringRepository abnormalAccessMyBatisMonitoringRepository(SqlSessionFactory sqlSessionFactory) {
         MyBatisMonitoringRepositoryRegistrar.register(sqlSessionFactory);
         return new MyBatisMonitoringRepository(sqlSessionFactory);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean(SqlSessionFactory.class)
+    public MyBatisMonitoringStore abnormalAccessMyBatisMonitoringStore(SqlSessionFactory sqlSessionFactory) {
+        return new MyBatisMonitoringStore(sqlSessionFactory);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean(SqlSessionFactory.class)
+    public MyBatisControlExecutionStore abnormalAccessMyBatisControlExecutionStore(
+            SqlSessionFactory sqlSessionFactory) {
+        return new MyBatisControlExecutionStore(sqlSessionFactory);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ActionCatalog abnormalAccessActionCatalog() {
+        ActionCatalog catalog = new ActionCatalog();
+        BuiltInActions.registerInto(catalog);
+        catalog.freeze();
+        return catalog;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MonitoringRuntimePort.class)
+    public DefaultMonitoringRuntime abnormalAccessMonitoringRuntime(ActionCatalog catalog,
+            ObjectProvider<FactBinding> bindings) {
+        List<FactBinding> values = new ArrayList<FactBinding>();
+        for (FactBinding binding : bindings) values.add(binding);
+        return new DefaultMonitoringRuntime(catalog, values);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ControlCatalog<ControlHandler> abnormalAccessControlCatalog(ControlHandlerRegistry handlers) {
+        ControlCatalog.Builder<ControlHandler> catalog = ControlCatalog.builder();
+        for (ControlType type : ControlType.values()) {
+            java.util.Optional<ControlHandler> handler = handlers.find(ControlActionType.valueOf(type.name()));
+            if (handler.isPresent()) catalog.bind(type, handler.get());
+        }
+        return catalog.freeze();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ControlExecutionService abnormalAccessControlExecutionService(
+            MyBatisControlExecutionStore store, ControlCatalog<ControlHandler> catalog) {
+        return new ControlExecutionService(store, catalog, Clock.systemUTC());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MonitoringService.RuleEvaluationPort.class)
+    public TypedRuleEvaluationService abnormalAccessTypedRuleEvaluationService(
+            MyBatisMonitoringStore store, AbnormalAccessMonitorProperties properties,
+            ControlExecutionService controls, NotificationChannel notifications) {
+        return new TypedRuleEvaluationService(store, store, store, store, DefaultRuleCatalog.typedRules(),
+            properties.getMode(), controls, notifications, Clock.systemUTC());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public MonitoringService abnormalAccessMonitoringService(AbnormalAccessMonitorProperties properties,
+            MyBatisMonitoringStore store, MonitoringRuntimePort runtime,
+            MonitoringService.RuleEvaluationPort evaluator) {
+        return new MonitoringService(store, new SecurityEventAssembler(properties.getSystemId(), Clock.systemUTC()),
+            runtime, evaluator);
     }
 
     /** 创建告警处置生命周期服务。 */
@@ -303,6 +385,13 @@ public class AbnormalAccessMonitorAutoConfiguration {
         @ConditionalOnMissingBean(AnnotatedActionMonitoringAspect.class)
         AnnotatedActionMonitoringAspect abnormalAccessAnnotatedActionMonitoringAspect(ListableBeanFactory beanFactory) {
             return new AnnotatedActionMonitoringAspect(beanFactory);
+        }
+
+        @Bean("abnormalAccessTypedMonitorActionAspect")
+        @ConditionalOnMissingBean(TypedMonitorActionAspect.class)
+        TypedMonitorActionAspect abnormalAccessTypedMonitorActionAspect(MonitoringService monitoring,
+                MonitoringContextAccessor context) {
+            return new TypedMonitorActionAspect(monitoring, context);
         }
     }
 
