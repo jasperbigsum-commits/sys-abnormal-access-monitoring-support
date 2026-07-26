@@ -4,6 +4,10 @@ import io.github.jasper.monitoring.core.domain.RuleMatch;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.rule.DefaultRuleCatalog;
 import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
+import io.github.jasper.monitoring.core.domain.rule.RuleEvaluationContext;
+import io.github.jasper.monitoring.api.action.ActionDefinition;
+import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
+import io.github.jasper.monitoring.api.action.ActionType;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,7 +32,7 @@ class DefaultRuleCatalogAuthenticationTest {
             history.add(loginFailure("account-hash-" + index));
         }
 
-        assertFalse(rule("AUTH-01").evaluate(history.get(4), history).isPresent());
+        assertFalse(evaluate(rule("AUTH-01"), history.get(4), history).isPresent());
     }
 
     @Test
@@ -38,7 +42,7 @@ class DefaultRuleCatalogAuthenticationTest {
             history.add(loginFailure("account-hash"));
         }
 
-        Optional<RuleMatch> match = rule("AUTH-01").evaluate(history.get(4), history);
+        Optional<RuleMatch> match = evaluate(rule("AUTH-01"), history.get(4), history);
 
         assertTrue(match.isPresent());
         assertEquals("attempted:account-hash", match.get().getSubject());
@@ -52,7 +56,7 @@ class DefaultRuleCatalogAuthenticationTest {
             history.add(loginFailure(null));
         }
 
-        Optional<RuleMatch> match = rule("AUTH-01").evaluate(history.get(4), history);
+        Optional<RuleMatch> match = evaluate(rule("AUTH-01"), history.get(4), history);
 
         assertTrue(match.isPresent());
         assertEquals(SOURCE_IP, match.get().getSubject());
@@ -65,7 +69,7 @@ class DefaultRuleCatalogAuthenticationTest {
             history.add(loginFailure("account-hash-" + index));
         }
 
-        Optional<RuleMatch> match = rule("AUTH-02").evaluate(history.get(9), history);
+        Optional<RuleMatch> match = evaluate(rule("AUTH-02"), history.get(9), history);
 
         assertTrue(match.isPresent());
         assertEquals("ip:" + SOURCE_IP, match.get().getSubject());
@@ -81,7 +85,7 @@ class DefaultRuleCatalogAuthenticationTest {
             history.add(loginSuccess());
         }
 
-        assertFalse(rule("AUTH-02").evaluate(history.get(9), history).isPresent());
+        assertFalse(evaluate(rule("AUTH-02"), history.get(9), history).isPresent());
     }
 
     @Test
@@ -90,9 +94,9 @@ class DefaultRuleCatalogAuthenticationTest {
         SecurityEvent upperCase = concurrentSession("TRUE");
         SecurityEvent numeric = concurrentSession("1");
 
-        assertTrue(rule("SESS-01").evaluate(canonical, Collections.singletonList(canonical)).isPresent());
-        assertFalse(rule("SESS-01").evaluate(upperCase, Collections.singletonList(upperCase)).isPresent());
-        assertFalse(rule("SESS-01").evaluate(numeric, Collections.singletonList(numeric)).isPresent());
+        assertTrue(evaluate(rule("SESS-01"), canonical, Collections.singletonList(canonical)).isPresent());
+        assertFalse(evaluate(rule("SESS-01"), upperCase, Collections.singletonList(upperCase)).isPresent());
+        assertFalse(evaluate(rule("SESS-01"), numeric, Collections.singletonList(numeric)).isPresent());
     }
 
     @Test
@@ -100,16 +104,28 @@ class DefaultRuleCatalogAuthenticationTest {
         SecurityEvent earlier = export(Long.MAX_VALUE, NOW);
         SecurityEvent current = export(1L, NOW);
 
-        assertTrue(rule("EXPT-02").evaluate(current, Arrays.asList(earlier, current)).isPresent());
+        assertTrue(evaluate(rule("EXPT-02"), current, Arrays.asList(earlier, current)).isPresent());
     }
 
     private static DetectionRule rule(String ruleId) {
-        for (DetectionRule rule : DefaultRuleCatalog.initialRules()) {
+        for (DetectionRule rule : DefaultRuleCatalog.typedRules()) {
             if (ruleId.equals(rule.getRuleId())) {
                 return rule;
             }
         }
         throw new AssertionError("Missing rule " + ruleId);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static Optional<RuleMatch> evaluate(DetectionRule rule, SecurityEvent event,
+            List<SecurityEvent> history) {
+        Class<? extends ActionType> actionType =
+            (Class<? extends ActionType>) rule.definition().getActionTypes().iterator().next();
+        ActionDefinition action = ActionDefinition.builder("test:action")
+            .eventType(event.getEventType()).resourceType("test")
+            .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
+        return RuleEvaluationContext.builder(event, actionType, action)
+            .history(history).build().evaluate(rule).getMatch();
     }
 
     private static SecurityEvent loginFailure(String attemptedAccountHash) {

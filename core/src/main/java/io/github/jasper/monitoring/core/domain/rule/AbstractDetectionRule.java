@@ -6,38 +6,28 @@ import io.github.jasper.monitoring.core.domain.RuleMatch;
 
 
 import io.github.jasper.monitoring.api.ControlActionType;
-import io.github.jasper.monitoring.api.RiskLevel;
+import io.github.jasper.monitoring.api.rule.RuleDefinition;
 import io.github.jasper.monitoring.api.rule.RuleType;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 /** Shared immutable response metadata for built-in reusable rules. */
-abstract class AbstractDetectionRule implements DetectionRule<AbstractDetectionRule.LegacyRuleType> {
-    static final class LegacyRuleType implements RuleType {
-        private LegacyRuleType() {
-        }
-    }
+abstract class AbstractDetectionRule<R extends RuleType> implements DetectionRule<R> {
     private static final Duration DEFAULT_CONTROL_TTL = Duration.ofMinutes(15);
 
-    private final String ruleId;
-    private final RiskLevel riskLevel;
-    private final List<ControlActionType> actions;
+    private final RuleDefinition<R> definition;
     private final String reason;
 
-    AbstractDetectionRule(String ruleId, RiskLevel riskLevel, List<ControlActionType> actions, String reason) {
-        this.ruleId = Objects.requireNonNull(ruleId, "ruleId");
-        this.riskLevel = Objects.requireNonNull(riskLevel, "riskLevel");
-        this.actions = Collections.unmodifiableList(new ArrayList<>(Objects.requireNonNull(actions, "actions")));
+    AbstractDetectionRule(RuleDefinition<R> definition, String reason) {
+        this.definition = Objects.requireNonNull(definition, "definition");
         this.reason = Objects.requireNonNull(reason, "reason");
     }
 
     @Override
-    public final String getRuleId() {
-        return ruleId;
+    public final RuleDefinition<R> definition() {
+        return definition;
     }
 
     protected final Optional<RuleMatch> match(SecurityEvent event) {
@@ -46,7 +36,8 @@ abstract class AbstractDetectionRule implements DetectionRule<AbstractDetectionR
 
     protected final Optional<RuleMatch> match(SecurityEvent event, String subject, Duration controlTtl) {
         String resource = event.getResourceType() == null ? "" : event.getResourceType() + ":" + nullToEmpty(event.getResourceId());
-        return Optional.of(new RuleMatch(ruleId, riskLevel, subject, resource, reason, actions, controlTtl));
+        return Optional.of(new RuleMatch(definition.getId(), definition.getRisk(), subject, resource, reason,
+            new ArrayList<ControlActionType>(definition.getControls()), controlTtl));
     }
 
     private static String nullToEmpty(String value) {

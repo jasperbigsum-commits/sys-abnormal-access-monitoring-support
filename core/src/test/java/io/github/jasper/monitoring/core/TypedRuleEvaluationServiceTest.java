@@ -87,9 +87,6 @@ class TypedRuleEvaluationServiceTest {
             return Optional.of(new RuleMatch("QUERY-01", RiskLevel.HIGH, context.getEvent().subject(),
                 "reports", "query observed", Collections.singletonList(ControlActionType.RECORD)));
         }
-        @Override public Optional<RuleMatch> evaluate(SecurityEvent event, List<SecurityEvent> history) {
-            throw new AssertionError("legacy evaluation must not be used");
-        }
     }
 
     static final class FixedRuntime implements io.github.jasper.monitoring.core.application.MonitoringRuntimePort {

@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class DefaultRuleCatalogTypedIntegrationTest {
     @Test
-    void exposesAllLegacyBaselineRulesThroughFrozenTypedCatalog() {
+    void exposesEveryBuiltInRuleThroughFrozenTypedCatalog() {
         RuleCatalog catalog = DefaultRuleCatalog.typedCatalog();
 
         assertTrue(catalog.isFrozen());

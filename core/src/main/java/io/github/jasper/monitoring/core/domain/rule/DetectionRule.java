@@ -11,11 +11,9 @@ import java.util.Optional;
  * <p>类型化规则评估服务会先持久化当前事件，再提供包含该事件的时间顺序历史。
  * 规则实现只返回命中证据；告警持久化、通知和宿主控制动作均由规则之外的组件负责。</p>
  */
-public interface DetectionRule<R extends RuleType> extends LegacyDetectionRule {
-    /** @return the complete static definition for the typed runtime path */
-    default RuleDefinition<R> definition() {
-        throw new UnsupportedOperationException("Legacy rule has no typed definition");
-    }
+public interface DetectionRule<R extends RuleType> {
+    /** @return the complete static definition for this rule */
+    RuleDefinition<R> definition();
 
     /** @return the statically registered rule token */
     default Class<R> type() {
@@ -23,15 +21,11 @@ public interface DetectionRule<R extends RuleType> extends LegacyDetectionRule {
     }
 
     /** Returns the stable identifier owned by the typed definition. */
-    @Override
     default String getRuleId() {
         return definition().getId();
     }
 
     /** Evaluates through the typed context without consulting an external policy. */
-    default Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
-        throw new UnsupportedOperationException(
-            "Typed rule must implement evaluate(RuleEvaluationContext)");
-    }
+    Optional<RuleMatch> evaluate(RuleEvaluationContext context);
 
 }

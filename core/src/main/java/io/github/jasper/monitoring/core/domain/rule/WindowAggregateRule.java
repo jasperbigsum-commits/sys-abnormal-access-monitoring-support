@@ -2,14 +2,12 @@ package io.github.jasper.monitoring.core.domain.rule;
 
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.api.error.MonitoringValidationException;
-
-
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.RuleMatch;
 
 
-import io.github.jasper.monitoring.api.ControlActionType;
-import io.github.jasper.monitoring.api.RiskLevel;
+import io.github.jasper.monitoring.api.rule.RuleDefinition;
+import io.github.jasper.monitoring.api.rule.RuleType;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
@@ -25,7 +23,7 @@ import java.util.function.Predicate;
  * <p>触发条件和候选条件使宿主可以使用事件类型或标准化属性定义规则，而无需为每种业务规则
  * 新建专用实现类。</p>
  */
-public final class WindowAggregateRule extends AbstractDetectionRule {
+public final class WindowAggregateRule<R extends RuleType> extends AbstractDetectionRule<R> {
     /** 基线规则支持的聚合方式。 */
     public enum Aggregation {
         /** 统计匹配事件数量。 */
@@ -54,43 +52,36 @@ public final class WindowAggregateRule extends AbstractDetectionRule {
     /**
      * 创建滚动窗口聚合规则。
      *
-     * @param ruleId 用于告警和控制关联的稳定标识
+     * @param definition 规则的唯一静态定义，包含窗口、阈值、风险和控制动作
      * @param trigger 决定当前事件是否开始评估的条件
      * @param candidate 应用于纳入聚合的历史事件条件
-     * @param window 包含起止边界的回溯窗口
-     * @param threshold 达到该正数阈值时规则命中
      * @param scope 当前事件与候选事件的关联范围
      * @param aggregation 对匹配候选事件使用的计算方式
-     * @param riskLevel 达到阈值时输出的风险级别
-     * @param actions 命中时建议执行的控制动作
      * @param reason 面向操作人的命中说明
      */
-    public WindowAggregateRule(String ruleId, Predicate<SecurityEvent> trigger, Predicate<SecurityEvent> candidate,
-                               Duration window, long threshold, Scope scope, Aggregation aggregation,
-                               RiskLevel riskLevel, List<ControlActionType> actions, String reason) {
-        super(ruleId, riskLevel, actions, reason);
+    public WindowAggregateRule(RuleDefinition<R> definition, Predicate<SecurityEvent> trigger,
+                               Predicate<SecurityEvent> candidate, Scope scope, Aggregation aggregation,
+                               String reason) {
+        super(definition, reason);
         this.trigger = Objects.requireNonNull(trigger, "trigger");
         this.candidate = Objects.requireNonNull(candidate, "candidate");
-        this.window = Objects.requireNonNull(window, "window");
+        this.window = definition.getHistoryWindow();
         if (window.isNegative() || window.isZero()) {
             throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
                 "window must be positive");
         }
-        if (threshold <= 0) {
-            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
-                "threshold must be positive");
-        }
-        this.threshold = threshold;
+        this.threshold = definition.getThreshold();
         this.scope = Objects.requireNonNull(scope, "scope");
         this.aggregation = Objects.requireNonNull(aggregation, "aggregation");
     }
 
     @Override
-    public Optional<RuleMatch> evaluate(SecurityEvent event, List<SecurityEvent> history) {
+    public Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
+        SecurityEvent event = context.getEvent();
         if (!trigger.test(event)) {
             return Optional.empty();
         }
-        return aggregate(event, history) >= threshold ? match(event) : Optional.<RuleMatch>empty();
+        return aggregate(event, context.getHistory()) >= threshold ? match(event) : Optional.<RuleMatch>empty();
     }
 
     private long aggregate(SecurityEvent event, List<SecurityEvent> history) {
