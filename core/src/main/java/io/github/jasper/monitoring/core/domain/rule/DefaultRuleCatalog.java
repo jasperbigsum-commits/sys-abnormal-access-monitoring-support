@@ -148,7 +148,7 @@ public final class DefaultRuleCatalog {
             .historyWindow(historyWindow)
             .threshold(threshold)
             .risk(risk)
-            .mode(RuleMode.OBSERVE)
+            .mode(RuleMode.ENFORCE)
             .source(RuleSource.INTERNAL);
         for (ControlActionType control : controls) {
             builder.control(control);
