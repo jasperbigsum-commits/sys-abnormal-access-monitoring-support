@@ -30,6 +30,17 @@ CREATE TABLE security_event (
 
 CREATE INDEX idx_security_event_occurred_at ON security_event (occurred_at);
 CREATE INDEX idx_security_event_subject_at ON security_event (user_id, source_ip, occurred_at);
+CREATE INDEX idx_security_event_system_at ON security_event (system_id, occurred_at, event_id);
+
+CREATE TABLE security_event_fact (
+    event_id VARCHAR(128) NOT NULL,
+    fact_key VARCHAR(128) NOT NULL,
+    value_type VARCHAR(32) NOT NULL,
+    value_text VARCHAR(2048) NOT NULL,
+    source_type VARCHAR(64) NOT NULL,
+    PRIMARY KEY (event_id, fact_key),
+    CONSTRAINT fk_event_fact_event FOREIGN KEY (event_id) REFERENCES security_event (event_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件规范化事实值';
 
 CREATE TABLE security_event_role (
     event_id VARCHAR(128) NOT NULL COMMENT '事件唯一标识',
@@ -77,10 +88,12 @@ CREATE TABLE security_alert (
     first_seen TIMESTAMP NOT NULL COMMENT '首次发现时间',
     last_seen TIMESTAMP NOT NULL COMMENT '最近发现时间',
     event_count INTEGER NOT NULL COMMENT '关联事件数量',
+    version BIGINT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
     PRIMARY KEY (alert_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全告警表';
 
 CREATE INDEX idx_security_alert_fingerprint_status ON security_alert (fingerprint, status);
+CREATE INDEX idx_security_alert_rule_status ON security_alert (rule_id, status, last_seen);
 
 CREATE TABLE alert_event_link (
     alert_id VARCHAR(128) NOT NULL COMMENT '告警唯一标识',
@@ -100,6 +113,7 @@ CREATE TABLE control_action (
     status VARCHAR(32) NOT NULL COMMENT '控制执行状态',
     failure_reason VARCHAR(512) COMMENT '失败原因',
     executed_at TIMESTAMP NOT NULL COMMENT '执行时间',
+    version BIGINT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
     PRIMARY KEY (control_id),
     UNIQUE (idempotency_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='控制动作执行记录表';
@@ -128,3 +142,34 @@ CREATE TABLE security_whitelist (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全规则白名单表';
 
 CREATE INDEX idx_security_whitelist_lookup ON security_whitelist (rule_id, subject, expires_at);
+
+CREATE TABLE control_action_attempt (
+    control_id VARCHAR(128) NOT NULL,
+    attempt_no INTEGER NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    failure_reason VARCHAR(512),
+    attempted_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (control_id, attempt_no),
+    CONSTRAINT fk_control_attempt_control FOREIGN KEY (control_id) REFERENCES control_action (control_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='控制执行尝试历史';
+
+CREATE TABLE notification_delivery (
+    delivery_id VARCHAR(128) NOT NULL,
+    channel VARCHAR(128) NOT NULL,
+    aggregate_id VARCHAR(128) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (delivery_id),
+    UNIQUE (channel, aggregate_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知投递状态';
+
+CREATE TABLE management_audit (
+    audit_id VARCHAR(128) NOT NULL,
+    system_id VARCHAR(128) NOT NULL,
+    actor_id VARCHAR(128) NOT NULL,
+    action VARCHAR(128) NOT NULL,
+    target_id VARCHAR(128) NOT NULL,
+    occurred_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (audit_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理操作脱敏审计记录';
+CREATE INDEX idx_management_audit_system_at ON management_audit (system_id, occurred_at, audit_id);
