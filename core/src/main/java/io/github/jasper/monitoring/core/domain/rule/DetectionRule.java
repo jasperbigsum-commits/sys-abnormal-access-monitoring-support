@@ -1,11 +1,9 @@
 package io.github.jasper.monitoring.core.domain.rule;
 
-import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
 import io.github.jasper.monitoring.core.domain.RuleMatch;
-
-
-import java.util.List;
+import io.github.jasper.monitoring.api.rule.RuleDefinition;
+import io.github.jasper.monitoring.api.rule.RuleType;
 import java.util.Optional;
 
 /**
@@ -14,16 +12,20 @@ import java.util.Optional;
  * <p>{@link DefaultSecurityMonitor} 会先持久化当前事件，再提供包含该事件的时间顺序历史。
  * 规则实现只返回命中证据；告警持久化、通知和宿主控制动作均由规则之外的组件负责。</p>
  */
-public interface DetectionRule {
-    /** @return 用于告警、控制和白名单的稳定规则标识 */
-    String getRuleId();
+public interface DetectionRule<R extends RuleType> extends LegacyDetectionRule {
+    /** @return the complete static definition for the typed runtime path */
+    default RuleDefinition<R> definition() {
+        throw new UnsupportedOperationException("Legacy rule has no typed definition");
+    }
 
-    /**
-     * 使用提供的有限历史评估一条事件。
-     *
-     * @param event 当前正在记录的事件
-     * @param history 可供规则使用的时间顺序事件历史；由 {@link DefaultSecurityMonitor} 调用时包含 {@code event}
-     * @return 含风险级别和建议动作的命中结果；未违反规则时返回空值
-     */
-    Optional<RuleMatch> evaluate(SecurityEvent event, List<SecurityEvent> history);
+    /** @return the statically registered rule token */
+    default Class<R> type() {
+        return definition().getType();
+    }
+
+    /** Evaluates through the typed context without consulting an external policy. */
+    default Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
+        return evaluate(context.getEvent(), context.getHistory());
+    }
+
 }

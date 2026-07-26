@@ -7,6 +7,7 @@ import io.github.jasper.monitoring.core.domain.RuleMatch;
 
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.RiskLevel;
+import io.github.jasper.monitoring.api.rule.RuleType;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,7 +16,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** Shared immutable response metadata for built-in reusable rules. */
-abstract class AbstractDetectionRule implements DetectionRule {
+abstract class AbstractDetectionRule implements DetectionRule<AbstractDetectionRule.LegacyRuleType> {
+    static final class LegacyRuleType implements RuleType {
+        private LegacyRuleType() {
+        }
+    }
     private static final Duration DEFAULT_CONTROL_TTL = Duration.ofMinutes(15);
 
     private final String ruleId;
