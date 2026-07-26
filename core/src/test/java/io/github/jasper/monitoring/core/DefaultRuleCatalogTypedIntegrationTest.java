@@ -51,4 +51,22 @@ class DefaultRuleCatalogTypedIntegrationTest {
         assertTrue(export.getMatch().isPresent());
         assertEquals(RuleEvaluationContext.Status.SKIPPED_NOT_APPLICABLE, unrelated.getStatus());
     }
+
+    @Test
+    void frontendSupplementalSignalIsNotEligibleForAnyBuiltInRule() {
+        io.github.jasper.monitoring.api.action.ActionCatalog actions =
+            new io.github.jasper.monitoring.api.action.ActionCatalog();
+        BuiltInActions.registerInto(actions);
+        actions.freeze();
+        ActionDefinition frontendSignal = actions.require(BuiltInActions.FrontendSignal.class);
+        SecurityEvent event = SecurityEvent.builder().eventType(SecurityEventType.QUERY)
+            .occurredAt(Instant.parse("2026-07-26T00:00:00Z")).sourceIp("203.0.113.8").build();
+
+        for (DetectionRule<?> rule : DefaultRuleCatalog.typedRules()) {
+            RuleEvaluationContext.Evaluation result = RuleEvaluationContext.builder(
+                event, BuiltInActions.FrontendSignal.class, frontendSignal).build().evaluate(rule);
+            assertEquals(RuleEvaluationContext.Status.SKIPPED_NOT_APPLICABLE, result.getStatus(),
+                rule.getRuleId());
+        }
+    }
 }
