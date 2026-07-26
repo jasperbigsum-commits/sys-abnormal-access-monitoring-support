@@ -12,6 +12,7 @@ import io.github.jasper.monitoring.api.management.query.RuleQuery;
 import io.github.jasper.monitoring.api.management.query.SecurityEventQuery;
 import io.github.jasper.monitoring.api.management.query.WhitelistQuery;
 import java.util.Optional;
+import io.github.jasper.monitoring.core.domain.ControlCommand;
 
 /** Database-backed management projections and optimistic state transitions. */
 public interface ManagementQueryRepository {
@@ -19,7 +20,8 @@ public interface ManagementQueryRepository {
     Optional<SecurityEventView> findEventView(String scope, String id);
     ManagementPage<AlertView> searchAlerts(String scope, AlertQuery query);
     Optional<AlertView> findAlertView(String scope, String id);
-    boolean transitionAlert(String scope, String id, long version, String status);
+    boolean transitionAlert(String scope, String id, long version, String status, String actorId, String reason,
+                            String dispositionId);
     ManagementPage<RuleView> searchRules(String scope, RuleQuery query);
     Optional<RuleView> findRuleView(String scope, String id);
     ManagementPage<WhitelistView> searchWhitelists(String scope, WhitelistQuery query);
@@ -27,6 +29,7 @@ public interface ManagementQueryRepository {
     boolean transitionWhitelist(String scope, String id, long version, boolean active, String actorId, String reason);
     ManagementPage<ControlView> searchControls(String scope, ControlQuery query);
     Optional<ControlView> findControlView(String scope, String id);
+    Optional<ControlCommand> findControlCommand(String scope, String id);
     boolean transitionControl(String scope, String id, long version, String expectedStatus, String targetStatus,
                               String reason);
 }

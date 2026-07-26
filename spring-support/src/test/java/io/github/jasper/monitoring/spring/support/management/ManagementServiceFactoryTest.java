@@ -7,6 +7,6 @@ import org.junit.jupiter.api.Test;
 
 class ManagementServiceFactoryTest {
     @Test void requiresTrustedAuthorizer() {
-        assertThrows(NullPointerException.class,()->ManagementServiceFactory.create(null,null,null,null,Clock.systemUTC()));
+        assertThrows(NullPointerException.class,()->ManagementServiceFactory.create(null,null,null,null,null,Clock.systemUTC()));
     }
 }

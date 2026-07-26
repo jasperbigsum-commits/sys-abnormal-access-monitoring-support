@@ -43,6 +43,8 @@ import static org.junit.jupiter.api.Assertions.*;
         ControlCommand approval = new ControlCommand("approval", "a", "s", ControlActionType.REQUIRE_APPROVAL, null, "r");
         assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.AWAITING_APPROVAL, approvals.execute(approval).getStatus());
         assertEquals(0, calls.get());
+        assertThrows(IllegalStateException.class, () -> approvals.approve(approval, 9));
+        assertEquals(0, calls.get());
         assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.SUCCEEDED, approvals.approve(approval).getStatus());
         assertEquals(1, calls.get());
 

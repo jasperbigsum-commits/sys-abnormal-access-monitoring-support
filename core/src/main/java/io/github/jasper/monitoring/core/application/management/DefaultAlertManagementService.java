@@ -31,7 +31,8 @@ public final class DefaultAlertManagementService extends AbstractManagementServi
             success(actor, ManagementOperation.ALERT_READ, "alert", alertId); return view; });
     }
     @Override public AlertView acknowledge(ManagementActor actor, AlertAcknowledgeCommand command) {
-        return change(actor, ManagementOperation.ALERT_ACKNOWLEDGE, command.getAlertId(), command.getExpectedVersion(), "ACKNOWLEDGED");
+        return change(actor, ManagementOperation.ALERT_ACKNOWLEDGE, command.getAlertId(), command.getExpectedVersion(),
+            command.getReason(), command.getIdempotencyKey(), "ACKNOWLEDGED");
     }
     @Override public AlertView startInvestigation(ManagementActor actor, AlertStartInvestigationCommand command) {
         return change(actor, ManagementOperation.ALERT_INVESTIGATE, command, "IN_PROGRESS");
@@ -45,12 +46,14 @@ public final class DefaultAlertManagementService extends AbstractManagementServi
     private AlertView change(ManagementActor actor, ManagementOperation operation, VersionedReasonCommand command,
                              String status) {
         Objects.requireNonNull(command, "command");
-        return change(actor, operation, command.getResourceId(), command.getExpectedVersion(), status);
+        return change(actor, operation, command.getResourceId(), command.getExpectedVersion(), command.getReason(),
+            command.getIdempotencyKey(), status);
     }
     private AlertView change(final ManagementActor actor, final ManagementOperation operation, final String id,
-                             final long version, final String status) {
+                             final long version, final String reason, final String dispositionId, final String status) {
         access.require(actor, operation, "alert", id);
-        return transaction.required(() -> { requireUpdated(queries.transitionAlert(actor.getSystemScope(), id, version, status));
+        return transaction.required(() -> { requireUpdated(queries.transitionAlert(actor.getSystemScope(), id, version,
+                status, actor.getActorId(), reason, dispositionId));
             AlertView view = require(queries.findAlertView(actor.getSystemScope(), id), "alert", id);
             success(actor, operation, "alert", id); return view; });
     }

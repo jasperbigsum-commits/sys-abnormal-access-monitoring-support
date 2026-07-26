@@ -31,7 +31,10 @@ public final class ControlExecutionService {
         return executeAutomatic(command, false);
     }
 
-    public ControlExecution retry(ControlCommand command) { return executeAutomatic(command, true); }
+    public ControlExecution retry(ControlCommand command) { return executeAutomatic(command, true, null); }
+    public ControlExecution retry(ControlCommand command, long expectedVersion) {
+        return executeAutomatic(command, true, Long.valueOf(expectedVersion));
+    }
 
     /** Recovers a committed PENDING reservation after a worker lost the terminal write. */
     public ControlExecution recover(ControlCommand command) {
@@ -40,14 +43,32 @@ public final class ControlExecutionService {
     }
 
     public ControlExecution approve(ControlCommand command) {
+        return approve(command, null);
+    }
+
+    public ControlExecution approve(ControlCommand command, long expectedVersion) {
+        return approve(command, Long.valueOf(expectedVersion));
+    }
+
+    private ControlExecution approve(ControlCommand command, Long expectedVersion) {
         StoredControl awaiting = require(command.getIdempotencyKey(), ControlStatus.AWAITING_APPROVAL);
+        requireVersion(awaiting, expectedVersion);
         StoredControl pending = store.transition(command.getIdempotencyKey(), awaiting.version(),
             ControlStatus.AWAITING_APPROVAL, ControlStatus.PENDING, null, now());
         return invoke(command, pending);
     }
 
     public ControlExecution reject(String idempotencyKey, String reason) {
+        return reject(idempotencyKey, reason, null);
+    }
+
+    public ControlExecution reject(String idempotencyKey, String reason, long expectedVersion) {
+        return reject(idempotencyKey, reason, Long.valueOf(expectedVersion));
+    }
+
+    private ControlExecution reject(String idempotencyKey, String reason, Long expectedVersion) {
         StoredControl awaiting = require(idempotencyKey, ControlStatus.AWAITING_APPROVAL);
+        requireVersion(awaiting, expectedVersion);
         return store.transition(idempotencyKey, awaiting.version(), ControlStatus.AWAITING_APPROVAL,
             ControlStatus.REJECTED, reason, now()).execution();
     }
@@ -59,6 +80,10 @@ public final class ControlExecutionService {
     }
 
     private ControlExecution executeAutomatic(ControlCommand command, boolean retry) {
+        return executeAutomatic(command, retry, null);
+    }
+
+    private ControlExecution executeAutomatic(ControlCommand command, boolean retry, Long expectedVersion) {
         Optional<StoredControl> existing = store.find(command.getIdempotencyKey());
         StoredControl pending;
         if (!existing.isPresent()) {
@@ -66,6 +91,7 @@ public final class ControlExecutionService {
                 return store.find(command.getIdempotencyKey()).get().execution().replay();
             pending = store.find(command.getIdempotencyKey()).get();
         } else if (retry && existing.get().status() == ControlStatus.FAILED) {
+            requireVersion(existing.get(), expectedVersion);
             pending = store.transition(command.getIdempotencyKey(), existing.get().version(), ControlStatus.FAILED,
                 ControlStatus.PENDING, null, now());
         } else {
@@ -93,6 +119,11 @@ public final class ControlExecutionService {
         StoredControl value = store.find(key).orElseThrow(() -> new IllegalStateException("Unknown control: " + key));
         if (value.status() != status) throw new IllegalStateException("Expected " + status + " but was " + value.status());
         return value;
+    }
+    private static void requireVersion(StoredControl control, Long expectedVersion) {
+        if (expectedVersion != null && control.version() != expectedVersion.longValue()) {
+            throw new IllegalStateException("Control version changed");
+        }
     }
     private Instant now() { return Instant.now(clock); }
 }

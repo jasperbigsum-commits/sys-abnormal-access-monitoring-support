@@ -87,7 +87,7 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
     @Override public Optional<io.github.jasper.monitoring.api.management.model.SecurityEventView> findEventView(String s,String id){return management.findEventView(s,id);}
     @Override public io.github.jasper.monitoring.api.management.ManagementPage<io.github.jasper.monitoring.api.management.model.AlertView> searchAlerts(String s,io.github.jasper.monitoring.api.management.query.AlertQuery q){return management.searchAlerts(s,q);}
     @Override public Optional<io.github.jasper.monitoring.api.management.model.AlertView> findAlertView(String s,String id){return management.findAlertView(s,id);}
-    @Override public boolean transitionAlert(String s,String id,long v,String status){return management.transitionAlert(s,id,v,status);}
+    @Override public boolean transitionAlert(String s,String id,long v,String status,String actor,String reason,String dispositionId){return management.transitionAlert(s,id,v,status,actor,reason,dispositionId);}
     @Override public io.github.jasper.monitoring.api.management.ManagementPage<io.github.jasper.monitoring.api.management.model.RuleView> searchRules(String s,io.github.jasper.monitoring.api.management.query.RuleQuery q){return management.searchRules(s,q);}
     @Override public Optional<io.github.jasper.monitoring.api.management.model.RuleView> findRuleView(String s,String id){return management.findRuleView(s,id);}
     @Override public io.github.jasper.monitoring.api.management.ManagementPage<io.github.jasper.monitoring.api.management.model.WhitelistView> searchWhitelists(String s,io.github.jasper.monitoring.api.management.query.WhitelistQuery q){return management.searchWhitelists(s,q);}
@@ -95,6 +95,7 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
     @Override public boolean transitionWhitelist(String s,String id,long v,boolean a,String actor,String reason){return management.transitionWhitelist(s,id,v,a,actor,reason);}
     @Override public io.github.jasper.monitoring.api.management.ManagementPage<io.github.jasper.monitoring.api.management.model.ControlView> searchControls(String s,io.github.jasper.monitoring.api.management.query.ControlQuery q){return management.searchControls(s,q);}
     @Override public Optional<io.github.jasper.monitoring.api.management.model.ControlView> findControlView(String s,String id){return management.findControlView(s,id);}
+    @Override public Optional<io.github.jasper.monitoring.core.domain.ControlCommand> findControlCommand(String s,String id){return management.findControlCommand(s,id);}
     @Override public boolean transitionControl(String s,String id,long v,String expected,String target,String reason){return management.transitionControl(s,id,v,expected,target,reason);}
     @Override public void append(io.github.jasper.monitoring.core.domain.management.ManagementAuditRecord record){management.append(record);}
 

@@ -6,6 +6,8 @@ import java.util.List;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.Insert;
+import io.github.jasper.monitoring.mybatis.po.ControlActionPo;
 
 /** Fixed, scope-constrained management queries and optimistic transitions. */
 public interface ManagementQueryMapper {
@@ -30,6 +32,9 @@ public interface ManagementQueryMapper {
     @Update("UPDATE security_alert SET status=#{status}, version=version+1 WHERE alert_id=#{id} AND version=#{version} AND EXISTS (SELECT 1 FROM alert_event_link l JOIN security_event e ON e.event_id=l.event_id WHERE l.alert_id=security_alert.alert_id AND e.system_id=#{scope})")
     int transitionAlert(@Param("scope") String scope, @Param("id") String id, @Param("version") long version,
                         @Param("status") String status);
+    @Insert("INSERT INTO alert_disposition(disposition_id,alert_id,disposition_type,operator_id,comment_text,evidence_summary,created_at) VALUES(#{dispositionId},#{alertId},#{type},#{actorId},#{reason},NULL,CURRENT_TIMESTAMP)")
+    int insertAlertDisposition(@Param("dispositionId") String dispositionId,@Param("alertId") String alertId,
+        @Param("type") String type,@Param("actorId") String actorId,@Param("reason") String reason);
 
     @Select("SELECT rule_id AS id, rule_mode AS status, rule_version AS version FROM security_rule ORDER BY rule_id, rule_version DESC LIMIT #{limit} OFFSET #{offset}")
     List<ManagementRowPo> rules(@Param("limit") int limit, @Param("offset") long offset);
@@ -54,6 +59,8 @@ public interface ManagementQueryMapper {
     long countControls(@Param("scope") String scope, @Param("from") Instant from, @Param("to") Instant to);
     @Select("SELECT c.control_id AS id, c.status, c.version FROM control_action c WHERE c.control_id=#{id} AND EXISTS (SELECT 1 FROM alert_event_link l JOIN security_event e ON e.event_id=l.event_id WHERE l.alert_id=c.alert_id AND e.system_id=#{scope})")
     ManagementRowPo control(@Param("scope") String scope, @Param("id") String id);
+    @Select("SELECT c.control_id AS controlId,c.idempotency_key AS idempotencyKey,c.alert_id AS alertId,c.rule_id AS ruleId,c.subject,c.action_type AS action,c.expires_at AS expiresAt,c.status,c.failure_reason AS failureReason,c.executed_at AS executedAt,c.version FROM control_action c WHERE c.control_id=#{id} AND EXISTS (SELECT 1 FROM alert_event_link l JOIN security_event e ON e.event_id=l.event_id WHERE l.alert_id=c.alert_id AND e.system_id=#{scope})")
+    ControlActionPo controlCommand(@Param("scope") String scope,@Param("id") String id);
     @Update("UPDATE control_action SET status=#{target}, failure_reason=#{reason}, version=version+1 WHERE control_id=#{id} AND version=#{version} AND status=#{expected} AND EXISTS (SELECT 1 FROM alert_event_link l JOIN security_event e ON e.event_id=l.event_id WHERE l.alert_id=control_action.alert_id AND e.system_id=#{scope})")
     int transitionControl(@Param("scope") String scope, @Param("id") String id, @Param("version") long version,
                           @Param("expected") String expected, @Param("target") String target,

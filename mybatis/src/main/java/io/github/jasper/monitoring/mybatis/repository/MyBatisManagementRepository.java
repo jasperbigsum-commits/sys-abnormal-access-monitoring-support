@@ -18,6 +18,8 @@ import io.github.jasper.monitoring.core.port.ManagementQueryRepository;
 import io.github.jasper.monitoring.mybatis.mapper.ManagementAuditMapper;
 import io.github.jasper.monitoring.mybatis.mapper.ManagementQueryMapper;
 import io.github.jasper.monitoring.mybatis.po.ManagementRowPo;
+import io.github.jasper.monitoring.mybatis.po.ControlActionPo;
+import io.github.jasper.monitoring.core.domain.ControlCommand;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -47,8 +49,10 @@ public final class MyBatisManagementRepository implements ManagementQueryReposit
     @Override public Optional<AlertView> findAlertView(String scope, String id) {
         return read(session -> optionalAlert(session.getMapper(ManagementQueryMapper.class).alert(scope,id),scope));
     }
-    @Override public boolean transitionAlert(String scope,String id,long version,String status) {
-        return write(session -> session.getMapper(ManagementQueryMapper.class).transitionAlert(scope,id,version,status)==1);
+    @Override public boolean transitionAlert(String scope,String id,long version,String status,String actorId,String reason,String dispositionId) {
+        return write(session -> {ManagementQueryMapper mapper=session.getMapper(ManagementQueryMapper.class);
+            if(mapper.transitionAlert(scope,id,version,status)!=1)return false;
+            mapper.insertAlertDisposition(dispositionId,id,status,actorId,reason);return true;});
     }
     @Override public ManagementPage<RuleView> searchRules(String scope, RuleQuery query) {
         return read(session -> { ManagementQueryMapper mapper=session.getMapper(ManagementQueryMapper.class); ManagementPageRequest p=query.getPage();
@@ -77,6 +81,11 @@ public final class MyBatisManagementRepository implements ManagementQueryReposit
     }
     @Override public Optional<ControlView> findControlView(String scope,String id) {
         return read(session -> optionalControl(session.getMapper(ManagementQueryMapper.class).control(scope,id),scope));
+    }
+    @Override public Optional<ControlCommand> findControlCommand(String scope,String id) {
+        return read(session -> {ControlActionPo row=session.getMapper(ManagementQueryMapper.class).controlCommand(scope,id);
+            return row==null?Optional.<ControlCommand>empty():Optional.of(new ControlCommand(row.getIdempotencyKey(),
+                row.getAlertId(),row.getSubject(),row.getAction(),row.getExpiresAt(),row.getRuleId()));});
     }
     @Override public boolean transitionControl(String scope,String id,long version,String expected,String target,String reason) {
         return write(session -> session.getMapper(ManagementQueryMapper.class).transitionControl(scope,id,version,expected,target,reason)==1);

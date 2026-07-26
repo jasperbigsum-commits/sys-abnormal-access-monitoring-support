@@ -13,11 +13,16 @@ import io.github.jasper.monitoring.api.management.query.ControlQuery;
 import io.github.jasper.monitoring.core.port.ManagementQueryRepository;
 import io.github.jasper.monitoring.core.port.MonitoringTransaction;
 import java.util.Objects;
+import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
+import io.github.jasper.monitoring.core.domain.ControlCommand;
 
 /** Authorized control lifecycle operations. Host execution remains owned by the durable control worker. */
 public final class DefaultControlManagementService extends AbstractManagementService implements ControlManagementService {
+    private final ControlExecutionService executions;
     public DefaultControlManagementService(ManagementAccessGuard access, ManagementQueryRepository queries,
-                                           MonitoringTransaction transaction) { super(access, queries, transaction); }
+                                           MonitoringTransaction transaction, ControlExecutionService executions) {
+        super(access, queries, transaction); this.executions=Objects.requireNonNull(executions,"executions");
+    }
     @Override public ManagementPage<ControlView> search(final ManagementActor actor, final ControlQuery query) {
         Objects.requireNonNull(query, "query"); access.require(actor, ManagementOperation.CONTROL_READ, "control", "*");
         return transaction.required(() -> { ManagementPage<ControlView> page = queries.searchControls(actor.getSystemScope(), query);
@@ -29,20 +34,28 @@ public final class DefaultControlManagementService extends AbstractManagementSer
             success(actor, ManagementOperation.CONTROL_READ, "control", id); return view; });
     }
     @Override public ControlView approve(ManagementActor actor, ControlApprovalCommand command) {
-        return change(actor, ManagementOperation.CONTROL_APPROVE, command, "AWAITING_APPROVAL", "PENDING");
+        return execute(actor, ManagementOperation.CONTROL_APPROVE, command, "AWAITING_APPROVAL", 0);
     }
     @Override public ControlView reject(ManagementActor actor, ControlRejectionCommand command) {
-        return change(actor, ManagementOperation.CONTROL_REJECT, command, "AWAITING_APPROVAL", "REJECTED");
+        return execute(actor, ManagementOperation.CONTROL_REJECT, command, "AWAITING_APPROVAL", 1);
     }
     @Override public ControlView retryFailed(ManagementActor actor, ControlRetryCommand command) {
-        return change(actor, ManagementOperation.CONTROL_RETRY, command, "FAILED", "PENDING");
+        return execute(actor, ManagementOperation.CONTROL_RETRY, command, "FAILED", 2);
     }
-    private ControlView change(final ManagementActor actor, final ManagementOperation operation,
-                               final VersionedReasonCommand command, final String expected, final String target) {
+    private ControlView execute(final ManagementActor actor, final ManagementOperation operation,
+                                final VersionedReasonCommand command, final String expected, final int action) {
         Objects.requireNonNull(command, "command"); final String id = command.getResourceId();
         access.require(actor, operation, "control", id);
-        return transaction.required(() -> { requireUpdated(queries.transitionControl(actor.getSystemScope(), id,
-                command.getExpectedVersion(), expected, target, command.getReason()));
+        ControlCommand control = transaction.required(() -> {
+            ControlView current=require(queries.findControlView(actor.getSystemScope(),id),"control",id);
+            if(current.getVersion()!=command.getExpectedVersion()||!expected.equals(current.getStatus()))
+                throw new io.github.jasper.monitoring.api.error.ManagementConflictException("Control state changed");
+            return require(queries.findControlCommand(actor.getSystemScope(),id),"control",id);
+        });
+        if(action==0) executions.approve(control,command.getExpectedVersion());
+        else if(action==1) executions.reject(control.getIdempotencyKey(),command.getReason(),command.getExpectedVersion());
+        else executions.retry(control,command.getExpectedVersion());
+        return transaction.required(() -> {
             ControlView view = require(queries.findControlView(actor.getSystemScope(), id), "control", id);
             success(actor, operation, "control", id); return view; });
     }

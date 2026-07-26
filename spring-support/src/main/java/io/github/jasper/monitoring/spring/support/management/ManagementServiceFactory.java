@@ -12,18 +12,20 @@ import io.github.jasper.monitoring.core.port.ManagementQueryRepository;
 import io.github.jasper.monitoring.core.port.MonitoringTransaction;
 import java.time.Clock;
 import java.util.Objects;
+import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
 
 /** Builds the five management use cases around one trusted authorization and transaction boundary. */
 public final class ManagementServiceFactory {
     private ManagementServiceFactory() { }
     public static ManagementServices create(ManagementAuthorizer authorizer, ManagementQueryRepository queries,
                                             ManagementAuditRepository audits, MonitoringTransaction transaction,
-                                            Clock clock) {
+                                            ControlExecutionService controls, Clock clock) {
         Objects.requireNonNull(authorizer,"authorizer"); Objects.requireNonNull(queries,"queries");
-        Objects.requireNonNull(audits,"audits"); Objects.requireNonNull(transaction,"transaction"); Objects.requireNonNull(clock,"clock");
+        Objects.requireNonNull(audits,"audits"); Objects.requireNonNull(transaction,"transaction");
+        Objects.requireNonNull(controls,"controls"); Objects.requireNonNull(clock,"clock");
         ManagementAccessGuard guard=new ManagementAccessGuard(authorizer,audits,clock);
         return new ManagementServices(new DefaultSecurityEventQueryService(guard,queries,transaction),
             new DefaultAlertManagementService(guard,queries,transaction),new DefaultRuleCatalogService(guard,queries,transaction),
-            new DefaultWhitelistManagementService(guard,queries,transaction),new DefaultControlManagementService(guard,queries,transaction));
+            new DefaultWhitelistManagementService(guard,queries,transaction),new DefaultControlManagementService(guard,queries,transaction,controls));
     }
 }

@@ -36,8 +36,13 @@ class MyBatisManagementRepositoryTest {
         try (Connection connection=dataSource.getConnection(); Statement statement=connection.createStatement()) {
             statement.execute("CREATE TABLE security_event(event_id VARCHAR(128) PRIMARY KEY,system_id VARCHAR(128),occurred_at TIMESTAMP,action VARCHAR(128),result VARCHAR(32))");
             statement.execute("CREATE TABLE management_audit(audit_id VARCHAR(128) PRIMARY KEY,system_id VARCHAR(128),actor_id VARCHAR(128),action VARCHAR(128),target_type VARCHAR(64),target_id VARCHAR(128),outcome VARCHAR(32),occurred_at TIMESTAMP)");
+            statement.execute("CREATE TABLE security_alert(alert_id VARCHAR(128) PRIMARY KEY,status VARCHAR(32),version BIGINT,last_seen TIMESTAMP)");
+            statement.execute("CREATE TABLE alert_event_link(alert_id VARCHAR(128),event_id VARCHAR(128))");
+            statement.execute("CREATE TABLE alert_disposition(disposition_id VARCHAR(128) PRIMARY KEY,alert_id VARCHAR(128),disposition_type VARCHAR(64),operator_id VARCHAR(128),comment_text VARCHAR(1024),evidence_summary VARCHAR(1024),created_at TIMESTAMP)");
             statement.execute("INSERT INTO security_event VALUES('event-a','system-a',TIMESTAMP '2026-07-20 00:00:00','report:export','SUCCESS')");
             statement.execute("INSERT INTO security_event VALUES('event-b','system-b',TIMESTAMP '2026-07-20 00:00:00','report:export','SUCCESS')");
+            statement.execute("INSERT INTO security_alert VALUES('alert-a','NEW',1,TIMESTAMP '2026-07-20 00:00:00')");
+            statement.execute("INSERT INTO alert_event_link VALUES('alert-a','event-a')");
         }
         Configuration configuration=new Configuration(new Environment("test",new JdbcTransactionFactory(),dataSource));
         MyBatisMonitoringRepositoryRegistrar.register(configuration);
@@ -61,6 +66,15 @@ class MyBatisManagementRepositoryTest {
         try(Connection connection=dataSource.getConnection();Statement statement=connection.createStatement();
             ResultSet rows=statement.executeQuery("SELECT actor_id,outcome FROM management_audit WHERE audit_id='audit-1'")) {
             assertTrue(rows.next()); assertEquals("operator",rows.getString(1)); assertEquals("SUCCEEDED",rows.getString(2));
+        }
+    }
+
+    @Test
+    void alertTransitionAndDispositionAreWrittenTogether() throws Exception {
+        assertTrue(repository.transitionAlert("system-a","alert-a",1,"ACKNOWLEDGED","operator","triaged","ack-1"));
+        try(Connection connection=dataSource.getConnection();Statement statement=connection.createStatement();
+            ResultSet rows=statement.executeQuery("SELECT disposition_type,operator_id FROM alert_disposition WHERE disposition_id='ack-1'")) {
+            assertTrue(rows.next()); assertEquals("ACKNOWLEDGED",rows.getString(1)); assertEquals("operator",rows.getString(2));
         }
     }
 }
