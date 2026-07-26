@@ -1,6 +1,10 @@
 package io.github.jasper.monitoring.api.management;
 
 import io.github.jasper.monitoring.api.management.command.AlertAcknowledgeCommand;
+import io.github.jasper.monitoring.api.management.command.ControlApprovalCommand;
+import io.github.jasper.monitoring.api.management.command.ControlRejectionCommand;
+import io.github.jasper.monitoring.api.management.command.WhitelistGrantCommand;
+import io.github.jasper.monitoring.api.management.command.WhitelistRevokeCommand;
 import io.github.jasper.monitoring.api.management.model.AlertView;
 import io.github.jasper.monitoring.api.management.query.AlertQuery;
 import org.junit.jupiter.api.Test;
@@ -34,6 +38,14 @@ class ManagementContractsTest {
         assertEquals(3L, command.getExpectedVersion());
         assertEquals("triaged", command.getReason());
         assertThrows(IllegalArgumentException.class, () -> AlertAcknowledgeCommand.of("a", 0L, "x", "ack-0"));
+    }
+
+    @Test
+    void generatedCommandKeysIncludeOperationIdentity() {
+        assertNotEquals(ControlApprovalCommand.of("c", 3L, "approve").getIdempotencyKey(),
+            ControlRejectionCommand.of("c", 3L, "reject").getIdempotencyKey());
+        assertNotEquals(WhitelistGrantCommand.of("w", 2L, "grant").getIdempotencyKey(),
+            WhitelistRevokeCommand.of("w", 2L, "revoke").getIdempotencyKey());
     }
 
     @Test
