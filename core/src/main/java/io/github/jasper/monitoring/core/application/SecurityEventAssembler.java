@@ -8,6 +8,7 @@ import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
 import io.github.jasper.monitoring.api.action.ActionDefinition;
+import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.event.ObservationIssue;
@@ -34,9 +35,13 @@ public final class SecurityEventAssembler {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
-    public AssemblyResult assemble(ActionDefinition action, ActionExecution execution, ActionFacts facts) {
+    public AssemblyResult assemble(Class<? extends ActionType> resolvedType, ActionDefinition action,
+                                   ActionExecution execution, ActionFacts facts) {
+        if (!Objects.equals(Objects.requireNonNull(resolvedType, "resolvedType"),
+            Objects.requireNonNull(execution, "execution").getActionType())) {
+            throw new IllegalArgumentException("Resolved action type does not match execution action type");
+        }
         Objects.requireNonNull(action, "action");
-        Objects.requireNonNull(execution, "execution");
         Objects.requireNonNull(facts, "facts");
         MonitoringRequestContext request = Objects.requireNonNull(execution.getRequestContext(), "requestContext");
         IdentityContext identity = Objects.requireNonNull(execution.getIdentityContext(), "identityContext");

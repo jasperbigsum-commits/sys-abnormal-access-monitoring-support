@@ -26,7 +26,7 @@ public final class MonitoringService {
         Objects.requireNonNull(execution, "execution");
         ActionDefinition action = runtime.resolve(execution.getActionType());
         ActionFacts facts = runtime.collect(execution, action);
-        SecurityEventAssembler.AssemblyResult result = assembler.assemble(action, execution, facts);
+        SecurityEventAssembler.AssemblyResult result = assembler.assemble(execution.getActionType(), action, execution, facts);
         repository.saveEvent(result.getEvent());
         evaluator.evaluate(result.getEvent(), result.getFacts(), result.getIneligibleRuleTypes(), result.getIssues());
         return result;

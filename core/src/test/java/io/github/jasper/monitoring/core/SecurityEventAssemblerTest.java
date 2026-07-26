@@ -33,7 +33,7 @@ class SecurityEventAssemblerTest {
         IdentityContext identity = new IdentityContext("alice", null, Collections.singleton("analyst"), "session-hash");
         ActionExecution execution = ActionExecution.of(ExportAction.class, request, identity, ActionOutcome.denied("server-denied"));
         SecurityEventAssembler.AssemblyResult result = new SecurityEventAssembler("demo", fixedClock())
-            .assemble(ACTION, execution, ActionFacts.builder().build());
+            .assemble(ExportAction.class, ACTION, execution, ActionFacts.builder().build());
         assertEquals(SecurityEventResult.DENIED, result.getEvent().getResult());
         assertEquals("server-denied", result.getEvent().getReasonCode());
         assertEquals("10.0.0.1", result.getEvent().getSourceIp());
@@ -46,9 +46,17 @@ class SecurityEventAssemblerTest {
             .require(RequiredFact.class, FactSource.HOST_PROVIDER)
             .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
         SecurityEventAssembler.AssemblyResult result = new SecurityEventAssembler("demo", fixedClock())
-            .assemble(action, ActionExecution.of(ExportAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success()),
+            .assemble(ExportAction.class, action, ActionExecution.of(ExportAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success()),
                 ActionFacts.builder().build());
         assertTrue(result.getIssues().stream().anyMatch(issue -> "MISSING_FACT".equals(issue.getCode())));
+    }
+
+    @Test
+    void rejectsActionExecutionTypeMismatch() {
+        ActionExecution execution = ActionExecution.of(ExportAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success());
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> new SecurityEventAssembler("demo", fixedClock()).assemble(OtherAction.class, ACTION, execution,
+                ActionFacts.builder().build()));
     }
 
     private static MonitoringRequestContext request() {
@@ -59,4 +67,5 @@ class SecurityEventAssemblerTest {
     private static Clock fixedClock() { return Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC); }
     static final class RequiredFact implements FactType<String> { }
     static final class ExportAction implements ActionType { }
+    static final class OtherAction implements ActionType { }
 }
