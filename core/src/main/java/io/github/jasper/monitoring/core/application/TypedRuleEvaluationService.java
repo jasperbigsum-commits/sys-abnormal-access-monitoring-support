@@ -8,6 +8,7 @@ import io.github.jasper.monitoring.api.event.ObservationIssue;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.api.fact.FactType;
+import io.github.jasper.monitoring.api.rule.RuleMode;
 import io.github.jasper.monitoring.api.rule.RuleType;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
@@ -15,11 +16,13 @@ import io.github.jasper.monitoring.core.domain.RuleMatch;
 import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
+import io.github.jasper.monitoring.core.domain.rule.RuleObservation;
 import io.github.jasper.monitoring.core.domain.rule.RuleEvaluationContext;
 import io.github.jasper.monitoring.core.port.AlertRepository;
 import io.github.jasper.monitoring.core.port.EventRepository;
 import io.github.jasper.monitoring.core.port.MonitoringTransaction;
 import io.github.jasper.monitoring.core.port.NotificationChannel;
+import io.github.jasper.monitoring.core.port.RuleObservationRepository;
 import io.github.jasper.monitoring.core.port.WhitelistRepository;
 import java.time.Clock;
 import java.time.Duration;
@@ -39,6 +42,7 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
     private final AlertRepository alerts;
     private final WhitelistRepository whitelist;
     private final MonitoringTransaction transaction;
+    private final RuleObservationRepository observations;
     private final List<DetectionRule<? extends RuleType>> rules;
     private final MonitoringMode mode;
     private final ControlExecutionService controls;
@@ -47,12 +51,14 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
 
     public TypedRuleEvaluationService(EventRepository events, AlertRepository alerts,
             WhitelistRepository whitelist, MonitoringTransaction transaction,
+            RuleObservationRepository observations,
             List<DetectionRule<? extends RuleType>> rules, MonitoringMode mode,
             ControlExecutionService controls, NotificationChannel notifications, Clock clock) {
         this.events = Objects.requireNonNull(events, "events");
         this.alerts = Objects.requireNonNull(alerts, "alerts");
         this.whitelist = Objects.requireNonNull(whitelist, "whitelist");
         this.transaction = Objects.requireNonNull(transaction, "transaction");
+        this.observations = Objects.requireNonNull(observations, "observations");
         this.rules = Collections.unmodifiableList(new ArrayList<DetectionRule<? extends RuleType>>(rules));
         this.mode = Objects.requireNonNull(mode, "mode");
         this.controls = Objects.requireNonNull(controls, "controls");
@@ -92,9 +98,14 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
             context.factSource(source.getKey(), source.getValue());
         }
         RuleEvaluationContext input = context.build();
-        List<RuleMatch> matches = new ArrayList<RuleMatch>();
+        List<RuleMatch> controlMatches = new ArrayList<RuleMatch>();
         List<SecurityAlert> raised = new ArrayList<SecurityAlert>();
+        List<SecurityAlert> controlAlerts = new ArrayList<SecurityAlert>();
         for (DetectionRule<? extends RuleType> rule : rules) {
+            RuleMode ruleMode = rule.definition().getMode();
+            if (ruleMode == RuleMode.DISABLED) {
+                continue;
+            }
             if (ineligibleRuleTypes.contains(rule.type())) {
                 continue;
             }
@@ -106,11 +117,19 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
             if (whitelist.isActive(match.getRuleId(), match.getSubject(), Instant.now(clock))) {
                 continue;
             }
+            if (ruleMode == RuleMode.OBSERVE) {
+                observations.save(RuleObservation.of(UUID.randomUUID().toString(), match.getRuleId(),
+                    event.getEventId(), match.getSubject(), Instant.now(clock)));
+                continue;
+            }
             SecurityAlert alert = raise(match, event);
-            matches.add(match);
             raised.add(alert);
+            if (ruleMode == RuleMode.ENFORCE) {
+                controlMatches.add(match);
+                controlAlerts.add(alert);
+            }
         }
-        return new EvaluationResult(matches, raised);
+        return new EvaluationResult(controlMatches, controlAlerts, raised);
     }
 
     private static List<SecurityEvent> canonicalHistory(SecurityEvent current, List<SecurityEvent> persisted) {
@@ -156,9 +175,9 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
     }
 
     private void executeControls(EvaluationResult result) {
-        for (int index = 0; index < result.matches.size(); index++) {
-            RuleMatch match = result.matches.get(index);
-            SecurityAlert alert = result.alerts.get(index);
+        for (int index = 0; index < result.controlMatches.size(); index++) {
+            RuleMatch match = result.controlMatches.get(index);
+            SecurityAlert alert = result.controlAlerts.get(index);
             for (ControlActionType action : match.getActions()) {
                 if (action == ControlActionType.RECORD) {
                     continue;
@@ -170,10 +189,13 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
     }
 
     private static final class EvaluationResult {
-        private final List<RuleMatch> matches;
+        private final List<RuleMatch> controlMatches;
+        private final List<SecurityAlert> controlAlerts;
         private final List<SecurityAlert> alerts;
-        private EvaluationResult(List<RuleMatch> matches, List<SecurityAlert> alerts) {
-            this.matches = matches;
+        private EvaluationResult(List<RuleMatch> controlMatches, List<SecurityAlert> controlAlerts,
+                List<SecurityAlert> alerts) {
+            this.controlMatches = controlMatches;
+            this.controlAlerts = controlAlerts;
             this.alerts = alerts;
         }
     }
