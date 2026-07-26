@@ -12,7 +12,7 @@ public final class BuiltInFacts {
     public static final FactDefinition<String> RESOURCE_ID = FactDefinition
         .builder(ResourceId.class, "resource_id", String.class)
         .allowedSources(FactSource.TRUSTED_REQUEST, FactSource.METHOD_PARAMETER,
-            FactSource.HOST_PROVIDER)
+            FactSource.HOST_PROVIDER, FactSource.CLIENT_SUPPLEMENTAL)
         .sensitivity(FactDefinition.Sensitivity.INTERNAL)
         .maxLength(256)
         .storage(FactDefinition.Storage.STANDARD_COLUMN)

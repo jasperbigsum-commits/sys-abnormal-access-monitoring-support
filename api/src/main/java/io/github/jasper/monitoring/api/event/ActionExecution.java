@@ -19,8 +19,8 @@ public interface ActionExecution {
     MonitoringRequestContext getRequestContext();
     IdentityContext getIdentityContext();
     ActionOutcome getOutcome();
-    ActionFacts getSuppliedFacts();
-    FactSource getSuppliedFactSource();
+    default ActionFacts getSuppliedFacts() { return ActionFacts.builder().build(); }
+    default FactSource getSuppliedFactSource() { return FactSource.HOST_PROVIDER; }
 
     static ActionExecution of(Class<? extends ActionType> actionType, MonitoringRequestContext request, IdentityContext identity,
                               ActionOutcome outcome) {

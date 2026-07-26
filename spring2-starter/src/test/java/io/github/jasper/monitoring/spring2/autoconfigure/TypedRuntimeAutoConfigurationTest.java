@@ -7,6 +7,8 @@ import io.github.jasper.monitoring.core.application.ActionEventRecorder;
 import io.github.jasper.monitoring.core.application.SecurityMonitor;
 import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
+import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
+import io.github.jasper.monitoring.spring.support.FrontendSignalRecorder;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisControlExecutionStore;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisMonitoringStore;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -33,6 +35,8 @@ class TypedRuntimeAutoConfigurationTest {
                 assertThat(context).hasSingleBean(MyBatisControlExecutionStore.class);
                 assertThat(context).hasSingleBean(ControlExecutionService.class);
                 assertThat(context).hasSingleBean(TypedMonitorActionAspect.class);
+                assertThat(context).hasSingleBean(ResourceAccessGuard.class);
+                assertThat(context).hasSingleBean(FrontendSignalRecorder.class);
                 assertThat(context).doesNotHaveBean(SecurityMonitor.class);
                 assertThat(context).doesNotHaveBean(DefaultSecurityMonitor.class);
                 assertThat(context).doesNotHaveBean(ActionEventRecorder.class);

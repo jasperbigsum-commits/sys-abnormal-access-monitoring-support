@@ -1,18 +1,16 @@
 package io.github.jasper.monitoring.core.application.authorization;
 
-import io.github.jasper.monitoring.core.application.SecurityMonitor;
-import io.github.jasper.monitoring.core.application.ActionEventRecorder;
-
-
+import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.event.ActionExecution;
+import io.github.jasper.monitoring.api.event.ActionOutcome;
+import io.github.jasper.monitoring.api.fact.ActionFacts;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
+import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
-import io.github.jasper.monitoring.api.SecurityEventDraft;
-import io.github.jasper.monitoring.api.SecurityEventResult;
-import io.github.jasper.monitoring.api.SecurityEventType;
-import java.time.Clock;
-import java.time.Instant;
+import io.github.jasper.monitoring.core.application.MonitoringService;
 import java.util.Objects;
 
 /**
@@ -23,30 +21,12 @@ import java.util.Objects;
  */
 public final class ResourceAccessGuard {
     private final ResourceScopeAuthorizer authorizer;
-    private final SecurityMonitor monitor;
-    private final ActionEventRecorder recorder;
-    private final Clock clock;
+    private final MonitoringService typedMonitoring;
 
-    /**
-     * 创建资源授权记录桥接器。
-     *
-     * @param authorizer 宿主拥有的授权决策器，仍是唯一权威来源
-     * @param monitor 仅用于审计最终决策的监测入口
-     * @param clock 事件时间来源
-     */
-    public ResourceAccessGuard(ResourceScopeAuthorizer authorizer, SecurityMonitor monitor, Clock clock) {
+    /** Creates the strict typed authorization audit bridge. */
+    public ResourceAccessGuard(ResourceScopeAuthorizer authorizer, MonitoringService monitoring) {
         this.authorizer = Objects.requireNonNull(authorizer, "authorizer");
-        this.monitor = Objects.requireNonNull(monitor, "monitor");
-        this.recorder = null;
-        this.clock = Objects.requireNonNull(clock, "clock");
-    }
-
-    /** Creates a guard whose authorization events use the recorder's configured enrichment chain. */
-    public ResourceAccessGuard(ResourceScopeAuthorizer authorizer, ActionEventRecorder recorder, Clock clock) {
-        this.authorizer = Objects.requireNonNull(authorizer, "authorizer");
-        this.monitor = null;
-        this.recorder = Objects.requireNonNull(recorder, "recorder");
-        this.clock = Objects.requireNonNull(clock, "clock");
+        this.typedMonitoring = Objects.requireNonNull(monitoring, "monitoring");
     }
 
     /**
@@ -75,27 +55,16 @@ public final class ResourceAccessGuard {
 
     private void recordDecision(IdentityContext identity, ResourceScopeRequest resource, AuthorizationDecision decision) {
         try {
-            SecurityEventDraft.Builder draft = SecurityEventDraft.builder()
-                .eventType(decision.isAllowed() ? SecurityEventType.ACCESS_ALLOWED : SecurityEventType.RESOURCE_SCOPE_DENIED)
-                .action(resource.getRequest().getMethod())
-                .result(decision.isAllowed() ? SecurityEventResult.SUCCESS : SecurityEventResult.DENIED)
-                .sourceIp(resource.getRequest().getSourceIp())
-                .requestId(resource.getRequest().getRequestId())
-                .traceId(resource.getRequest().getTraceId())
-                .userId(identity.getUserId())
-                .accountType(identity.getAccountType())
-                .roleIds(identity.getRoleIds())
-                .sessionIdHash(identity.getSessionIdHash())
-                .resourceType(resource.getResourceType())
-                .resourceId(resource.getResourceId())
-                .orgScope(resource.getOrgScope())
-                .reasonCode(decision.getReasonCode())
-                .occurredAt(Instant.now(clock));
-            if (recorder == null) {
-                monitor.record(draft.build());
-            } else {
-                recorder.record(draft.build(), resource.getRequest(), identity);
+            Class<? extends io.github.jasper.monitoring.api.action.ActionType> type = decision.isAllowed()
+                ? BuiltInActions.AccessAllowed.class : BuiltInActions.AccessDenied.class;
+            ActionFacts.Builder facts = ActionFacts.builder();
+            if (resource.getResourceId() != null) {
+                facts.put(BuiltInFacts.ResourceId.class, resource.getResourceId());
             }
+            ActionOutcome outcome = decision.isAllowed() ? ActionOutcome.success(0L)
+                : ActionOutcome.denied(decision.getReasonCode(), 0L);
+            typedMonitoring.monitor(ActionExecution.of(type, resource.getRequest(), identity, outcome,
+                facts.build(), FactSource.TRUSTED_REQUEST));
         } catch (RuntimeException ignored) {
             // Monitoring failures cannot bypass the host system's established authorization decision.
         }

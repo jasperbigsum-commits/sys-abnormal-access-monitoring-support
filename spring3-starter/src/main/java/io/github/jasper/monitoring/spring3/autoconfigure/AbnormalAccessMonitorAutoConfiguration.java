@@ -26,6 +26,7 @@ import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.application.TypedRuleEvaluationService;
+import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
 import io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger;
 import io.github.jasper.monitoring.core.port.ControlHandler;
@@ -36,6 +37,7 @@ import io.github.jasper.monitoring.core.port.NotificationChannel;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisControlExecutionStore;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisMonitoringStore;
 import io.github.jasper.monitoring.spring.support.ConfiguredTrustedProxyResolver;
+import io.github.jasper.monitoring.spring.support.FrontendSignalRecorder;
 import io.github.jasper.monitoring.spring.support.MdcTraceBridge;
 import io.github.jasper.monitoring.spring.support.control.GenericIpControlHandler;
 import io.github.jasper.monitoring.spring.support.control.IpControlState;
@@ -291,6 +293,19 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnMissingBean
     public ResourceScopeAuthorizer abnormalAccessResourceScopeAuthorizer() {
         return (identity, request) -> AuthorizationDecision.denied("RESOURCE_SCOPE_AUTHORIZER_NOT_CONFIGURED");
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ResourceAccessGuard abnormalAccessResourceAccessGuard(ResourceScopeAuthorizer authorizer,
+            MonitoringService monitoring) {
+        return new ResourceAccessGuard(authorizer, monitoring);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public FrontendSignalRecorder abnormalAccessFrontendSignalRecorder(MonitoringService monitoring) {
+        return new FrontendSignalRecorder(monitoring);
     }
 
     @Bean
