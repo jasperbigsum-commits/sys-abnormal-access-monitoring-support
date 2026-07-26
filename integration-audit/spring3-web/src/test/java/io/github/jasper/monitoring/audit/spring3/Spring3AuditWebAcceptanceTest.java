@@ -11,6 +11,7 @@ import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.port.MonitoringRepository;
+import io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepository;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,6 +52,12 @@ class Spring3AuditWebAcceptanceTest {
     @BeforeEach
     void resetExportSideEffects() {
         exportService.reset();
+    }
+
+    @Test
+    void usesMyBatisRepositoryForDurableAuditEvidence() {
+        assertTrue(repository instanceof MyBatisMonitoringRepository,
+            "The integration host must persist audit evidence through MyBatis, never the memory adapter");
     }
 
     @Test
