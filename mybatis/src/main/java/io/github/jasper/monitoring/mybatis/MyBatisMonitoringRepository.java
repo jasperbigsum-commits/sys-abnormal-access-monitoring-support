@@ -58,6 +58,11 @@ public final class MyBatisMonitoringRepository implements MonitoringRepository {
         this.sessionManager = SqlSessionManager.newInstance(sqlSessionFactory);
     }
 
+    /** Internal adapter constructor used when a narrow store owns the transaction manager. */
+    public MyBatisMonitoringRepository(SqlSessionManager sessionManager) {
+        this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager");
+    }
+
     @Override
     public <T> T inTransaction(TransactionWork<T> work) {
         Objects.requireNonNull(work, "work");

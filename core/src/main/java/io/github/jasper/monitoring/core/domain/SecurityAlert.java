@@ -23,6 +23,7 @@ public final class SecurityAlert {
     private final Instant firstSeen;
     private final Instant lastSeen;
     private final int eventCount;
+    private final long version;
 
     /**
      * 重建或创建一条告警摘要。
@@ -39,6 +40,10 @@ public final class SecurityAlert {
      */
     public SecurityAlert(String alertId, String ruleId, RiskLevel riskLevel, String fingerprint, String subject,
                          AlertStatus status, Instant firstSeen, Instant lastSeen, int eventCount) {
+        this(alertId, ruleId, riskLevel, fingerprint, subject, status, firstSeen, lastSeen, eventCount, 0L);
+    }
+    public SecurityAlert(String alertId, String ruleId, RiskLevel riskLevel, String fingerprint, String subject,
+                         AlertStatus status, Instant firstSeen, Instant lastSeen, int eventCount, long version) {
         this.alertId = alertId;
         this.ruleId = ruleId;
         this.riskLevel = riskLevel;
@@ -48,6 +53,7 @@ public final class SecurityAlert {
         this.firstSeen = firstSeen;
         this.lastSeen = lastSeen;
         this.eventCount = eventCount;
+        this.version = version;
     }
     /**
      * @param alertId 新告警标识
@@ -91,4 +97,5 @@ public final class SecurityAlert {
     public Instant getLastSeen() { return lastSeen; }
     /** @return 已关联事件数量 */
     public int getEventCount() { return eventCount; }
+    public long getVersion() { return version; }
 }

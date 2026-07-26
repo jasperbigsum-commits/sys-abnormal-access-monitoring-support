@@ -38,8 +38,8 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
     public MyBatisMonitoringStore(SqlSessionFactory sqlSessionFactory) {
         Objects.requireNonNull(sqlSessionFactory, "sqlSessionFactory");
         MyBatisMonitoringRepositoryRegistrar.register(sqlSessionFactory);
-        this.legacy = new MyBatisMonitoringRepository(sqlSessionFactory);
         this.sessions = SqlSessionManager.newInstance(sqlSessionFactory);
+        this.legacy = new MyBatisMonitoringRepository(this.sessions);
     }
 
     @Override public void save(SecurityEvent event) { legacy.saveEvent(event); }
@@ -76,8 +76,9 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
     }
 
     private <T> T read(java.util.function.Function<org.apache.ibatis.session.SqlSession, T> work) {
-        if (!sessions.isManagedSessionStarted()) sessions.startManagedSession(true);
-        try { return work.apply(sessions); } finally { if (sessions.isManagedSessionStarted()) sessions.close(); }
+        boolean owner = !sessions.isManagedSessionStarted();
+        if (owner) sessions.startManagedSession(true);
+        try { return work.apply(sessions); } finally { if (owner) sessions.close(); }
     }
     private void write(java.util.function.Consumer<org.apache.ibatis.session.SqlSession> work) {
         boolean owner = !sessions.isManagedSessionStarted();
@@ -92,6 +93,6 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
             .dataCount(row.getDataCount()).dataCountKnown(row.isDataCountKnown()).latencyMs(row.getLatencyMs())
             .latencyMsKnown(row.isLatencyMsKnown()).inputStatus(row.getInputStatus()).build();
     }
-    private static SecurityAlertPo alertRow(SecurityAlert alert) { SecurityAlertPo row = new SecurityAlertPo(); row.setAlertId(alert.getAlertId()); row.setRuleId(alert.getRuleId()); row.setRiskLevel(alert.getRiskLevel()); row.setFingerprint(alert.getFingerprint()); row.setSubject(alert.getSubject()); row.setStatus(alert.getStatus()); row.setFirstSeen(alert.getFirstSeen()); row.setLastSeen(alert.getLastSeen()); row.setEventCount(alert.getEventCount()); return row; }
-    private static Optional<SecurityAlert> alertOf(SecurityAlertPo row) { return row == null ? Optional.<SecurityAlert>empty() : Optional.of(new SecurityAlert(row.getAlertId(), row.getRuleId(), row.getRiskLevel(), row.getFingerprint(), row.getSubject(), row.getStatus(), row.getFirstSeen(), row.getLastSeen(), row.getEventCount())); }
+    private static SecurityAlertPo alertRow(SecurityAlert alert) { SecurityAlertPo row = new SecurityAlertPo(); row.setAlertId(alert.getAlertId()); row.setRuleId(alert.getRuleId()); row.setRiskLevel(alert.getRiskLevel()); row.setFingerprint(alert.getFingerprint()); row.setSubject(alert.getSubject()); row.setStatus(alert.getStatus()); row.setFirstSeen(alert.getFirstSeen()); row.setLastSeen(alert.getLastSeen()); row.setEventCount(alert.getEventCount()); row.setVersion(alert.getVersion()); return row; }
+    private static Optional<SecurityAlert> alertOf(SecurityAlertPo row) { return row == null ? Optional.<SecurityAlert>empty() : Optional.of(new SecurityAlert(row.getAlertId(), row.getRuleId(), row.getRiskLevel(), row.getFingerprint(), row.getSubject(), row.getStatus(), row.getFirstSeen(), row.getLastSeen(), row.getEventCount(), row.getVersion())); }
 }
