@@ -43,7 +43,7 @@ class MonitoringServiceTest {
                 public ActionFacts collect(ActionExecution execution, ActionDefinition definition) { return ActionFacts.builder().build(); }
             },
             (event, facts, ineligible, issues) -> persisted.set(!repository.findEventsSince(Instant.EPOCH).isEmpty()));
-        service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success()));
+        service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(1L)));
         assertTrue(persisted.get());
     }
 
@@ -58,7 +58,7 @@ class MonitoringServiceTest {
                 public ActionFacts collect(ActionExecution execution, ActionDefinition definition) { return ActionFacts.builder().build(); }
             }, (event, facts, ineligible, issues) -> { });
         assertThrows(RuntimeException.class, () -> service.monitor(
-            ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success())));
+            ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(1L))));
     }
 
     @Test
@@ -79,7 +79,7 @@ class MonitoringServiceTest {
                 public ActionFacts collect(ActionExecution execution, ActionDefinition definition) { return facts; }
             },
             (event, evaluatedFacts, skipped, issues) -> { seen[0] = evaluatedFacts; ineligible[0] = skipped; });
-        service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success()));
+        service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(1L)));
         assertSame(facts, seen[0]);
         assertTrue(ineligible[0].contains(QueryRule.class));
     }

@@ -51,7 +51,7 @@ public final class SecurityEventAssembler {
             .sourceIp(request.getSourceIp()).requestId(request.getRequestId()).traceId(request.getTraceId())
             .userId(identity.getUserId()).accountType(identity.getAccountType()).roleIds(identity.getRoleIds())
             .sessionIdHash(identity.getSessionIdHash()).resourceType(action.getResourceType())
-            .occurredAt(Instant.now(clock)).reasonCode(outcome.getReasonCode());
+            .occurredAt(Instant.now(clock)).reasonCode(outcome.getReasonCode()).latencyMs(outcome.getLatencyMs());
         List<ObservationIssue> observations = new ArrayList<ObservationIssue>();
         List<EventInputIssue> inputIssues = new ArrayList<EventInputIssue>();
         for (Class<? extends FactType<?>> fact : action.getRequiredFacts()) {
@@ -69,24 +69,27 @@ public final class SecurityEventAssembler {
             Instant.now(clock), validation);
         java.util.Set<Class<? extends RuleType>> ineligible = new java.util.LinkedHashSet<Class<? extends RuleType>>();
         if (!inputIssues.isEmpty()) ineligible.addAll(action.getRuleTypes());
-        return new AssemblyResult(event, facts, observations, ineligible);
+        return new AssemblyResult(event, facts, outcome, observations, ineligible);
     }
 
     public static final class AssemblyResult {
         private final SecurityEvent event;
         private final ActionFacts facts;
+        private final ActionOutcome outcome;
         private final List<ObservationIssue> issues;
         private final java.util.Set<Class<? extends RuleType>> ineligibleRuleTypes;
-        private AssemblyResult(SecurityEvent event, ActionFacts facts, List<ObservationIssue> issues,
+        private AssemblyResult(SecurityEvent event, ActionFacts facts, ActionOutcome outcome, List<ObservationIssue> issues,
                                java.util.Set<Class<? extends RuleType>> ineligibleRuleTypes) {
             this.event = event;
             this.facts = facts;
+            this.outcome = outcome;
             this.issues = Collections.unmodifiableList(new ArrayList<ObservationIssue>(issues));
             this.ineligibleRuleTypes = Collections.unmodifiableSet(
                 new java.util.LinkedHashSet<Class<? extends RuleType>>(ineligibleRuleTypes));
         }
         public SecurityEvent getEvent() { return event; }
         public ActionFacts getFacts() { return facts; }
+        public ActionOutcome getOutcome() { return outcome; }
         public List<ObservationIssue> getIssues() { return issues; }
         public java.util.Set<Class<? extends RuleType>> getIneligibleRuleTypes() { return ineligibleRuleTypes; }
     }

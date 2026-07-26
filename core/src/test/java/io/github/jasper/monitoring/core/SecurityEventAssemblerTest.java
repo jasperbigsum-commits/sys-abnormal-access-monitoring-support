@@ -31,12 +31,13 @@ class SecurityEventAssemblerTest {
         MonitoringRequestContext request = MonitoringRequestContext.builder().method("GET").path("/reports")
             .sourceIp("10.0.0.1").requestId("req-1").build();
         IdentityContext identity = new IdentityContext("alice", null, Collections.singleton("analyst"), "session-hash");
-        ActionExecution execution = ActionExecution.of(ExportAction.class, request, identity, ActionOutcome.denied("server-denied"));
+        ActionExecution execution = ActionExecution.of(ExportAction.class, request, identity, ActionOutcome.denied("server-denied", 17L));
         SecurityEventAssembler.AssemblyResult result = new SecurityEventAssembler("demo", fixedClock())
             .assemble(ExportAction.class, ACTION, execution, ActionFacts.builder().build());
         assertEquals(SecurityEventResult.DENIED, result.getEvent().getResult());
         assertEquals("server-denied", result.getEvent().getReasonCode());
         assertEquals("10.0.0.1", result.getEvent().getSourceIp());
+        assertEquals(17L, result.getEvent().getLatencyMs());
     }
 
     @Test
@@ -46,14 +47,14 @@ class SecurityEventAssemblerTest {
             .require(RequiredFact.class, FactSource.HOST_PROVIDER)
             .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
         SecurityEventAssembler.AssemblyResult result = new SecurityEventAssembler("demo", fixedClock())
-            .assemble(ExportAction.class, action, ActionExecution.of(ExportAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success()),
+            .assemble(ExportAction.class, action, ActionExecution.of(ExportAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(4L)),
                 ActionFacts.builder().build());
         assertTrue(result.getIssues().stream().anyMatch(issue -> "MISSING_FACT".equals(issue.getCode())));
     }
 
     @Test
     void rejectsActionExecutionTypeMismatch() {
-        ActionExecution execution = ActionExecution.of(ExportAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success());
+        ActionExecution execution = ActionExecution.of(ExportAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(4L));
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
             () -> new SecurityEventAssembler("demo", fixedClock()).assemble(OtherAction.class, ACTION, execution,
                 ActionFacts.builder().build()));
