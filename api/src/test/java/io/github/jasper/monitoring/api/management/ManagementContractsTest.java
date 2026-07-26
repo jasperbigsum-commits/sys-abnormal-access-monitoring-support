@@ -25,7 +25,7 @@ class ManagementContractsTest {
     @Test
     void actorAndAuthorizerAreExplicitServiceBoundary() {
         assertThrows(NullPointerException.class, () -> ManagementActor.of(null, "host"));
-        assertThrows(NullPointerException.class, () -> ManagementAuthorizer.require(null, null, null));
+        assertThrows(NullPointerException.class, () -> ManagementAuthorizer.requireArguments(null, null, null));
     }
 
     @Test
