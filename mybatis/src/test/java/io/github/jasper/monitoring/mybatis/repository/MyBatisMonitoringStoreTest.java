@@ -4,6 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.EventFactSource;
+import io.github.jasper.monitoring.api.EventInputIssue;
+import io.github.jasper.monitoring.api.EventInputIssueCode;
+import io.github.jasper.monitoring.api.EventInputStatus;
+import java.util.Arrays;
+import java.util.Collections;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.port.EventRepository;
 import java.io.InputStream;
@@ -44,6 +50,24 @@ class MyBatisMonitoringStoreTest {
             statement.setString(1, "delivery-1");
             try (java.sql.ResultSet result = statement.executeQuery()) { result.next(); assertEquals("PENDING", result.getString(1)); }
         }
+    }
+
+    @Test
+    void roundTripsEventAssociations() throws Exception {
+        DataSource dataSource = dataSource("store-associations");
+        executeSchema(dataSource);
+        EventRepository events = new MyBatisMonitoringStore(factory(dataSource));
+        Instant at = Instant.parse("2026-07-26T01:00:00Z");
+        EventInputIssue issue = EventInputIssue.of("AUTH-01", "resourceId", EventInputIssueCode.MISSING_RESOURCE_ID, EventFactSource.SERVER_COMPUTED);
+        SecurityEvent source = SecurityEvent.builder().eventId("event-associations").systemId("orders").eventType(SecurityEventType.EXPORT)
+            .occurredAt(at).receivedAt(at).sourceIp("203.0.113.1").requestId("request-associations").action("EXPORT")
+            .result(SecurityEventResult.SUCCESS).roleIds(Collections.singleton("auditor"))
+            .attributes(Collections.singletonMap("tenant", "acme")).inputStatus(EventInputStatus.INCOMPLETE).inputIssues(Arrays.asList(issue)).build();
+        events.save(source);
+        SecurityEvent stored = events.findEvent("event-associations").get();
+        assertEquals(Collections.singleton("auditor"), stored.getRoleIds());
+        assertEquals(Collections.singletonMap("tenant", "acme"), stored.getAttributes());
+        assertEquals(Collections.singletonList(issue), stored.getInputIssues());
     }
 
     private SecurityEvent event(String id, String system, Instant at) {

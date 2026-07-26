@@ -19,6 +19,7 @@ import io.github.jasper.monitoring.mybatis.mapper.NotificationDeliveryMapper;
 import io.github.jasper.monitoring.mybatis.mapper.AlertMapper;
 import io.github.jasper.monitoring.mybatis.po.SecurityAlertPo;
 import io.github.jasper.monitoring.mybatis.po.SecurityEventPo;
+import io.github.jasper.monitoring.mybatis.po.SecurityEventInputIssuePo;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -45,13 +46,16 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
     @Override public void save(SecurityEvent event) { legacy.saveEvent(event); }
     @Override public Optional<SecurityEvent> findEvent(String eventId) {
         return read(s -> {
-            SecurityEvent event = toEvent(s.getMapper(EventMapper.class).find(eventId));
+            EventMapper mapper = s.getMapper(EventMapper.class);
+            SecurityEventPo row = mapper.find(eventId);
+            SecurityEvent event = toEvent(row, mapper);
             return event == null ? Optional.<SecurityEvent>empty() : Optional.of(event);
         });
     }
     @Override public List<SecurityEvent> findSince(String systemId, Instant since) {
         return read(s -> { java.util.ArrayList<SecurityEvent> result = new java.util.ArrayList<SecurityEvent>();
-            for (SecurityEventPo row : s.getMapper(EventMapper.class).findSince(systemId, since)) result.add(toEvent(row));
+            EventMapper mapper = s.getMapper(EventMapper.class);
+            for (SecurityEventPo row : mapper.findSince(systemId, since)) result.add(toEvent(row, mapper));
             return result; });
     }
     @Override public void save(SecurityAlert alert) { write(s -> { SecurityAlertPo row = alertRow(alert); if (s.getMapper(AlertMapper.class).update(row) == 0) s.getMapper(AlertMapper.class).insert(row); }); }
@@ -85,13 +89,20 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
         if (owner) sessions.startManagedSession(false);
         try { work.accept(sessions); if (owner) sessions.commit(); } catch (RuntimeException e) { if (owner) sessions.rollback(); throw e; } finally { if (owner) sessions.close(); }
     }
-    private static SecurityEvent toEvent(SecurityEventPo row) {
+    private static SecurityEvent toEvent(SecurityEventPo row, EventMapper mapper) {
         if (row == null) return null;
+        java.util.Map<String, String> attributes = new java.util.LinkedHashMap<String, String>();
+        for (io.github.jasper.monitoring.mybatis.po.SecurityEventAttributePo attribute : mapper.findAttributes(row.getEventId())) attributes.put(attribute.getAttributeKey(), attribute.getAttributeValue());
+        java.util.List<String> roles = mapper.findRoles(row.getEventId());
+        java.util.List<io.github.jasper.monitoring.api.EventInputIssue> issues = new java.util.ArrayList<io.github.jasper.monitoring.api.EventInputIssue>();
+        for (SecurityEventInputIssuePo issue : mapper.findInputIssues(row.getEventId())) {
+            issues.add(io.github.jasper.monitoring.api.EventInputIssue.of(issue.getRuleId(), issue.getFactName(), io.github.jasper.monitoring.api.EventInputIssueCode.valueOf(issue.getIssueCode()), io.github.jasper.monitoring.api.EventFactSource.valueOf(issue.getSourceType())));
+        }
         return SecurityEvent.builder().eventId(row.getEventId()).systemId(row.getSystemId()).eventType(row.getEventType())
             .occurredAt(row.getOccurredAt()).receivedAt(row.getReceivedAt()).userId(row.getUserId()).accountType(row.getAccountType())
             .sourceIp(row.getSourceIp()).deviceIdHash(row.getDeviceIdHash()).sessionIdHash(row.getSessionIdHash()).requestId(row.getRequestId()).traceId(row.getTraceId()).action(row.getAction()).result(row.getResult()).reasonCode(row.getReasonCode()).resourceType(row.getResourceType()).resourceId(row.getResourceId()).orgScope(row.getOrgScope())
             .dataCount(row.getDataCount()).dataCountKnown(row.isDataCountKnown()).latencyMs(row.getLatencyMs())
-            .latencyMsKnown(row.isLatencyMsKnown()).inputStatus(row.getInputStatus()).build();
+            .latencyMsKnown(row.isLatencyMsKnown()).inputStatus(row.getInputStatus()).roleIds(new java.util.LinkedHashSet<String>(roles)).attributes(attributes).inputIssues(issues).build();
     }
     private static SecurityAlertPo alertRow(SecurityAlert alert) { SecurityAlertPo row = new SecurityAlertPo(); row.setAlertId(alert.getAlertId()); row.setRuleId(alert.getRuleId()); row.setRiskLevel(alert.getRiskLevel()); row.setFingerprint(alert.getFingerprint()); row.setSubject(alert.getSubject()); row.setStatus(alert.getStatus()); row.setFirstSeen(alert.getFirstSeen()); row.setLastSeen(alert.getLastSeen()); row.setEventCount(alert.getEventCount()); row.setVersion(alert.getVersion()); return row; }
     private static Optional<SecurityAlert> alertOf(SecurityAlertPo row) { return row == null ? Optional.<SecurityAlert>empty() : Optional.of(new SecurityAlert(row.getAlertId(), row.getRuleId(), row.getRiskLevel(), row.getFingerprint(), row.getSubject(), row.getStatus(), row.getFirstSeen(), row.getLastSeen(), row.getEventCount(), row.getVersion())); }
