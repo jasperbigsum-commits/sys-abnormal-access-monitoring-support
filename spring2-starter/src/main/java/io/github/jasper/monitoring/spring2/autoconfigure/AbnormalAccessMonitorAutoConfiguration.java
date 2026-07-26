@@ -20,7 +20,6 @@ import io.github.jasper.monitoring.core.domain.rule.DefaultRuleCatalog;
 import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
 import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
 import io.github.jasper.monitoring.core.application.AlertLifecycleService;
-import io.github.jasper.monitoring.core.infrastructure.memory.InMemoryMonitoringRepository;
 import io.github.jasper.monitoring.core.application.rule.InternalRuleContributor;
 import io.github.jasper.monitoring.core.application.rule.InternalRuleRegistry;
 import io.github.jasper.monitoring.core.application.MonitoringActionRegistry;
@@ -59,8 +58,7 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 /**
  * Spring Boot 2 ({@code javax.servlet}) auto-configuration for the monitoring component.
  *
- * <p>The configuration selects the MyBatis repository when a {@link SqlSessionFactory} is present,
- * otherwise it supplies an in-memory repository for local development. Host beans always take
+ * <p>The configuration requires MyBatis-backed monitoring persistence. Host beans always take
  * precedence over defaults. Resource authorization defaults to deny and {@code ENFORCE} requires
  * at least one host {@link ControlHandler}.</p>
  */
@@ -68,13 +66,6 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 @AutoConfigureAfter(name = "org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration")
 @EnableConfigurationProperties(AbnormalAccessMonitorProperties.class)
 public class AbnormalAccessMonitorAutoConfiguration {
-    /** 当没有数据源会话工厂时提供仅用于本地开发和测试的内存仓储。 */
-    @Bean
-    @ConditionalOnMissingBean({MonitoringRepository.class, SqlSessionFactory.class})
-    public MonitoringRepository abnormalAccessMonitoringRepository() {
-        return new InMemoryMonitoringRepository();
-    }
-
     /** 当宿主提供 MyBatis 会话工厂时注册 Mapper 并创建生产仓储。 */
     @Bean
     @ConditionalOnMissingBean(MonitoringRepository.class)

@@ -60,24 +60,17 @@ import org.slf4j.MDC;
 
 class AbnormalAccessMonitorAutoConfigurationTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(autoConfiguration()));
+        .withConfiguration(AutoConfigurations.of(autoConfiguration()))
+        .withUserConfiguration(TestPersistenceConfiguration.class);
     private final WebApplicationContextRunner webContextRunner = new WebApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(autoConfiguration()));
+        .withConfiguration(AutoConfigurations.of(autoConfiguration()))
+        .withUserConfiguration(TestPersistenceConfiguration.class);
 
     @Test
-    void createsAnInMemoryObserveMonitorWhenNoSqlSessionFactoryIsAvailable() {
-        contextRunner.withPropertyValues("abnormal.access.monitor.system-id=orders")
-            .run(context -> {
-                assertThat(context).hasSingleBean(DefaultSecurityMonitor.class);
-                assertThat(context).hasSingleBean(AlertLifecycleService.class);
-                assertThat(context).hasSingleBean(ResourceAccessGuard.class);
-                assertThat(context.getBean(MonitoringRepository.class)).isInstanceOf(InMemoryMonitoringRepository.class);
-
-                MonitoringOutcome outcome = context.getBean(DefaultSecurityMonitor.class).record(disabledLoginFailure());
-
-                assertThat(outcome.getEvent().getSystemId()).isEqualTo("orders");
-                assertThat(outcome.getControls()).isEmpty();
-            });
+    void failsWhenSqlSessionFactoryIsUnavailable() {
+        new ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(autoConfiguration()))
+            .run(context -> assertThat(context).hasFailed());
     }
 
     @Test
@@ -108,7 +101,9 @@ class AbnormalAccessMonitorAutoConfigurationTest {
 
     @Test
     void usesMyBatisRepositoryWhenSqlSessionFactoryIsAvailable() {
-        contextRunner.withUserConfiguration(SqlSessionFactoryConfiguration.class)
+        new ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(autoConfiguration()))
+            .withUserConfiguration(SqlSessionFactoryConfiguration.class)
             .run(context -> assertThat(context.getBean(MonitoringRepository.class).getClass().getName())
                 .isEqualTo("io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepository"));
     }
@@ -488,9 +483,26 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     }
 
     @Configuration(proxyBeanMethods = false)
+    static class TestPersistenceConfiguration {
+        @Bean
+        SqlSessionFactory testSqlSessionFactory() {
+            return SqlSessionFactoryConfiguration.factory();
+        }
+
+        @Bean
+        MonitoringRepository testMonitoringRepository() {
+            return new InMemoryMonitoringRepository();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
     static class SqlSessionFactoryConfiguration {
         @Bean
         SqlSessionFactory sqlSessionFactory() {
+            return factory();
+        }
+
+        static SqlSessionFactory factory() {
             SqlSessionFactory factory = Mockito.mock(SqlSessionFactory.class);
             Mockito.when(factory.getConfiguration()).thenReturn(new org.apache.ibatis.session.Configuration());
             return factory;

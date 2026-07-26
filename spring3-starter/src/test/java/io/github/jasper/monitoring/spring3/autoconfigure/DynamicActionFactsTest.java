@@ -42,7 +42,8 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 class DynamicActionFactsTest {
     private final WebApplicationContextRunner webContextRunner = new WebApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class));
+        .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
+        .withUserConfiguration(AbnormalAccessMonitorAutoConfigurationTest.TestPersistenceConfiguration.class);
 
     @AfterEach
     void clearsRequestContext() {
