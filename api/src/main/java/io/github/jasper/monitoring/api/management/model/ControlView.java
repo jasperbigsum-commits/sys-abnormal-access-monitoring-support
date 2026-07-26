@@ -1,0 +1,2 @@
+package io.github.jasper.monitoring.api.management.model;
+public final class ControlView { private final String id,systemScope; private final long version; private ControlView(String id,String scope,long version){this.id=id;this.systemScope=scope;this.version=version;} public static ControlView of(String id,String scope,long version){return new ControlView(id,scope,version);} public String getId(){return id;} public String getSystemScope(){return systemScope;} public long getVersion(){return version;} }

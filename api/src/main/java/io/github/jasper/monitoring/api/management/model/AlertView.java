@@ -1,0 +1,2 @@
+package io.github.jasper.monitoring.api.management.model;
+public final class AlertView { private final String id,systemScope; private final long version; private AlertView(String id,String scope,long version){this.id=id;this.systemScope=scope;this.version=version;} public static AlertView of(String id,String scope,long version){return new AlertView(id,scope,version);} public String getId(){return id;} public String getSystemScope(){return systemScope;} public long getVersion(){return version;} }

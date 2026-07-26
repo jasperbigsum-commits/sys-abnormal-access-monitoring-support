@@ -1,0 +1,2 @@
+package io.github.jasper.monitoring.api.management.model;
+public final class SecurityEventView { private final String id,systemScope; private SecurityEventView(String id,String scope){this.id=id;this.systemScope=scope;} public static SecurityEventView of(String id,String scope){return new SecurityEventView(id,scope);} public String getId(){return id;} public String getSystemScope(){return systemScope;} }

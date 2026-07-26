@@ -1,0 +1,3 @@
+package io.github.jasper.monitoring.api.management;
+import io.github.jasper.monitoring.api.management.command.*; import io.github.jasper.monitoring.api.management.model.ControlView; import io.github.jasper.monitoring.api.management.query.*;
+public interface ControlManagementService { ManagementPage<ControlView> search(ManagementActor actor, ControlQuery query); ControlView get(ManagementActor actor, String id); ControlView approve(ManagementActor actor, ControlApprovalCommand command); ControlView reject(ManagementActor actor, ControlRejectionCommand command); ControlView retryFailed(ManagementActor actor, ControlRetryCommand command); }
