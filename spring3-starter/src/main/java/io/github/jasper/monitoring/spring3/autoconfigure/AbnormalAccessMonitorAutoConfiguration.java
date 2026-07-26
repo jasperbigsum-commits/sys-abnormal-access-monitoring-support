@@ -12,6 +12,12 @@ import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.control.ControlCatalog;
 import io.github.jasper.monitoring.api.control.ControlType;
+import io.github.jasper.monitoring.api.management.AlertManagementService;
+import io.github.jasper.monitoring.api.management.ControlManagementService;
+import io.github.jasper.monitoring.api.management.ManagementAuthorizer;
+import io.github.jasper.monitoring.api.management.RuleCatalogService;
+import io.github.jasper.monitoring.api.management.SecurityEventQueryService;
+import io.github.jasper.monitoring.api.management.WhitelistManagementService;
 import io.github.jasper.monitoring.api.fact.FactBinding;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
@@ -34,6 +40,8 @@ import io.github.jasper.monitoring.spring.support.MdcTraceBridge;
 import io.github.jasper.monitoring.spring.support.control.GenericIpControlHandler;
 import io.github.jasper.monitoring.spring.support.control.IpControlState;
 import io.github.jasper.monitoring.spring.support.control.LocalIpControlState;
+import io.github.jasper.monitoring.spring.support.management.ManagementServiceFactory;
+import io.github.jasper.monitoring.spring.support.management.ManagementServices;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -114,6 +122,20 @@ public class AbnormalAccessMonitorAutoConfiguration {
             MyBatisControlExecutionStore store, ControlCatalog<ControlHandler> catalog) {
         return new ControlExecutionService(store, catalog, Clock.systemUTC());
     }
+
+    @Bean
+    @ConditionalOnBean(ManagementAuthorizer.class)
+    @ConditionalOnMissingBean
+    public ManagementServices abnormalAccessManagementServices(ManagementAuthorizer authorizer,
+            MyBatisMonitoringStore store, ControlExecutionService controls) {
+        return ManagementServiceFactory.create(authorizer, store, store, store, controls, Clock.systemUTC());
+    }
+
+    @Bean @ConditionalOnBean(ManagementServices.class) @ConditionalOnMissingBean SecurityEventQueryService abnormalAccessSecurityEventQueryService(ManagementServices services) { return services.events(); }
+    @Bean @ConditionalOnBean(ManagementServices.class) @ConditionalOnMissingBean AlertManagementService abnormalAccessAlertManagementService(ManagementServices services) { return services.alerts(); }
+    @Bean @ConditionalOnBean(ManagementServices.class) @ConditionalOnMissingBean RuleCatalogService abnormalAccessRuleCatalogService(ManagementServices services) { return services.rules(); }
+    @Bean @ConditionalOnBean(ManagementServices.class) @ConditionalOnMissingBean WhitelistManagementService abnormalAccessWhitelistManagementService(ManagementServices services) { return services.whitelists(); }
+    @Bean @ConditionalOnBean(ManagementServices.class) @ConditionalOnMissingBean ControlManagementService abnormalAccessControlManagementService(ManagementServices services) { return services.controls(); }
 
     @Bean
     @ConditionalOnMissingBean(MonitoringService.RuleEvaluationPort.class)
