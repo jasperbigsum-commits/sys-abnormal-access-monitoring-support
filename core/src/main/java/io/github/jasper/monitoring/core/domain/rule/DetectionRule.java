@@ -31,7 +31,8 @@ public interface DetectionRule<R extends RuleType> extends LegacyDetectionRule {
 
     /** Evaluates through the typed context without consulting an external policy. */
     default Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
-        return evaluate(context.getEvent(), context.getHistory());
+        throw new UnsupportedOperationException(
+            "Typed rule must implement evaluate(RuleEvaluationContext)");
     }
 
 }

@@ -11,6 +11,12 @@ import io.github.jasper.monitoring.core.domain.RuleMatch;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.rule.RuleCatalog;
+import io.github.jasper.monitoring.api.rule.RuleDefinition;
+import io.github.jasper.monitoring.api.rule.RuleMode;
+import io.github.jasper.monitoring.api.rule.RuleSource;
+import io.github.jasper.monitoring.api.rule.RuleType;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -83,6 +89,105 @@ public final class DefaultRuleCatalog {
                 || event.getEventType() == SecurityEventType.SECURITY_SWITCH_CHANGE, RiskLevel.HIGH,
                 actions(ControlActionType.RECORD), "security configuration changed"));
     }
+
+    /**
+     * Returns the immutable typed registration of the fourteen built-in rules.
+     * The legacy predicates remain implementation details behind the adapters below.
+     */
+    public static RuleCatalog typedCatalog() {
+        RuleCatalog catalog = new RuleCatalog();
+        for (RuleRegistration registration : registrations()) {
+            register(catalog, registration);
+        }
+        catalog.freeze();
+        return catalog;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <R extends RuleType> void register(RuleCatalog catalog, RuleRegistration registration) {
+        catalog.register((RuleDefinition<R>) registration.definition);
+    }
+
+    /** @return typed rule adapters in the same stable order as {@link #initialRules()} */
+    public static List<DetectionRule<? extends RuleType>> typedRules() {
+        List<DetectionRule<? extends RuleType>> result =
+            new java.util.ArrayList<DetectionRule<? extends RuleType>>();
+        for (RuleRegistration registration : registrations()) {
+            result.add(registration.adapter);
+        }
+        return java.util.Collections.unmodifiableList(result);
+    }
+
+    private static List<RuleRegistration> registrations() {
+        List<DetectionRule> legacy = initialRules();
+        List<RuleRegistration> result = new java.util.ArrayList<RuleRegistration>(legacy.size());
+        result.add(registration(Auth01.class, legacy.get(0), "AUTH-01", RiskLevel.MEDIUM));
+        result.add(registration(Auth02.class, legacy.get(1), "AUTH-02", RiskLevel.HIGH));
+        result.add(registration(Auth03.class, legacy.get(2), "AUTH-03", RiskLevel.HIGH));
+        result.add(registration(Sess01.class, legacy.get(3), "SESS-01", RiskLevel.MEDIUM));
+        result.add(registration(Authz01.class, legacy.get(4), "AUTHZ-01", RiskLevel.HIGH));
+        result.add(registration(Authz02.class, legacy.get(5), "AUTHZ-02", RiskLevel.HIGH));
+        result.add(registration(Data01.class, legacy.get(6), "DATA-01", RiskLevel.MEDIUM));
+        result.add(registration(Data02.class, legacy.get(7), "DATA-02", RiskLevel.HIGH));
+        result.add(registration(Data03.class, legacy.get(8), "DATA-03", RiskLevel.MEDIUM));
+        result.add(registration(Expt01.class, legacy.get(9), "EXPT-01", RiskLevel.HIGH));
+        result.add(registration(Expt02.class, legacy.get(10), "EXPT-02", RiskLevel.HIGH));
+        result.add(registration(Priv01.class, legacy.get(11), "PRIV-01", RiskLevel.HIGH));
+        result.add(registration(Priv02.class, legacy.get(12), "PRIV-02", RiskLevel.HIGH));
+        result.add(registration(Secu01.class, legacy.get(13), "SECU-01", RiskLevel.HIGH));
+        return result;
+    }
+
+    private static <R extends RuleType> RuleRegistration registration(Class<R> type, DetectionRule legacy,
+                                                                        String id, RiskLevel risk) {
+        RuleDefinition<R> definition = RuleDefinition.builder(type, id)
+            .appliesTo(BuiltInActions.SensitiveView.class)
+            .historyWindow(Duration.ofDays(1)).threshold(1L).risk(risk)
+            .mode(RuleMode.OBSERVE).source(RuleSource.INTERNAL)
+            .control(ControlActionType.RECORD).build();
+        return new RuleRegistration(type, definition, new LegacyRuleAdapter<R>(legacy, definition));
+    }
+
+    private static final class RuleRegistration {
+        private final Class<? extends RuleType> type;
+        private final RuleDefinition<?> definition;
+        private final DetectionRule<? extends RuleType> adapter;
+        private <R extends RuleType> RuleRegistration(Class<R> type, RuleDefinition<R> definition,
+                                                       DetectionRule<R> adapter) {
+            this.type = type;
+            this.definition = definition;
+            this.adapter = adapter;
+        }
+    }
+
+    /** Explicit compatibility adapter; legacy predicates never become typed rules implicitly. */
+    private static final class LegacyRuleAdapter<R extends RuleType> implements DetectionRule<R> {
+        private final DetectionRule legacy;
+        private final RuleDefinition<R> definition;
+        private LegacyRuleAdapter(DetectionRule legacy, RuleDefinition<R> definition) {
+            this.legacy = legacy;
+            this.definition = definition;
+        }
+        @Override public RuleDefinition<R> definition() { return definition; }
+        @Override public Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
+            return legacy.evaluate(context.getEvent(), context.getHistory());
+        }
+    }
+
+    static final class Auth01 implements RuleType { private Auth01() { } }
+    static final class Auth02 implements RuleType { private Auth02() { } }
+    static final class Auth03 implements RuleType { private Auth03() { } }
+    static final class Sess01 implements RuleType { private Sess01() { } }
+    static final class Authz01 implements RuleType { private Authz01() { } }
+    static final class Authz02 implements RuleType { private Authz02() { } }
+    static final class Data01 implements RuleType { private Data01() { } }
+    static final class Data02 implements RuleType { private Data02() { } }
+    static final class Data03 implements RuleType { private Data03() { } }
+    static final class Expt01 implements RuleType { private Expt01() { } }
+    static final class Expt02 implements RuleType { private Expt02() { } }
+    static final class Priv01 implements RuleType { private Priv01() { } }
+    static final class Priv02 implements RuleType { private Priv02() { } }
+    static final class Secu01 implements RuleType { private Secu01() { } }
 
     private static DetectionRule authOne() {
         return new AbstractDetectionRule("AUTH-01", RiskLevel.MEDIUM,
