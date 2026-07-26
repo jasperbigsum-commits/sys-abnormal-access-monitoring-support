@@ -19,7 +19,6 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -129,15 +128,7 @@ public final class DefaultRuleCatalog {
 
     /** Returns every executable control that an enabled built-in rule may emit. */
     public static Set<ControlType> requiredControlTypes() {
-        Set<ControlType> result = EnumSet.noneOf(ControlType.class);
-        for (DetectionRule<? extends RuleType> rule : typedRules()) {
-            for (ControlActionType control : rule.definition().getControls()) {
-                if (control != ControlActionType.RECORD) {
-                    result.add(ControlType.from(control));
-                }
-            }
-        }
-        return Collections.unmodifiableSet(result);
+        return typedCatalog().requiredControlTypes();
     }
 
     private static <R extends RuleType, A extends ActionType> RuleDefinition<R> definition(

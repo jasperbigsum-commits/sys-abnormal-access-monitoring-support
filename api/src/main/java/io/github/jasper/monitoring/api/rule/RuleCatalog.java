@@ -1,5 +1,7 @@
 package io.github.jasper.monitoring.api.rule;
 
+import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.control.ControlType;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import java.lang.reflect.Modifier;
@@ -7,6 +9,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.EnumSet;
+import java.util.Set;
 
 /** Mutable-at-startup, frozen-at-runtime catalog keyed only by rule type tokens. */
 public final class RuleCatalog {
@@ -55,6 +59,22 @@ public final class RuleCatalog {
     public synchronized Map<Class<? extends RuleType>, RuleDefinition<?>> asMap() {
         return Collections.unmodifiableMap(
             new LinkedHashMap<Class<? extends RuleType>, RuleDefinition<?>>(definitions));
+    }
+
+    /** Returns executable controls required by frozen, rule-level enforcement definitions. */
+    public synchronized Set<ControlType> requiredControlTypes() {
+        if (!frozen) {
+            throw new MonitoringConfigurationException(MonitoringErrorCode.RULE_REGISTRY_FROZEN,
+                "Rule catalog must be frozen before deriving runtime controls");
+        }
+        Set<ControlType> required = EnumSet.noneOf(ControlType.class);
+        for (RuleDefinition<?> definition : definitions.values()) {
+            if (definition.getMode() != RuleMode.ENFORCE) continue;
+            for (ControlActionType control : definition.getControls()) {
+                if (control != ControlActionType.RECORD) required.add(ControlType.from(control));
+            }
+        }
+        return Collections.unmodifiableSet(required);
     }
 
     private void requireMutable() {

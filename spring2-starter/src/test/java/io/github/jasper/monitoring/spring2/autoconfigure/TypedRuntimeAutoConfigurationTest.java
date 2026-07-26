@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.spring2.autoconfigure;
 
 import io.github.jasper.monitoring.api.action.ActionCatalog;
+import io.github.jasper.monitoring.api.rule.RuleCatalog;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
@@ -37,12 +38,30 @@ class TypedRuntimeAutoConfigurationTest {
             });
     }
 
+    @Test
+    void enforceValidationUsesInjectedFrozenRuleCatalog() {
+        new WebApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
+            .withUserConfiguration(PersistenceConfiguration.class, EmptyRuleCatalogConfiguration.class)
+            .withPropertyValues("abnormal.access.monitor.mode=ENFORCE")
+            .run(context -> assertThat(context).hasNotFailed());
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class PersistenceConfiguration {
         @Bean SqlSessionFactory sqlSessionFactory() {
             SqlSessionFactory factory = Mockito.mock(SqlSessionFactory.class);
             Mockito.when(factory.getConfiguration()).thenReturn(new org.apache.ibatis.session.Configuration());
             return factory;
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class EmptyRuleCatalogConfiguration {
+        @Bean RuleCatalog ruleCatalog() {
+            RuleCatalog catalog = new RuleCatalog();
+            catalog.freeze();
+            return catalog;
         }
     }
 }

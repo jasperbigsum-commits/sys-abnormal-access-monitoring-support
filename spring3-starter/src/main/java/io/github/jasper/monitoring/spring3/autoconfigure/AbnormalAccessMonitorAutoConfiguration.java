@@ -17,6 +17,7 @@ import io.github.jasper.monitoring.api.management.AlertManagementService;
 import io.github.jasper.monitoring.api.management.ControlManagementService;
 import io.github.jasper.monitoring.api.management.ManagementAuthorizer;
 import io.github.jasper.monitoring.api.management.RuleCatalogService;
+import io.github.jasper.monitoring.api.rule.RuleCatalog;
 import io.github.jasper.monitoring.api.management.SecurityEventQueryService;
 import io.github.jasper.monitoring.api.management.WhitelistManagementService;
 import io.github.jasper.monitoring.api.fact.FactBinding;
@@ -121,10 +122,16 @@ public class AbnormalAccessMonitorAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    public RuleCatalog abnormalAccessRuleDefinitionCatalog() {
+        return DefaultRuleCatalog.typedCatalog();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public ControlCatalog<ControlHandler> abnormalAccessControlCatalog(ControlHandlerRegistry handlers,
-            AbnormalAccessMonitorProperties properties) {
+            AbnormalAccessMonitorProperties properties, RuleCatalog rules) {
         ControlCatalog.Builder<ControlHandler> catalog = ControlCatalog.builder();
-        Set<ControlType> required = DefaultRuleCatalog.requiredControlTypes();
+        Set<ControlType> required = rules.requiredControlTypes();
         Set<ControlType> missing = new HashSet<ControlType>(required);
         for (ControlType type : ControlType.values()) {
             java.util.Optional<ControlHandler> handler = properties.getMode() == MonitoringMode.ENFORCE
