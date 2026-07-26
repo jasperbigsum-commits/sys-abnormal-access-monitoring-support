@@ -50,6 +50,13 @@ public final class BuiltInFacts {
         return ALL;
     }
 
+    /** Registers every library-owned fact definition into a mutable catalog. */
+    public static void registerInto(FactCatalog catalog) {
+        for (FactDefinition<?> definition : ALL) {
+            catalog.register(definition);
+        }
+    }
+
     /** Built-in resource identifier token. */
     public static final class ResourceId implements BuiltInFactType<String> {
         private ResourceId() {

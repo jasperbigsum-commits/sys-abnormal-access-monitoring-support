@@ -14,9 +14,9 @@ public enum ControlType {
 
     public boolean requiresApproval() { return this == REQUIRE_APPROVAL; }
 
-    /** Explicit migration mapping from the legacy public enum. */
-    public static ControlType from(ControlActionType legacy) {
-        switch (legacy) {
+    /** Maps a rule-emitted action to its executable control type. */
+    public static ControlType from(ControlActionType action) {
+        switch (action) {
             case REQUIRE_CAPTCHA: return REQUIRE_CAPTCHA;
             case RATE_LIMIT: return RATE_LIMIT;
             case LOCK: return LOCK;

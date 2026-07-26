@@ -67,6 +67,15 @@ public final class ControlHandlerRegistry {
         Optional<ControlHandler> generic = find(genericHandlers, action);
         return generic.isPresent() ? generic : find(defaultHandlers, action);
     }
+
+    /**
+     * Resolves only host or explicitly configured generic handlers. Framework fallback handlers
+     * are intentionally excluded because they cannot satisfy strict enforcement.
+     */
+    public Optional<ControlHandler> findExecutable(ControlActionType action) {
+        Optional<ControlHandler> host = find(hostHandlers, action);
+        return host.isPresent() ? host : find(genericHandlers, action);
+    }
     /**
      * @param action 待判断的控制动作
      * @return 是否有任一已配置处理器支持该动作

@@ -20,6 +20,8 @@ import io.github.jasper.monitoring.api.management.RuleCatalogService;
 import io.github.jasper.monitoring.api.management.SecurityEventQueryService;
 import io.github.jasper.monitoring.api.management.WhitelistManagementService;
 import io.github.jasper.monitoring.api.fact.FactBinding;
+import io.github.jasper.monitoring.api.fact.FactCatalog;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.core.application.DefaultMonitoringRuntime;
@@ -100,26 +102,45 @@ public class AbnormalAccessMonitorAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    public FactCatalog abnormalAccessFactCatalog() {
+        FactCatalog catalog = new FactCatalog();
+        BuiltInFacts.registerInto(catalog);
+        catalog.freeze();
+        return catalog;
+    }
+
+    @Bean
     @ConditionalOnMissingBean(MonitoringRuntimePort.class)
-    public DefaultMonitoringRuntime abnormalAccessMonitoringRuntime(ActionCatalog catalog,
+    public DefaultMonitoringRuntime abnormalAccessMonitoringRuntime(ActionCatalog catalog, FactCatalog factCatalog,
             ObjectProvider<FactBinding> bindings) {
         List<FactBinding> values = new ArrayList<FactBinding>();
         for (FactBinding binding : bindings) values.add(binding);
-        return new DefaultMonitoringRuntime(catalog, values);
+        return new DefaultMonitoringRuntime(catalog, factCatalog, values);
     }
 
     @Bean
     @ConditionalOnMissingBean
     public ControlCatalog<ControlHandler> abnormalAccessControlCatalog(ControlHandlerRegistry handlers,
             AbnormalAccessMonitorProperties properties) {
-        if (properties.getMode() == MonitoringMode.ENFORCE && handlers.isEmpty()) {
-            throw new MonitoringConfigurationException(MonitoringErrorCode.ENFORCEMENT_HANDLER_REQUIRED,
-                "ENFORCE mode requires at least one executable ControlHandler");
-        }
         ControlCatalog.Builder<ControlHandler> catalog = ControlCatalog.builder();
+        Set<ControlType> required = DefaultRuleCatalog.requiredControlTypes();
+        Set<ControlType> missing = new HashSet<ControlType>(required);
         for (ControlType type : ControlType.values()) {
-            java.util.Optional<ControlHandler> handler = handlers.find(ControlActionType.valueOf(type.name()));
-            if (handler.isPresent()) catalog.bind(type, handler.get());
+            java.util.Optional<ControlHandler> handler = properties.getMode() == MonitoringMode.ENFORCE
+                ? handlers.findExecutable(ControlActionType.valueOf(type.name()))
+                : handlers.find(ControlActionType.valueOf(type.name()));
+            if (handler.isPresent()) {
+                catalog.bind(type, handler.get());
+                missing.remove(type);
+            }
+        }
+        if (properties.getMode() == MonitoringMode.ENFORCE) {
+            if (!missing.isEmpty()) {
+                throw new MonitoringConfigurationException(MonitoringErrorCode.ENFORCEMENT_HANDLER_REQUIRED,
+                    "ENFORCE mode requires handlers for built-in rule controls: " + missing);
+            }
+            catalog.enforce(required);
         }
         return catalog.freeze();
     }

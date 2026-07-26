@@ -35,4 +35,24 @@ public final class AuditControlActions {
     public ControlExecution rateLimit(ControlCommand command) {
         return ControlExecution.succeeded(command.getIdempotencyKey());
     }
+
+    @ControlTrigger(ControlActionType.REVOKE_SESSION)
+    public ControlExecution revokeSession(ControlCommand command) {
+        return ControlExecution.succeeded(command.getIdempotencyKey());
+    }
+
+    @ControlTrigger(ControlActionType.REQUIRE_MFA)
+    public ControlExecution requireMfa(ControlCommand command) {
+        return ControlExecution.succeeded(command.getIdempotencyKey());
+    }
+
+    @ControlTrigger(ControlActionType.DENY)
+    public ControlExecution deny(ControlCommand command) {
+        return ControlExecution.succeeded(command.getIdempotencyKey());
+    }
+
+    @ControlTrigger(ControlActionType.REQUIRE_APPROVAL)
+    public ControlExecution requireApproval(ControlCommand command) {
+        return ControlExecution.succeeded(command.getIdempotencyKey());
+    }
 }

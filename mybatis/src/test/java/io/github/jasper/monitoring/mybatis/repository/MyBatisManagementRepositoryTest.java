@@ -9,7 +9,7 @@ import io.github.jasper.monitoring.api.management.ManagementOperation;
 import io.github.jasper.monitoring.api.management.ManagementPageRequest;
 import io.github.jasper.monitoring.api.management.query.SecurityEventQuery;
 import io.github.jasper.monitoring.core.domain.management.ManagementAuditRecord;
-import io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepositoryRegistrar;
+import io.github.jasper.monitoring.mybatis.MyBatisMonitoringStoreRegistrar;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
@@ -45,7 +45,7 @@ class MyBatisManagementRepositoryTest {
             statement.execute("INSERT INTO alert_event_link VALUES('alert-a','event-a')");
         }
         Configuration configuration=new Configuration(new Environment("test",new JdbcTransactionFactory(),dataSource));
-        MyBatisMonitoringRepositoryRegistrar.register(configuration);
+        MyBatisMonitoringStoreRegistrar.register(configuration);
         SqlSessionFactory factory=new SqlSessionFactoryBuilder().build(configuration);
         repository=new MyBatisManagementRepository(SqlSessionManager.newInstance(factory));
     }

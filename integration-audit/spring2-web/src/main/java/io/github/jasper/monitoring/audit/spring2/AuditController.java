@@ -10,11 +10,18 @@ import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.api.management.ManagementActor;
+import io.github.jasper.monitoring.api.management.ManagementPage;
+import io.github.jasper.monitoring.api.management.ManagementPageRequest;
+import io.github.jasper.monitoring.api.management.SecurityEventQueryService;
+import io.github.jasper.monitoring.api.management.model.SecurityEventView;
+import io.github.jasper.monitoring.api.management.query.SecurityEventQuery;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.time.Instant;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,16 +42,19 @@ public class AuditController {
     private final MonitoringContextAccessor contextAccessor;
     private final AuditReportCatalog reportCatalog;
     private final AuditExportService exportService;
+    private final SecurityEventQueryService eventQueries;
 
     /** @param monitoring Starter 自动装配的强类型监测服务 */
     public AuditController(MonitoringService monitoring, ResourceAccessGuard resourceAccessGuard,
                            MonitoringContextAccessor contextAccessor,
-                           AuditReportCatalog reportCatalog, AuditExportService exportService) {
+                           AuditReportCatalog reportCatalog, AuditExportService exportService,
+                           SecurityEventQueryService eventQueries) {
         this.monitoring = monitoring;
         this.resourceAccessGuard = resourceAccessGuard;
         this.contextAccessor = contextAccessor;
         this.reportCatalog = reportCatalog;
         this.exportService = exportService;
+        this.eventQueries = eventQueries;
     }
 
     @GetMapping("/reports/{reportId}")
@@ -115,6 +125,19 @@ public class AuditController {
     public Map<String, Object> annotatedQuery() {
         Map<String, Object> response = new LinkedHashMap<String, Object>();
         response.put("status", "ok");
+        return response;
+    }
+
+    @GetMapping("/management/events")
+    public Map<String, Object> managementEvents() {
+        ManagementActor actor = ManagementActor.of(
+            contextAccessor.identityContext().getUserId(), "audit-spring2-web");
+        SecurityEventQuery query = SecurityEventQuery.of(
+            ManagementPageRequest.of(0, 20, SecurityEventQuery.Sort.OCCURRED_AT),
+            Instant.now().minusSeconds(60), Instant.now().plusSeconds(1));
+        ManagementPage<SecurityEventView> page = eventQueries.search(actor, query);
+        Map<String, Object> response = new LinkedHashMap<String, Object>();
+        response.put("count", Long.valueOf(page.getTotalElements()));
         return response;
     }
 

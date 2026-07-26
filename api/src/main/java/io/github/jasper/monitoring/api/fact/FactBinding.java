@@ -15,14 +15,16 @@ public final class FactBinding {
     private final Class<? extends ActionType> actionType;
     private final Class<? extends ActionContract> contractType;
     private final ActionFactProvider provider;
+    private final FactSource source;
     private final Set<Class<? extends FactType<?>>> declaredFacts;
 
     private FactBinding(Class<? extends ActionType> actionType,
-            Class<? extends ActionContract> contractType, ActionFactProvider provider,
+            Class<? extends ActionContract> contractType, FactSource source, ActionFactProvider provider,
             Class<? extends FactType<?>>[] declaredFacts) {
         this.actionType = actionType;
         this.contractType = contractType;
         this.provider = Objects.requireNonNull(provider, "provider");
+        this.source = Objects.requireNonNull(source, "source");
         if (declaredFacts == null || declaredFacts.length == 0) {
             throw new IllegalArgumentException("At least one declared fact is required");
         }
@@ -37,24 +39,26 @@ public final class FactBinding {
     /** Creates an exact action binding that is never inherited by sibling actions. */
     @SafeVarargs
     public static FactBinding forAction(Class<? extends ActionType> actionType,
-            ActionFactProvider provider, Class<? extends FactType<?>>... declaredFacts) {
+            FactSource source, ActionFactProvider provider,
+            Class<? extends FactType<?>>... declaredFacts) {
         Objects.requireNonNull(actionType, "actionType");
         int modifiers = actionType.getModifiers();
         if (actionType.isInterface() || Modifier.isAbstract(modifiers) || !Modifier.isFinal(modifiers)) {
             throw new IllegalArgumentException("Action binding target must be concrete and final");
         }
-        return new FactBinding(actionType, null, provider, declaredFacts);
+        return new FactBinding(actionType, null, source, provider, declaredFacts);
     }
 
     /** Creates an explicit contract binding shared by every action implementing that contract. */
     @SafeVarargs
     public static FactBinding forContract(Class<? extends ActionContract> contractType,
-            ActionFactProvider provider, Class<? extends FactType<?>>... declaredFacts) {
+            FactSource source, ActionFactProvider provider,
+            Class<? extends FactType<?>>... declaredFacts) {
         Objects.requireNonNull(contractType, "contractType");
         if (contractType == ActionContract.class || !contractType.isInterface()) {
             throw new IllegalArgumentException("Contract binding target must be a specific contract interface");
         }
-        return new FactBinding(null, contractType, provider, declaredFacts);
+        return new FactBinding(null, contractType, source, provider, declaredFacts);
     }
 
     /** @return whether this binding explicitly covers the supplied concrete action */
@@ -65,6 +69,10 @@ public final class FactBinding {
 
     public ActionFactProvider getProvider() {
         return provider;
+    }
+
+    public FactSource getSource() {
+        return source;
     }
 
     public Set<Class<? extends FactType<?>>> getDeclaredFacts() {

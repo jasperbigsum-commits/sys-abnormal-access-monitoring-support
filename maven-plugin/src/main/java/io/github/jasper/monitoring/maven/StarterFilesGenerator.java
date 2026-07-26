@@ -169,7 +169,7 @@ final class StarterFilesGenerator {
             + "\n"
             + "    @Bean\n"
             + "    public FactBinding hostReportExportFacts() {\n"
-            + "        return FactBinding.forAction(HostReportExport.class, execution ->\n"
+            + "        return FactBinding.forAction(HostReportExport.class, FactSource.TRUSTED_REQUEST, execution ->\n"
             + "            ActionFacts.builder().put(BuiltInFacts.ResourceId.class,\n"
             + "                execution.getRequestContext().getPath()).build(),\n"
             + "            BuiltInFacts.ResourceId.class);\n"

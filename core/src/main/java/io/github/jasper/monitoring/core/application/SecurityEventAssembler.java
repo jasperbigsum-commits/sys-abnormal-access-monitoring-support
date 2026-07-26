@@ -17,6 +17,7 @@ import io.github.jasper.monitoring.api.fact.FactType;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.rule.RuleType;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
+import io.github.jasper.monitoring.core.domain.EventFact;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -38,6 +39,12 @@ public final class SecurityEventAssembler {
 
     public AssemblyResult assemble(Class<? extends ActionType> resolvedType, ActionDefinition action,
                                    ActionExecution execution, ActionFacts facts) {
+        return assemble(resolvedType, action, execution, facts, Collections.<EventFact>emptyList());
+    }
+
+    public AssemblyResult assemble(Class<? extends ActionType> resolvedType, ActionDefinition action,
+                                   ActionExecution execution, ActionFacts facts,
+                                   List<EventFact> persistedFacts) {
         if (!Objects.equals(Objects.requireNonNull(resolvedType, "resolvedType"),
             Objects.requireNonNull(execution, "execution").getActionType())) {
             throw new IllegalArgumentException("Resolved action type does not match execution action type");
@@ -72,11 +79,26 @@ public final class SecurityEventAssembler {
         EventInputValidation validation = inputIssues.isEmpty() ? EventInputValidation.valid()
             : EventInputValidation.incomplete(inputIssues,
                 Collections.singleton("action-" + action.getCode().replace(':', '-')));
-        SecurityEvent event = SecurityEvent.from(draft.build(), systemId, UUID.randomUUID().toString(),
+        SecurityEvent base = SecurityEvent.from(draft.build(), systemId, UUID.randomUUID().toString(),
             Instant.now(clock), validation);
+        SecurityEvent event = copyWithFacts(base, persistedFacts);
         java.util.Set<Class<? extends RuleType>> ineligible = new java.util.LinkedHashSet<Class<? extends RuleType>>();
         if (!inputIssues.isEmpty()) ineligible.addAll(action.getRuleTypes());
         return new AssemblyResult(event, facts, outcome, observations, ineligible);
+    }
+
+    private static SecurityEvent copyWithFacts(SecurityEvent event, List<EventFact> facts) {
+        return SecurityEvent.builder().eventId(event.getEventId()).systemId(event.getSystemId())
+            .eventType(event.getEventType()).occurredAt(event.getOccurredAt()).receivedAt(event.getReceivedAt())
+            .userId(event.getUserId()).accountType(event.getAccountType()).roleIds(event.getRoleIds())
+            .sourceIp(event.getSourceIp()).deviceIdHash(event.getDeviceIdHash())
+            .sessionIdHash(event.getSessionIdHash()).requestId(event.getRequestId()).traceId(event.getTraceId())
+            .action(event.getAction()).result(event.getResult()).reasonCode(event.getReasonCode())
+            .resourceType(event.getResourceType()).resourceId(event.getResourceId()).orgScope(event.getOrgScope())
+            .dataCount(event.getDataCount()).dataCountKnown(event.hasDataCount())
+            .latencyMs(event.getLatencyMs()).latencyMsKnown(event.hasLatencyMs())
+            .inputStatus(event.getInputStatus()).inputIssues(event.getInputIssues())
+            .attributes(event.getAttributes()).facts(facts).build();
     }
 
     public static final class AssemblyResult {

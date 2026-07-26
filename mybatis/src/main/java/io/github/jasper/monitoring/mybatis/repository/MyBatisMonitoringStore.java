@@ -1,10 +1,14 @@
 package io.github.jasper.monitoring.mybatis.repository;
 
 import io.github.jasper.monitoring.core.domain.AlertDisposition;
+import io.github.jasper.monitoring.core.domain.ControlCommand;
+import io.github.jasper.monitoring.core.domain.ControlExecution;
 import io.github.jasper.monitoring.core.domain.ControlRecord;
 import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.WhitelistEntry;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
+import io.github.jasper.monitoring.api.error.MonitoringPersistenceException;
 import io.github.jasper.monitoring.core.port.AlertRepository;
 import io.github.jasper.monitoring.core.port.ControlRepository;
 import io.github.jasper.monitoring.core.port.EventRepository;
@@ -13,42 +17,58 @@ import io.github.jasper.monitoring.core.port.ManagementAuditRepository;
 import io.github.jasper.monitoring.core.port.ManagementQueryRepository;
 import io.github.jasper.monitoring.core.port.NotificationDeliveryRepository;
 import io.github.jasper.monitoring.core.port.WhitelistRepository;
-import io.github.jasper.monitoring.core.port.MonitoringRepository;
-import io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepository;
-import io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepositoryRegistrar;
+import io.github.jasper.monitoring.mybatis.MyBatisMonitoringStoreRegistrar;
+import io.github.jasper.monitoring.mybatis.mapper.ControlMapper;
 import io.github.jasper.monitoring.mybatis.mapper.EventMapper;
 import io.github.jasper.monitoring.mybatis.mapper.NotificationDeliveryMapper;
 import io.github.jasper.monitoring.mybatis.mapper.AlertMapper;
+import io.github.jasper.monitoring.mybatis.mapper.WhitelistMapper;
+import io.github.jasper.monitoring.mybatis.po.AlertDispositionPo;
+import io.github.jasper.monitoring.mybatis.po.ControlActionPo;
 import io.github.jasper.monitoring.mybatis.po.SecurityAlertPo;
 import io.github.jasper.monitoring.mybatis.po.SecurityEventPo;
 import io.github.jasper.monitoring.mybatis.po.SecurityEventInputIssuePo;
+import io.github.jasper.monitoring.mybatis.po.SecurityEventFactPo;
+import io.github.jasper.monitoring.core.domain.EventFact;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionManager;
+import org.apache.ibatis.exceptions.PersistenceException;
 
 /**
- * The single production persistence adapter. It exposes narrow aggregate ports while retaining
- * the legacy repository only as an internal migration boundary.
+ * The single production persistence adapter exposing narrow, responsibility-specific ports.
  */
 public final class MyBatisMonitoringStore implements EventRepository, AlertRepository, ControlRepository,
     WhitelistRepository, NotificationDeliveryRepository, MonitoringTransaction,
     ManagementQueryRepository, ManagementAuditRepository {
-    private final MonitoringRepository legacy;
     private final SqlSessionManager sessions;
     private final MyBatisManagementRepository management;
 
     public MyBatisMonitoringStore(SqlSessionFactory sqlSessionFactory) {
         Objects.requireNonNull(sqlSessionFactory, "sqlSessionFactory");
-        MyBatisMonitoringRepositoryRegistrar.register(sqlSessionFactory);
+        MyBatisMonitoringStoreRegistrar.register(sqlSessionFactory);
         this.sessions = SqlSessionManager.newInstance(sqlSessionFactory);
-        this.legacy = new MyBatisMonitoringRepository(this.sessions);
         this.management = new MyBatisManagementRepository(this.sessions);
     }
 
-    @Override public void save(SecurityEvent event) { legacy.saveEvent(event); }
+    @Override public void save(SecurityEvent event) {
+        Objects.requireNonNull(event, "event");
+        write(s -> {
+            EventMapper mapper = s.getMapper(EventMapper.class);
+            mapper.insert(eventRow(event));
+            for (String roleId : event.getRoleIds()) mapper.insertRole(event.getEventId(), roleId);
+            for (java.util.Map.Entry<String, String> attribute : event.getAttributes().entrySet()) {
+                mapper.insertAttribute(event.getEventId(), attribute.getKey(), attribute.getValue());
+            }
+            for (int index = 0; index < event.getInputIssues().size(); index++) {
+                mapper.insertInputIssue(inputIssueRow(event.getEventId(), index, event.getInputIssues().get(index)));
+            }
+            for (EventFact fact : event.getFacts()) mapper.insertFact(factRow(event.getEventId(), fact));
+        });
+    }
     @Override public Optional<SecurityEvent> findEvent(String eventId) {
         return read(s -> {
             EventMapper mapper = s.getMapper(EventMapper.class);
@@ -66,13 +86,13 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
     @Override public void save(SecurityAlert alert) { write(s -> { SecurityAlertPo row = alertRow(alert); if (s.getMapper(AlertMapper.class).update(row) == 0) s.getMapper(AlertMapper.class).insert(row); }); }
     @Override public Optional<SecurityAlert> findAlert(String alertId) { return read(s -> alertOf(s.getMapper(AlertMapper.class).find(alertId))); }
     @Override public Optional<SecurityAlert> findOpen(String fingerprint) { return read(s -> alertOf(s.getMapper(AlertMapper.class).findOpen(fingerprint))); }
-    @Override public void linkEvent(String alertId, String eventId) { legacy.linkAlertEvent(alertId, eventId); }
-    @Override public void appendDisposition(AlertDisposition disposition) { legacy.appendAlertDisposition(disposition); }
-    @Override public List<AlertDisposition> findDispositions(String alertId) { return legacy.findAlertDispositions(alertId); }
-    @Override public Optional<ControlRecord> findControl(String idempotencyKey) { return legacy.findControl(idempotencyKey); }
-    @Override public void save(ControlRecord record) { legacy.saveControl(record); }
-    @Override public boolean isActive(String ruleId, String subject, Instant at) { return legacy.isWhitelisted(ruleId, subject, at); }
-    @Override public void add(WhitelistEntry entry) { legacy.addWhitelist(entry); }
+    @Override public void linkEvent(String alertId, String eventId) { write(s -> { AlertMapper mapper = s.getMapper(AlertMapper.class); if (mapper.countEventLink(alertId, eventId) == 0) mapper.insertEventLink(alertId, eventId); }); }
+    @Override public void appendDisposition(AlertDisposition disposition) { write(s -> s.getMapper(AlertMapper.class).insertDisposition(dispositionRow(disposition))); }
+    @Override public List<AlertDisposition> findDispositions(String alertId) { return read(s -> { java.util.ArrayList<AlertDisposition> result = new java.util.ArrayList<AlertDisposition>(); for (AlertDispositionPo row : s.getMapper(AlertMapper.class).findDispositions(alertId)) result.add(dispositionOf(row)); return result; }); }
+    @Override public Optional<ControlRecord> findControl(String idempotencyKey) { return read(s -> controlOf(s.getMapper(ControlMapper.class).find(idempotencyKey))); }
+    @Override public void save(ControlRecord record) { write(s -> { ControlMapper mapper = s.getMapper(ControlMapper.class); ControlActionPo row = controlRow(record); if (mapper.update(row) == 0) mapper.insert(row); }); }
+    @Override public boolean isActive(String ruleId, String subject, Instant at) { return read(s -> s.getMapper(WhitelistMapper.class).countActive(ruleId, subject, at) > 0); }
+    @Override public void add(WhitelistEntry entry) { write(s -> s.getMapper(WhitelistMapper.class).insert(entry.getRuleId(), entry.getSubject(), entry.getExpiresAt())); }
     @Override public void record(String deliveryId, String channel, String aggregateId, String status) {
         write(s -> s.getMapper(NotificationDeliveryMapper.class).insert(deliveryId, channel, aggregateId, status));
     }
@@ -80,6 +100,7 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
         if (sessions.isManagedSessionStarted()) return work.execute();
         sessions.startManagedSession(false);
         try { T result = work.execute(); sessions.commit(); return result; }
+        catch (PersistenceException e) { sessions.rollback(); throw persistenceFailure(e); }
         catch (RuntimeException e) { sessions.rollback(); throw e; }
         finally { sessions.close(); }
     }
@@ -102,12 +123,17 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
     private <T> T read(java.util.function.Function<org.apache.ibatis.session.SqlSession, T> work) {
         boolean owner = !sessions.isManagedSessionStarted();
         if (owner) sessions.startManagedSession(true);
-        try { return work.apply(sessions); } finally { if (owner) sessions.close(); }
+        try { return work.apply(sessions); }
+        catch (PersistenceException e) { throw persistenceFailure(e); }
+        finally { if (owner) sessions.close(); }
     }
     private void write(java.util.function.Consumer<org.apache.ibatis.session.SqlSession> work) {
         boolean owner = !sessions.isManagedSessionStarted();
         if (owner) sessions.startManagedSession(false);
-        try { work.accept(sessions); if (owner) sessions.commit(); } catch (RuntimeException e) { if (owner) sessions.rollback(); throw e; } finally { if (owner) sessions.close(); }
+        try { work.accept(sessions); if (owner) sessions.commit(); }
+        catch (PersistenceException e) { if (owner) sessions.rollback(); throw persistenceFailure(e); }
+        catch (RuntimeException e) { if (owner) sessions.rollback(); throw e; }
+        finally { if (owner) sessions.close(); }
     }
     private static SecurityEvent toEvent(SecurityEventPo row, EventMapper mapper) {
         if (row == null) return null;
@@ -122,8 +148,17 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
             .occurredAt(row.getOccurredAt()).receivedAt(row.getReceivedAt()).userId(row.getUserId()).accountType(row.getAccountType())
             .sourceIp(row.getSourceIp()).deviceIdHash(row.getDeviceIdHash()).sessionIdHash(row.getSessionIdHash()).requestId(row.getRequestId()).traceId(row.getTraceId()).action(row.getAction()).result(row.getResult()).reasonCode(row.getReasonCode()).resourceType(row.getResourceType()).resourceId(row.getResourceId()).orgScope(row.getOrgScope())
             .dataCount(row.getDataCount()).dataCountKnown(row.isDataCountKnown()).latencyMs(row.getLatencyMs())
-            .latencyMsKnown(row.isLatencyMsKnown()).inputStatus(row.getInputStatus()).roleIds(new java.util.LinkedHashSet<String>(roles)).attributes(attributes).inputIssues(issues).build();
+            .latencyMsKnown(row.isLatencyMsKnown()).inputStatus(row.getInputStatus()).roleIds(new java.util.LinkedHashSet<String>(roles)).attributes(attributes).inputIssues(issues).facts(factsOf(mapper.findFacts(row.getEventId()))).build();
     }
+    private static SecurityEventPo eventRow(SecurityEvent event) { SecurityEventPo row = new SecurityEventPo(); row.setEventId(event.getEventId()); row.setSystemId(event.getSystemId()); row.setEventType(event.getEventType()); row.setOccurredAt(event.getOccurredAt()); row.setReceivedAt(event.getReceivedAt()); row.setUserId(event.getUserId()); row.setAccountType(event.getAccountType()); row.setSourceIp(event.getSourceIp()); row.setDeviceIdHash(event.getDeviceIdHash()); row.setSessionIdHash(event.getSessionIdHash()); row.setRequestId(event.getRequestId()); row.setTraceId(event.getTraceId()); row.setAction(event.getAction()); row.setResult(event.getResult()); row.setReasonCode(event.getReasonCode()); row.setResourceType(event.getResourceType()); row.setResourceId(event.getResourceId()); row.setOrgScope(event.getOrgScope()); row.setDataCount(event.getDataCount()); row.setLatencyMs(event.getLatencyMs()); row.setDataCountKnown(event.hasDataCount()); row.setLatencyMsKnown(event.hasLatencyMs()); row.setInputStatus(event.getInputStatus()); return row; }
+    private static SecurityEventInputIssuePo inputIssueRow(String eventId, int index, io.github.jasper.monitoring.api.EventInputIssue issue) { SecurityEventInputIssuePo row = new SecurityEventInputIssuePo(); row.setEventId(eventId); row.setIssueIndex(index); row.setRuleId(issue.getRuleId()); row.setFactName(issue.getFactName()); row.setIssueCode(issue.getIssueCode()); row.setSourceType(issue.getSourceType()); return row; }
+    private static SecurityEventFactPo factRow(String eventId, EventFact fact) { SecurityEventFactPo row = new SecurityEventFactPo(); row.setEventId(eventId); row.setFactKey(fact.getKey()); row.setValueType(fact.getValueType()); row.setValueText(fact.getValueText()); row.setSourceType(fact.getSource()); return row; }
+    private static java.util.List<EventFact> factsOf(java.util.List<SecurityEventFactPo> rows) { java.util.List<EventFact> result = new java.util.ArrayList<EventFact>(); for (SecurityEventFactPo row : rows) result.add(new EventFact(row.getFactKey(), row.getValueType(), row.getValueText(), row.getSourceType())); return result; }
     private static SecurityAlertPo alertRow(SecurityAlert alert) { SecurityAlertPo row = new SecurityAlertPo(); row.setAlertId(alert.getAlertId()); row.setRuleId(alert.getRuleId()); row.setRiskLevel(alert.getRiskLevel()); row.setFingerprint(alert.getFingerprint()); row.setSubject(alert.getSubject()); row.setStatus(alert.getStatus()); row.setFirstSeen(alert.getFirstSeen()); row.setLastSeen(alert.getLastSeen()); row.setEventCount(alert.getEventCount()); row.setVersion(alert.getVersion()); return row; }
     private static Optional<SecurityAlert> alertOf(SecurityAlertPo row) { return row == null ? Optional.<SecurityAlert>empty() : Optional.of(new SecurityAlert(row.getAlertId(), row.getRuleId(), row.getRiskLevel(), row.getFingerprint(), row.getSubject(), row.getStatus(), row.getFirstSeen(), row.getLastSeen(), row.getEventCount(), row.getVersion())); }
+    private static AlertDispositionPo dispositionRow(AlertDisposition disposition) { AlertDispositionPo row = new AlertDispositionPo(); row.setDispositionId(disposition.getDispositionId()); row.setAlertId(disposition.getAlertId()); row.setDispositionType(disposition.getDispositionType()); row.setOperatorId(disposition.getOperatorId()); row.setCommentText(disposition.getCommentText()); row.setEvidenceSummary(disposition.getEvidenceSummary()); row.setCreatedAt(disposition.getCreatedAt()); return row; }
+    private static AlertDisposition dispositionOf(AlertDispositionPo row) { return new AlertDisposition(row.getDispositionId(), row.getAlertId(), row.getDispositionType(), row.getOperatorId(), row.getCommentText(), row.getEvidenceSummary(), row.getCreatedAt()); }
+    private static ControlActionPo controlRow(ControlRecord record) { ControlCommand command = record.getCommand(); ControlExecution execution = record.getExecution(); ControlActionPo row = new ControlActionPo(); row.setControlId(execution.getControlId()); row.setIdempotencyKey(command.getIdempotencyKey()); row.setAlertId(command.getAlertId()); row.setRuleId(command.getRuleId()); row.setSubject(command.getSubject()); row.setAction(command.getAction()); row.setExpiresAt(command.getExpiresAt()); row.setStatus(execution.getStatus()); row.setFailureReason(execution.getFailureReason()); row.setExecutedAt(record.getExecutedAt()); row.setVersion(0L); return row; }
+    private static Optional<ControlRecord> controlOf(ControlActionPo row) { if (row == null) return Optional.empty(); ControlCommand command = new ControlCommand(row.getIdempotencyKey(), row.getAlertId(), row.getSubject(), row.getAction(), row.getExpiresAt(), row.getRuleId()); ControlExecution execution = ControlExecution.restored(row.getControlId(), row.getIdempotencyKey(), row.getStatus(), row.getFailureReason()); return Optional.of(new ControlRecord(command, execution, row.getExecutedAt())); }
+    private static MonitoringPersistenceException persistenceFailure(PersistenceException exception) { return new MonitoringPersistenceException(MonitoringErrorCode.PERSISTENCE_OPERATION_FAILED, "Monitoring persistence operation failed", exception); }
 }

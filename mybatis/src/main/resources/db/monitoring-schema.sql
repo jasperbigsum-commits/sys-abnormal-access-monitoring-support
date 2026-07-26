@@ -35,7 +35,7 @@ CREATE INDEX idx_security_event_system_at ON security_event (system_id, occurred
 CREATE TABLE security_event_fact (
     event_id VARCHAR(128) NOT NULL,
     fact_key VARCHAR(128) NOT NULL,
-    value_type VARCHAR(32) NOT NULL,
+    value_type VARCHAR(256) NOT NULL,
     value_text VARCHAR(2048) NOT NULL,
     source_type VARCHAR(64) NOT NULL,
     PRIMARY KEY (event_id, fact_key),

@@ -17,7 +17,7 @@ import org.apache.shiro.subject.PrincipalCollection;
 public final class AuditRbacRealm extends AuthorizingRealm {
     static final String FIXTURE_CREDENTIAL = "audit-fixture";
     private static final Set<String> PRINCIPALS = new HashSet<String>(
-        Arrays.asList("audit-viewer", "audit-exporter"));
+        Arrays.asList("audit-viewer", "audit-exporter", "audit-admin"));
 
     static boolean supportsPrincipal(String principal) {
         return PRINCIPALS.contains(principal);

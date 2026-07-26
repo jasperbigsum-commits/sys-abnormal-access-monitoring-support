@@ -171,11 +171,9 @@ class Spring3AuditWebAcceptanceTest {
     @Test
     void authorizesAndAuditsManagementEventQueries() {
         post("/audit/export", "audit-exporter");
-        SecurityEventQuery query = SecurityEventQuery.of(
-            ManagementPageRequest.of(0, 20, SecurityEventQuery.Sort.OCCURRED_AT),
-            Instant.now().minusSeconds(60), Instant.now().plusSeconds(1));
-        assertTrue(eventQueries.search(ManagementActor.of("audit-admin", "audit-spring3-web"), query)
-            .getItems().size() >= 1);
+        ResponseEntity<String> response = get("/audit/management/events", "audit-admin");
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().contains("\"count\":"));
         assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM management_audit WHERE system_id = ? "
             + "AND actor_id = ? AND action = ? AND outcome = ?", Long.class,
             "audit-spring3-web", "audit-admin", "EVENT_READ", "SUCCEEDED").longValue() >= 1L);

@@ -98,6 +98,7 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     void registersGenericIpControlInEnforceMode() {
         webContextRunner.withPropertyValues(validIpControlProperties())
             .withPropertyValues("abnormal.access.monitor.mode=ENFORCE")
+            .withUserConfiguration(RequiredControlConfiguration.class)
             .run(context -> {
                 assertThat(context).hasSingleBean(IpControlFilter.class);
                 assertThat(context).hasSingleBean(LocalIpControlState.class);
@@ -136,6 +137,29 @@ class AbnormalAccessMonitorAutoConfigurationTest {
             SqlSessionFactory factory = Mockito.mock(SqlSessionFactory.class);
             Mockito.when(factory.getConfiguration()).thenReturn(new org.apache.ibatis.session.Configuration());
             return factory;
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class RequiredControlConfiguration {
+        @Bean
+        io.github.jasper.monitoring.core.port.ControlHandler remainingBuiltInControls() {
+            return new io.github.jasper.monitoring.core.port.ControlHandler() {
+                @Override
+                public boolean supports(io.github.jasper.monitoring.api.ControlActionType action) {
+                    return action == io.github.jasper.monitoring.api.ControlActionType.REQUIRE_CAPTCHA
+                        || action == io.github.jasper.monitoring.api.ControlActionType.REVOKE_SESSION
+                        || action == io.github.jasper.monitoring.api.ControlActionType.REQUIRE_MFA
+                        || action == io.github.jasper.monitoring.api.ControlActionType.REQUIRE_APPROVAL;
+                }
+
+                @Override
+                public io.github.jasper.monitoring.core.domain.ControlExecution execute(
+                        io.github.jasper.monitoring.core.domain.ControlCommand command) {
+                    return io.github.jasper.monitoring.core.domain.ControlExecution.succeeded(
+                        command.getIdempotencyKey());
+                }
+            };
         }
     }
 }

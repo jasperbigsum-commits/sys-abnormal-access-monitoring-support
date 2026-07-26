@@ -8,25 +8,38 @@ import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactBinding;
 import io.github.jasper.monitoring.api.fact.FactType;
 import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.api.fact.FactCatalog;
+import io.github.jasper.monitoring.api.fact.FactDefinition;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import io.github.jasper.monitoring.core.domain.EventFact;
 
 /** Default runtime that resolves frozen action metadata and invokes explicitly bound fact providers. */
 public final class DefaultMonitoringRuntime implements MonitoringRuntimePort {
     private final ActionCatalog catalog;
+    private final FactCatalog factCatalog;
     private final List<FactBinding> bindings;
 
-    public DefaultMonitoringRuntime(ActionCatalog catalog, List<FactBinding> bindings) {
+    public DefaultMonitoringRuntime(ActionCatalog catalog, FactCatalog factCatalog, List<FactBinding> bindings) {
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         if (!catalog.isFrozen()) {
             throw new IllegalArgumentException("Action catalog must be frozen before runtime creation");
         }
-        this.bindings = Collections.unmodifiableList(
-            new ArrayList<FactBinding>(Objects.requireNonNull(bindings, "bindings")));
+        this.factCatalog = Objects.requireNonNull(factCatalog, "factCatalog");
+        if (!factCatalog.isFrozen()) {
+            throw new IllegalArgumentException("Fact catalog must be frozen before runtime creation");
+        }
+        validateActionFacts(catalog, factCatalog);
+        List<FactBinding> copy = new ArrayList<FactBinding>(
+            Objects.requireNonNull(bindings, "bindings"));
+        validateBindings(catalog, factCatalog, copy);
+        this.bindings = Collections.unmodifiableList(copy);
     }
 
     @Override
@@ -35,24 +48,27 @@ public final class DefaultMonitoringRuntime implements MonitoringRuntimePort {
     }
 
     @Override
-    public ActionFacts collect(ActionExecution execution, ActionDefinition action) {
+    public FactCollection collect(ActionExecution execution, ActionDefinition action) {
         Objects.requireNonNull(execution, "execution");
         Objects.requireNonNull(action, "action");
         Map<Class<? extends FactType<?>>, Object> values =
             new LinkedHashMap<Class<? extends FactType<?>>, Object>();
-        add(values, execution.getSuppliedFacts(), action, execution.getSuppliedFactSource(), null);
+        Map<Class<? extends FactType<?>>, FactSource> sources =
+            new LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
+        add(values, sources, execution.getSuppliedFacts(), action, execution.getSuppliedFactSource(), null);
         for (FactBinding binding : bindings) {
             if (!binding.appliesTo(execution.getActionType())) {
                 continue;
             }
             ActionFacts contribution = Objects.requireNonNull(binding.getProvider().provide(execution),
                 "Fact provider returned null");
-            add(values, contribution, action, FactSource.HOST_PROVIDER, binding);
+            add(values, sources, contribution, action, binding.getSource(), binding);
         }
-        return facts(values);
+        return new FactCollection(facts(values), sources, snapshots(values, sources));
     }
 
-    private static void add(Map<Class<? extends FactType<?>>, Object> values, ActionFacts contribution,
+    private static void add(Map<Class<? extends FactType<?>>, Object> values,
+            Map<Class<? extends FactType<?>>, FactSource> sources, ActionFacts contribution,
             ActionDefinition action, FactSource source, FactBinding binding) {
         for (Map.Entry<Class<? extends FactType<?>>, Object> entry : contribution.asMap().entrySet()) {
             Class<? extends FactType<?>> factType = entry.getKey();
@@ -68,7 +84,94 @@ public final class DefaultMonitoringRuntime implements MonitoringRuntimePort {
             if (values.put(factType, entry.getValue()) != null) {
                 throw new IllegalStateException("Multiple sources returned the same fact: " + factType.getName());
             }
+            sources.put(factType, source);
         }
+    }
+
+    private static void validateBindings(ActionCatalog catalog, FactCatalog factCatalog,
+            List<FactBinding> bindings) {
+        Map<Class<? extends ActionType>, Map<Class<? extends FactType<?>>, FactBinding>> ownership =
+            new LinkedHashMap<Class<? extends ActionType>, Map<Class<? extends FactType<?>>, FactBinding>>();
+        for (FactBinding binding : bindings) {
+            Objects.requireNonNull(binding, "bindings contains null");
+            boolean matched = false;
+            for (Map.Entry<Class<? extends ActionType>, ActionDefinition> entry : catalog.asMap().entrySet()) {
+                if (!binding.appliesTo(entry.getKey())) {
+                    continue;
+                }
+                matched = true;
+                validateBinding(entry.getKey(), entry.getValue(), factCatalog, binding, ownership);
+            }
+            if (!matched) {
+                throw configuration("Fact binding does not match a registered action");
+            }
+        }
+    }
+
+    private static void validateBinding(Class<? extends ActionType> actionType, ActionDefinition action,
+            FactCatalog factCatalog, FactBinding binding,
+            Map<Class<? extends ActionType>, Map<Class<? extends FactType<?>>, FactBinding>> ownership) {
+        Map<Class<? extends FactType<?>>, FactBinding> actionOwnership = ownership.get(actionType);
+        if (actionOwnership == null) {
+            actionOwnership = new LinkedHashMap<Class<? extends FactType<?>>, FactBinding>();
+            ownership.put(actionType, actionOwnership);
+        }
+        for (Class<? extends FactType<?>> factType : binding.getDeclaredFacts()) {
+            FactDefinition<?> definition = factCatalog.require(factType);
+            if (!action.getRequiredFacts().contains(factType) && !action.getOptionalFacts().contains(factType)) {
+                throw configuration("Fact binding declares a fact not owned by action " + actionType.getName()
+                    + ": " + factType.getName());
+            }
+            if (!action.getAllowedSources(factType).contains(binding.getSource())) {
+                throw configuration("Fact binding source is not approved by action " + actionType.getName()
+                    + ": " + factType.getName());
+            }
+            if (!definition.allows(binding.getSource())) {
+                throw configuration("Fact binding source is not approved by fact definition "
+                    + definition.getKey());
+            }
+            if (actionOwnership.put(factType, binding) != null) {
+                throw configuration("Multiple bindings own fact " + factType.getName()
+                    + " for action " + actionType.getName());
+            }
+        }
+    }
+
+    private static void validateActionFacts(ActionCatalog actions, FactCatalog facts) {
+        for (Map.Entry<Class<? extends ActionType>, ActionDefinition> entry : actions.asMap().entrySet()) {
+            java.util.Set<Class<? extends FactType<?>>> declared =
+                new java.util.LinkedHashSet<Class<? extends FactType<?>>>(entry.getValue().getRequiredFacts());
+            declared.addAll(entry.getValue().getOptionalFacts());
+            for (Class<? extends FactType<?>> factType : declared) {
+                FactDefinition<?> definition = facts.require(factType);
+                if (java.util.Collections.disjoint(entry.getValue().getAllowedSources(factType),
+                        definition.getAllowedSources())) {
+                    throw configuration("Action and fact definition have no common source: "
+                        + entry.getKey().getName() + " / " + definition.getKey());
+                }
+            }
+        }
+    }
+
+    private List<EventFact> snapshots(Map<Class<? extends FactType<?>>, Object> values,
+            Map<Class<? extends FactType<?>>, FactSource> sources) {
+        List<EventFact> result = new ArrayList<EventFact>(values.size());
+        for (Map.Entry<Class<? extends FactType<?>>, Object> entry : values.entrySet()) {
+            FactDefinition<?> definition = factCatalog.require(entry.getKey());
+            FactSource source = sources.get(entry.getKey());
+            if (!definition.allows(source)) {
+                throw new IllegalStateException("Fact source is not approved by definition: "
+                    + definition.getKey());
+            }
+            result.add(new EventFact(definition.getKey(), definition.getValueType().getName(),
+                definition.encodeRaw(entry.getValue()), source));
+        }
+        return result;
+    }
+
+    private static MonitoringConfigurationException configuration(String message) {
+        return new MonitoringConfigurationException(
+            MonitoringErrorCode.CONFLICTING_ACTION_DEFINITION, message);
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

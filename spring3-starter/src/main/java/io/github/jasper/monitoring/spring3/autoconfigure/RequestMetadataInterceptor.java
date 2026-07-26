@@ -75,16 +75,6 @@ public final class RequestMetadataInterceptor implements AsyncHandlerInterceptor
         clearMdcScope(request, "request-metadata");
     }
 
-    /**
-     * 当其他适配器尚未建立上下文时，创建可信请求和身份快照。
-     * 包可见是为了让注解动作拦截器复用完全相同的信任边界。
-     */
-    static void populate(HttpServletRequest request, TrustedProxyResolver trustedProxyResolver,
-                         IdentityContextProvider identityContextProvider) {
-        populate(request, trustedProxyResolver, identityContextProvider, MdcTraceBridge.create(false, "traceId"),
-            "legacy");
-    }
-
     /** 在给定 MDC 作用域归属下建立可信上下文。 */
     static void populate(HttpServletRequest request, TrustedProxyResolver trustedProxyResolver,
                          IdentityContextProvider identityContextProvider, MdcTraceBridge mdcTraceBridge,

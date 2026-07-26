@@ -76,9 +76,17 @@ class ResourceAccessGuardTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-22T00:00:00Z"), ZoneOffset.UTC);
         MonitoringService monitoring = new MonitoringService(events,
             new SecurityEventAssembler("orders", clock),
-            new DefaultMonitoringRuntime(catalog, Collections.emptyList()),
-            (type, action, event, facts, ineligible, issues) -> { });
+            new DefaultMonitoringRuntime(catalog, builtInFacts(), Collections.emptyList()),
+            (type, action, event, facts, sources, ineligible, issues) -> { });
         return new ResourceAccessGuard(authorizer, monitoring);
+    }
+
+    private static io.github.jasper.monitoring.api.fact.FactCatalog builtInFacts() {
+        io.github.jasper.monitoring.api.fact.FactCatalog catalog =
+            new io.github.jasper.monitoring.api.fact.FactCatalog();
+        io.github.jasper.monitoring.api.fact.BuiltInFacts.registerInto(catalog);
+        catalog.freeze();
+        return catalog;
     }
 
     private static IdentityContext identity() {

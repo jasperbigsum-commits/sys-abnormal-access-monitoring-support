@@ -5,7 +5,7 @@ import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
 import io.github.jasper.monitoring.core.domain.control.StoredControl;
 import io.github.jasper.monitoring.core.port.ControlExecutionStore;
-import io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepositoryRegistrar;
+import io.github.jasper.monitoring.mybatis.MyBatisMonitoringStoreRegistrar;
 import io.github.jasper.monitoring.mybatis.mapper.ControlMapper;
 import io.github.jasper.monitoring.mybatis.po.ControlActionPo;
 import java.sql.SQLException;
@@ -20,7 +20,7 @@ import org.apache.ibatis.session.SqlSessionManager;
 public final class MyBatisControlExecutionStore implements ControlExecutionStore {
     private final SqlSessionManager sessions;
     public MyBatisControlExecutionStore(SqlSessionFactory factory) {
-        MyBatisMonitoringRepositoryRegistrar.register(Objects.requireNonNull(factory, "factory"));
+        MyBatisMonitoringStoreRegistrar.register(Objects.requireNonNull(factory, "factory"));
         this.sessions = SqlSessionManager.newInstance(factory);
     }
     public MyBatisControlExecutionStore(SqlSessionManager sessions) { this.sessions = Objects.requireNonNull(sessions, "sessions"); }

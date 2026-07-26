@@ -1,7 +1,8 @@
 package io.github.jasper.monitoring.core.application;
 
 
-import io.github.jasper.monitoring.core.port.MonitoringRepository;
+import io.github.jasper.monitoring.core.port.AlertRepository;
+import io.github.jasper.monitoring.core.port.MonitoringTransaction;
 import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.domain.AlertDisposition;
 import io.github.jasper.monitoring.api.AlertStatus;
@@ -21,17 +22,20 @@ import java.util.UUID;
  * 调用方必须先完成宿主权限校验再调用。</p>
  */
 public final class AlertLifecycleService {
-    private final MonitoringRepository repository;
+    private final AlertRepository alerts;
+    private final MonitoringTransaction transaction;
     private final Clock clock;
 
     /**
      * 创建告警生命周期服务。
      *
-     * @param repository 告警和仅追加处置记录的持久化端口
+     * @param alerts 告警和仅追加处置记录的持久化端口
+     * @param transaction 告警状态与处置记录的事务边界
      * @param clock 服务端处置时间来源
      */
-    public AlertLifecycleService(MonitoringRepository repository, Clock clock) {
-        this.repository = Objects.requireNonNull(repository, "repository");
+    public AlertLifecycleService(AlertRepository alerts, MonitoringTransaction transaction, Clock clock) {
+        this.alerts = Objects.requireNonNull(alerts, "alerts");
+        this.transaction = Objects.requireNonNull(transaction, "transaction");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -96,8 +100,8 @@ public final class AlertLifecycleService {
         requireText(alertId, "alertId");
         requireText(operatorId, "operatorId");
         requireText(commentText, "commentText");
-        return repository.inTransaction(() -> {
-            SecurityAlert alert = repository.findAlert(alertId)
+        return transaction.required(() -> {
+            SecurityAlert alert = alerts.findAlert(alertId)
                 .orElseThrow(() -> new MonitoringValidationException(MonitoringErrorCode.ALERT_NOT_FOUND,
                     "Alert not found"));
             assertTransitionAllowed(alert.getStatus(), dispositionType);
@@ -106,8 +110,8 @@ public final class AlertLifecycleService {
             AlertDisposition disposition = new AlertDisposition(UUID.randomUUID().toString(), alertId, dispositionType,
                 operatorId, commentText, evidenceSummary, now);
             SecurityAlert updated = alert.withStatus(targetStatus);
-            repository.appendAlertDisposition(disposition);
-            repository.saveAlert(updated);
+            alerts.appendDisposition(disposition);
+            alerts.save(updated);
             return updated;
         });
     }

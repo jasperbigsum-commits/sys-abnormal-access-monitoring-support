@@ -44,9 +44,11 @@ class MonitoringServiceTest {
             new SecurityEventAssembler("demo", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)),
             new MonitoringRuntimePort() {
                 public ActionDefinition resolve(Class<? extends ActionType> type) { return catalog.require(type); }
-                public ActionFacts collect(ActionExecution execution, ActionDefinition definition) { return ActionFacts.builder().build(); }
+                public MonitoringRuntimePort.FactCollection collect(ActionExecution execution, ActionDefinition definition) {
+                    return MonitoringRuntimePort.FactCollection.empty();
+                }
             },
-            (type, definition, event, facts, ineligible, issues) ->
+            (type, definition, event, facts, sources, ineligible, issues) ->
                 persisted.set(!repository.findSince("demo", Instant.EPOCH).isEmpty()));
         service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(1L)));
         assertTrue(persisted.get());
@@ -60,8 +62,10 @@ class MonitoringServiceTest {
             new SecurityEventAssembler("demo", Clock.systemUTC()),
             new MonitoringRuntimePort() {
                 public ActionDefinition resolve(Class<? extends ActionType> type) { return catalog.require(type); }
-                public ActionFacts collect(ActionExecution execution, ActionDefinition definition) { return ActionFacts.builder().build(); }
-            }, (type, definition, event, facts, ineligible, issues) -> { });
+                public MonitoringRuntimePort.FactCollection collect(ActionExecution execution, ActionDefinition definition) {
+                    return MonitoringRuntimePort.FactCollection.empty();
+                }
+            }, (type, definition, event, facts, sources, ineligible, issues) -> { });
         assertThrows(RuntimeException.class, () -> service.monitor(
             ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(1L))));
     }
@@ -81,9 +85,13 @@ class MonitoringServiceTest {
             new SecurityEventAssembler("demo", Clock.systemUTC()),
             new MonitoringRuntimePort() {
                 public ActionDefinition resolve(Class<? extends ActionType> type) { return catalog.require(type); }
-                public ActionFacts collect(ActionExecution execution, ActionDefinition definition) { return facts; }
+                public MonitoringRuntimePort.FactCollection collect(ActionExecution execution, ActionDefinition definition) {
+                    return new MonitoringRuntimePort.FactCollection(facts,
+                        java.util.Collections.<Class<? extends FactType<?>>, FactSource>emptyMap(),
+                        java.util.Collections.<io.github.jasper.monitoring.core.domain.EventFact>emptyList());
+                }
             },
-            (type, definition, event, evaluatedFacts, skipped, issues) -> {
+            (type, definition, event, evaluatedFacts, sources, skipped, issues) -> {
                 seen[0] = evaluatedFacts;
                 ineligible[0] = skipped;
             });

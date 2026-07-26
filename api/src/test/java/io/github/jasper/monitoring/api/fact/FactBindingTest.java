@@ -22,7 +22,8 @@ class FactBindingTest {
     @Test
     void actionSpecificProviderDoesNotApplyToSiblingActions() {
         ActionFactProvider provider = execution -> ActionFacts.builder().build();
-        FactBinding binding = FactBinding.forAction(FirstExport.class, provider, DataCountFact.class);
+        FactBinding binding = FactBinding.forAction(FirstExport.class, FactSource.HOST_PROVIDER,
+            provider, DataCountFact.class);
 
         assertTrue(binding.appliesTo(FirstExport.class));
         assertFalse(binding.appliesTo(SecondExport.class));
@@ -33,11 +34,12 @@ class FactBindingTest {
 
     @Test
     void contractProviderExplicitlyAppliesToAllImplementations() {
-        FactBinding binding = FactBinding.forContract(ExportContract.class,
+        FactBinding binding = FactBinding.forContract(ExportContract.class, FactSource.TRUSTED_REQUEST,
             execution -> ActionFacts.builder().build(), DataCountFact.class);
 
         assertTrue(binding.appliesTo(FirstExport.class));
         assertTrue(binding.appliesTo(SecondExport.class));
+        assertEquals(FactSource.TRUSTED_REQUEST, binding.getSource());
         assertFalse(binding.appliesTo(UnrelatedAction.class));
     }
 

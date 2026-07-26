@@ -13,6 +13,8 @@ import io.github.jasper.monitoring.api.control.ControlCatalog;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
+import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.api.fact.FactType;
 import io.github.jasper.monitoring.api.rule.RuleDefinition;
 import io.github.jasper.monitoring.api.rule.RuleType;
 import io.github.jasper.monitoring.core.application.MonitoringService;
@@ -69,6 +71,50 @@ class TypedRuleEvaluationServiceTest {
         assertEquals("QUERY-01", store.alerts.get(0).getRuleId());
     }
 
+    @Test
+    void preservesClientSupplementalFactSourceForRuleEligibility() {
+        Store store = new Store();
+        Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
+        TypedRuleEvaluationService evaluator = evaluator(store, new SourceAwareRule(), clock);
+        ActionDefinition action = ActionDefinition.builder("client:signal")
+            .eventType(SecurityEventType.QUERY).resourceType("signal")
+            .require(ClientFact.class, FactSource.CLIENT_SUPPLEMENTAL)
+            .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
+        MonitoringService service = new MonitoringService(store,
+            new SecurityEventAssembler("demo", clock), new FixedRuntime(action), evaluator);
+
+        service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(),
+            ActionOutcome.success(1L), ActionFacts.builder().put(ClientFact.class, "observed").build(),
+            FactSource.CLIENT_SUPPLEMENTAL));
+
+        assertEquals(1, store.alerts.size());
+    }
+
+    @Test
+    void evaluatesWithCanonicalCurrentEventWhenDatabaseRoundTripOmitsIt() {
+        Store store = new EmptyHistoryStore();
+        Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
+        TypedRuleEvaluationService evaluator = evaluator(store, new CurrentEventRule(), clock);
+        ActionDefinition action = ActionDefinition.builder("data:query").eventType(SecurityEventType.QUERY)
+            .resourceType("report").failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
+        MonitoringService service = new MonitoringService(store,
+            new SecurityEventAssembler("demo", clock), new FixedRuntime(action), evaluator);
+
+        service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(),
+            ActionOutcome.success(1L)));
+
+        assertEquals(1, store.alerts.size());
+    }
+
+    private static TypedRuleEvaluationService evaluator(Store store,
+            DetectionRule<? extends RuleType> rule, Clock clock) {
+        ControlExecutionService controls = new ControlExecutionService(new UnusedControlStore(),
+            ControlCatalog.<ControlHandler>builder().freeze(), clock);
+        return new TypedRuleEvaluationService(store, store, store, store,
+            Collections.<DetectionRule<? extends RuleType>>singletonList(rule),
+            MonitoringMode.OBSERVE, controls, NotificationChannel.noop(), clock);
+    }
+
     private static MonitoringRequestContext request() {
         return MonitoringRequestContext.builder().method("GET").path("/reports").sourceIp("127.0.0.1")
             .requestId("req-1").build();
@@ -76,6 +122,7 @@ class TypedRuleEvaluationServiceTest {
 
     static final class QueryAction implements ActionType { }
     static final class QueryRule implements RuleType { }
+    static final class ClientFact implements FactType<String> { }
     static final class MatchingRule implements DetectionRule<QueryRule> {
         private final RuleDefinition<QueryRule> definition = RuleDefinition.builder(QueryRule.class, "QUERY-01")
             .appliesTo(QueryAction.class).historyWindow(Duration.ofMinutes(5)).threshold(1L)
@@ -89,16 +136,62 @@ class TypedRuleEvaluationServiceTest {
         }
     }
 
+    static final class SourceAwareRule implements DetectionRule<QueryRule> {
+        private final RuleDefinition<QueryRule> definition = RuleDefinition.builder(QueryRule.class, "SOURCE-01")
+            .appliesTo(QueryAction.class).require(ClientFact.class, FactSource.CLIENT_SUPPLEMENTAL)
+            .historyWindow(Duration.ZERO).threshold(1L).risk(RiskLevel.MEDIUM)
+            .mode(io.github.jasper.monitoring.api.rule.RuleMode.OBSERVE)
+            .source(io.github.jasper.monitoring.api.rule.RuleSource.INTERNAL)
+            .control(ControlActionType.RECORD).build();
+        @Override public RuleDefinition<QueryRule> definition() { return definition; }
+        @Override public Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
+            assertEquals(FactSource.CLIENT_SUPPLEMENTAL, context.getFactSource(ClientFact.class));
+            return Optional.of(match("SOURCE-01", context));
+        }
+    }
+
+    static final class CurrentEventRule implements DetectionRule<QueryRule> {
+        private final RuleDefinition<QueryRule> definition = RuleDefinition.builder(QueryRule.class, "CURRENT-01")
+            .appliesTo(QueryAction.class).historyWindow(Duration.ofMinutes(1)).threshold(1L)
+            .risk(RiskLevel.MEDIUM).mode(io.github.jasper.monitoring.api.rule.RuleMode.OBSERVE)
+            .source(io.github.jasper.monitoring.api.rule.RuleSource.INTERNAL)
+            .control(ControlActionType.RECORD).build();
+        @Override public RuleDefinition<QueryRule> definition() { return definition; }
+        @Override public Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
+            for (SecurityEvent candidate : context.getHistory()) {
+                if (candidate == context.getEvent()) return Optional.of(match("CURRENT-01", context));
+            }
+            return Optional.empty();
+        }
+    }
+
+    private static RuleMatch match(String ruleId, RuleEvaluationContext context) {
+        return new RuleMatch(ruleId, RiskLevel.MEDIUM, context.getEvent().subject(), "reports",
+            "observed", Collections.singletonList(ControlActionType.RECORD));
+    }
+
     static final class FixedRuntime implements io.github.jasper.monitoring.core.application.MonitoringRuntimePort {
         private final ActionDefinition action;
         FixedRuntime(ActionDefinition action) { this.action = action; }
         @Override public ActionDefinition resolve(Class<? extends ActionType> type) { return action; }
-        @Override public ActionFacts collect(ActionExecution execution, ActionDefinition definition) {
-            return ActionFacts.builder().build();
+        @Override public FactCollection collect(ActionExecution execution, ActionDefinition definition) {
+            java.util.Map<Class<? extends FactType<?>>, FactSource> sources =
+                new java.util.LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
+            for (Class<? extends FactType<?>> type : execution.getSuppliedFacts().asMap().keySet()) {
+                sources.put(type, execution.getSuppliedFactSource());
+            }
+            java.util.List<io.github.jasper.monitoring.core.domain.EventFact> persisted =
+                new java.util.ArrayList<io.github.jasper.monitoring.core.domain.EventFact>();
+            for (Class<? extends FactType<?>> type : execution.getSuppliedFacts().asMap().keySet()) {
+                Object value = execution.getSuppliedFacts().asMap().get(type);
+                persisted.add(new io.github.jasper.monitoring.core.domain.EventFact(type.getSimpleName(),
+                    value.getClass().getName(), String.valueOf(value), execution.getSuppliedFactSource()));
+            }
+            return new FactCollection(execution.getSuppliedFacts(), sources, persisted);
         }
     }
 
-    static final class Store implements EventRepository, AlertRepository, WhitelistRepository, MonitoringTransaction {
+    static class Store implements EventRepository, AlertRepository, WhitelistRepository, MonitoringTransaction {
         private final List<SecurityEvent> events = new ArrayList<SecurityEvent>();
         private final List<SecurityAlert> alerts = new ArrayList<SecurityAlert>();
         @Override public void save(SecurityEvent event) { events.add(event); }
@@ -113,6 +206,12 @@ class TypedRuleEvaluationServiceTest {
         @Override public boolean isActive(String ruleId, String subject, Instant at) { return false; }
         @Override public void add(WhitelistEntry entry) { }
         @Override public <T> T required(io.github.jasper.monitoring.core.port.TransactionWork<T> work) { return work.execute(); }
+    }
+
+    static final class EmptyHistoryStore extends Store {
+        @Override public List<SecurityEvent> findSince(String systemId, Instant since) {
+            return Collections.emptyList();
+        }
     }
 
     static final class UnusedControlStore implements ControlExecutionStore {

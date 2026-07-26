@@ -3,7 +3,7 @@
 ALTER TABLE security_alert ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE control_action ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS security_event_fact (
-    event_id VARCHAR(128) NOT NULL, fact_key VARCHAR(128) NOT NULL, value_type VARCHAR(32) NOT NULL,
+    event_id VARCHAR(128) NOT NULL, fact_key VARCHAR(128) NOT NULL, value_type VARCHAR(256) NOT NULL,
     value_text VARCHAR(2048) NOT NULL, source_type VARCHAR(64) NOT NULL, PRIMARY KEY (event_id, fact_key),
     CONSTRAINT fk_v4_event_fact_event FOREIGN KEY (event_id) REFERENCES security_event (event_id)
 );

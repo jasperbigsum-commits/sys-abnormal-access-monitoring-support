@@ -144,6 +144,14 @@ public final class FactDefinition<T> {
         return encoded;
     }
 
+    /** Validates and encodes a value received through a heterogeneous fact collection. */
+    public String encodeRaw(Object value) {
+        T normalized = normalizeRaw(value);
+        String encoded = encodeNormalized(normalized);
+        validateNormalized(normalized, encoded);
+        return encoded;
+    }
+
     /** Decodes a persistence value and applies the same normalization and validation path. */
     public T decode(String encoded) {
         Objects.requireNonNull(encoded, "encoded");

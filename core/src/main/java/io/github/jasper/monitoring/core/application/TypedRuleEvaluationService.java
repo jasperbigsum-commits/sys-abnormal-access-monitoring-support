@@ -27,6 +27,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -61,10 +62,12 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
 
     @Override
     public void evaluate(Class<? extends ActionType> actionType, ActionDefinition action,
-            SecurityEvent event, ActionFacts facts, Set<Class<? extends RuleType>> ineligibleRuleTypes,
+            SecurityEvent event, ActionFacts facts,
+            Map<Class<? extends FactType<?>>, FactSource> factSources,
+            Set<Class<? extends RuleType>> ineligibleRuleTypes,
             List<ObservationIssue> issues) {
         EvaluationResult result = transaction.required(() -> evaluateInTransaction(
-            actionType, action, event, facts, ineligibleRuleTypes));
+            actionType, action, event, facts, factSources, ineligibleRuleTypes));
         for (SecurityAlert alert : result.alerts) {
             try {
                 notifications.notify(alert);
@@ -79,13 +82,14 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
 
     private EvaluationResult evaluateInTransaction(Class<? extends ActionType> actionType,
             ActionDefinition action, SecurityEvent event, ActionFacts facts,
+            Map<Class<? extends FactType<?>>, FactSource> factSources,
             Set<Class<? extends RuleType>> ineligibleRuleTypes) {
-        List<SecurityEvent> history = events.findSince(event.getSystemId(),
-            event.getOccurredAt().minus(Duration.ofDays(1)));
+        List<SecurityEvent> history = canonicalHistory(event, events.findSince(event.getSystemId(),
+            event.getOccurredAt().minus(Duration.ofDays(1))));
         RuleEvaluationContext.Builder context = RuleEvaluationContext.builder(event, actionType, action)
             .history(history).facts(facts);
-        for (Class<? extends FactType<?>> factType : facts.asMap().keySet()) {
-            context.factSource(factType, FactSource.HOST_PROVIDER);
+        for (Map.Entry<Class<? extends FactType<?>>, FactSource> source : factSources.entrySet()) {
+            context.factSource(source.getKey(), source.getValue());
         }
         RuleEvaluationContext input = context.build();
         List<RuleMatch> matches = new ArrayList<RuleMatch>();
@@ -107,6 +111,32 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
             raised.add(alert);
         }
         return new EvaluationResult(matches, raised);
+    }
+
+    private static List<SecurityEvent> canonicalHistory(SecurityEvent current, List<SecurityEvent> persisted) {
+        List<SecurityEvent> history = new ArrayList<SecurityEvent>(persisted.size() + 1);
+        boolean replaced = false;
+        for (SecurityEvent candidate : persisted) {
+            if (current.getEventId().equals(candidate.getEventId())) {
+                if (!replaced) {
+                    history.add(current);
+                    replaced = true;
+                }
+            } else {
+                history.add(candidate);
+            }
+        }
+        if (!replaced) {
+            history.add(current);
+        }
+        java.util.Collections.sort(history, new java.util.Comparator<SecurityEvent>() {
+            @Override
+            public int compare(SecurityEvent left, SecurityEvent right) {
+                int time = left.getOccurredAt().compareTo(right.getOccurredAt());
+                return time != 0 ? time : left.getEventId().compareTo(right.getEventId());
+            }
+        });
+        return history;
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

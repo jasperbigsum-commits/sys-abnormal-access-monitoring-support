@@ -53,6 +53,7 @@ public final class SecurityEvent {
     private final EventInputStatus inputStatus;
     private final List<EventInputIssue> inputIssues;
     private final Map<String, String> attributes;
+    private final List<EventFact> facts;
 
     private SecurityEvent(Builder builder, EventInputValidation validation) {
         this.eventId = builder.eventId;
@@ -81,6 +82,7 @@ public final class SecurityEvent {
         this.inputStatus = validation.getStatus();
         this.inputIssues = Collections.unmodifiableList(new ArrayList<EventInputIssue>(validation.getIssues()));
         this.attributes = Collections.unmodifiableMap(new LinkedHashMap<String, String>(builder.attributes));
+        this.facts = Collections.unmodifiableList(new ArrayList<EventFact>(builder.facts));
     }
 
     /**
@@ -179,6 +181,8 @@ public final class SecurityEvent {
     public List<EventInputIssue> getInputIssues() { return inputIssues; }
     /** @return 已校验的补充属性；返回只读映射 */
     public Map<String, String> getAttributes() { return attributes; }
+    /** @return immutable, codec-produced fact snapshots associated with this event */
+    public List<EventFact> getFacts() { return facts; }
     /**
      * @param key 已标准化的属性键
      * @return 对应属性值；不存在时为 {@code null}
@@ -218,6 +222,7 @@ public final class SecurityEvent {
         private EventInputStatus inputStatus = EventInputStatus.UNKNOWN;
         private List<EventInputIssue> inputIssues = new ArrayList<EventInputIssue>();
         private Map<String, String> attributes = new LinkedHashMap<String, String>();
+        private List<EventFact> facts = new ArrayList<EventFact>();
         /** @param value 服务端生成的事件标识 @return 当前构建器 */
         public Builder eventId(String value) { eventId = value; return this; }
         /** @param value 事件来源系统标识 @return 当前构建器 */
@@ -276,6 +281,11 @@ public final class SecurityEvent {
         }
         /** @param value 已校验补充属性 @return 当前构建器 */
         public Builder attributes(Map<String, String> value) { attributes = value == null ? new LinkedHashMap<String, String>() : value; return this; }
+        /** @param value validated fact snapshots @return current builder */
+        public Builder facts(Collection<EventFact> value) {
+            facts = value == null ? new ArrayList<EventFact>() : new ArrayList<EventFact>(value);
+            return this;
+        }
         /** @return 本构建器表示的不可变安全事件 */
         public SecurityEvent build() {
             EventInputValidation validation = EventInputValidation.of(inputStatus, inputIssues,
