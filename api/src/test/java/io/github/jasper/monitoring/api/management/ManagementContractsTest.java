@@ -30,10 +30,10 @@ class ManagementContractsTest {
 
     @Test
     void commandsCarryExpectedVersionAndReason() {
-        AlertAcknowledgeCommand command = AlertAcknowledgeCommand.of("a", 3L, "triaged");
+        AlertAcknowledgeCommand command = AlertAcknowledgeCommand.of("a", 3L, "triaged", "ack-3");
         assertEquals(3L, command.getExpectedVersion());
         assertEquals("triaged", command.getReason());
-        assertThrows(IllegalArgumentException.class, () -> AlertAcknowledgeCommand.of("a", 0L, "x"));
+        assertThrows(IllegalArgumentException.class, () -> AlertAcknowledgeCommand.of("a", 0L, "x", "ack-0"));
     }
 
     @Test
