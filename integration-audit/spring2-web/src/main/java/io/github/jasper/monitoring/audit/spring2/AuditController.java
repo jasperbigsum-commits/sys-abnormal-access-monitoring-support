@@ -1,15 +1,17 @@
 package io.github.jasper.monitoring.audit.spring2;
 
 import io.github.jasper.monitoring.api.AuthorizationDecision;
-import io.github.jasper.monitoring.api.MonitorAction;
-import io.github.jasper.monitoring.api.MonitorActionAttribute;
-import io.github.jasper.monitoring.api.MonitorActionAttributeTarget;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
-import io.github.jasper.monitoring.api.SecurityEventResult;
-import io.github.jasper.monitoring.api.SecurityEventType;
-import io.github.jasper.monitoring.core.application.ActionEventRecorder;
-import io.github.jasper.monitoring.core.application.MonitoringOutcome;
+import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.event.ActionExecution;
+import io.github.jasper.monitoring.api.event.ActionOutcome;
+import io.github.jasper.monitoring.api.fact.ActionFacts;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
+import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.core.application.MonitoringService;
+import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -28,17 +30,17 @@ import org.springframework.http.ResponseEntity;
 public class AuditController {
     // This integration fixture must not echo a client-controlled requested row count.
     private static final long SERVER_REPORTED_ROW_COUNT = 37L;
-    private final ActionEventRecorder recorder;
+    private final MonitoringService monitoring;
     private final ResourceAccessGuard resourceAccessGuard;
     private final MonitoringContextAccessor contextAccessor;
     private final AuditReportCatalog reportCatalog;
     private final AuditExportService exportService;
 
-    /** @param recorder Starter 自动装配的动作记录器 */
-    public AuditController(ActionEventRecorder recorder, ResourceAccessGuard resourceAccessGuard,
+    /** @param monitoring Starter 自动装配的强类型监测服务 */
+    public AuditController(MonitoringService monitoring, ResourceAccessGuard resourceAccessGuard,
                            MonitoringContextAccessor contextAccessor,
                            AuditReportCatalog reportCatalog, AuditExportService exportService) {
-        this.recorder = recorder;
+        this.monitoring = monitoring;
         this.resourceAccessGuard = resourceAccessGuard;
         this.contextAccessor = contextAccessor;
         this.reportCatalog = reportCatalog;
@@ -81,9 +83,9 @@ public class AuditController {
      */
     @PostMapping("/login-failure")
     public Map<String, Object> loginFailure() {
-        MonitoringOutcome outcome = recorder.record("audit:login-failure", contextAccessor.requestContext(),
-            contextAccessor.identityContext(),
-            SecurityEventResult.FAILURE, "INVALID_PASSWORD");
+        SecurityEventAssembler.AssemblyResult outcome = monitoring.monitor(ActionExecution.of(
+            BuiltInActions.LoginFailure.class, contextAccessor.requestContext(), contextAccessor.identityContext(),
+            ActionOutcome.failure("INVALID_PASSWORD", ActionOutcome.ExceptionClassification.AUTHORIZATION, 0L)));
         return response(outcome);
     }
 
@@ -94,9 +96,12 @@ public class AuditController {
      */
     @PostMapping("/export")
     public Map<String, Object> export() {
-        MonitoringOutcome outcome = recorder.record(recorder.draft("audit:export", contextAccessor.requestContext(),
-            contextAccessor.identityContext()).resourceId("audit-export-2026").dataCount(5000)
-            .result(SecurityEventResult.SUCCESS).reasonCode("EXPORT_COMPLETED").build());
+        ActionFacts facts = ActionFacts.builder()
+            .put(BuiltInFacts.ResourceId.class, "audit-export-2026")
+            .put(BuiltInFacts.DataCount.class, Long.valueOf(5000L)).build();
+        SecurityEventAssembler.AssemblyResult outcome = monitoring.monitor(ActionExecution.of(
+            BuiltInActions.ReportExport.class, contextAccessor.requestContext(), contextAccessor.identityContext(),
+            ActionOutcome.success(0L), facts, FactSource.HOST_PROVIDER));
         return response(outcome);
     }
 
@@ -106,7 +111,7 @@ public class AuditController {
      * @return 简化业务响应；事件由 Starter 请求完成拦截器记录
      */
     @GetMapping("/annotated-query")
-    @MonitorAction(value = "audit:annotated-query", resourceType = "audit")
+    @MonitorAction(BuiltInActions.Query.class)
     public Map<String, Object> annotatedQuery() {
         Map<String, Object> response = new LinkedHashMap<String, Object>();
         response.put("status", "ok");
@@ -114,24 +119,13 @@ public class AuditController {
     }
 
     @PostMapping("/annotated-export")
-    @MonitorAction(action = "audit:annotated-export", eventType = SecurityEventType.EXPORT,
-        resourceType = "report", ruleTags = {"sensitive-data"}, enrichers = AuditExportFacts.class)
-    @MonitorActionAttribute(name = "sensitivity", value = "HIGH")
-    public Map<String, Object> annotatedExport(
-        @MonitorActionAttribute(target = MonitorActionAttributeTarget.RESOURCE_ID, path = "report.id")
-        @MonitorActionAttribute(target = MonitorActionAttributeTarget.ORG_SCOPE, path = "tenant.code")
-        @RequestBody AuditExportRequest request) {
+    @MonitorAction(BuiltInActions.Query.class)
+    public Map<String, Object> annotatedExport(@RequestBody AuditExportRequest request) {
         return exportResponse(SERVER_REPORTED_ROW_COUNT);
     }
 
     @PostMapping("/annotated-export-denied")
-    @MonitorAction(action = "audit:annotated-export-denied", eventType = SecurityEventType.EXPORT,
-        resourceType = "report", ruleTags = {"sensitive-data"}, enrichers = AuditExportFacts.class)
-    @MonitorActionAttribute(name = "sensitivity", value = "HIGH")
-    public ResponseEntity<Map<String, Object>> annotatedExportDenied(
-        @MonitorActionAttribute(target = MonitorActionAttributeTarget.RESOURCE_ID, path = "report.id")
-        @MonitorActionAttribute(target = MonitorActionAttributeTarget.ORG_SCOPE, path = "tenant.code")
-        @RequestBody AuditExportRequest request) {
+    public ResponseEntity<Map<String, Object>> annotatedExportDenied(@RequestBody AuditExportRequest request) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(exportResponse(SERVER_REPORTED_ROW_COUNT));
     }
 
@@ -141,10 +135,10 @@ public class AuditController {
         return response;
     }
 
-    private static Map<String, Object> response(MonitoringOutcome outcome) {
+    private static Map<String, Object> response(SecurityEventAssembler.AssemblyResult outcome) {
         Map<String, Object> response = new LinkedHashMap<String, Object>();
         response.put("eventId", outcome.getEvent().getEventId());
-        response.put("matchCount", outcome.getMatches().size());
+        response.put("action", outcome.getEvent().getAction());
         return response;
     }
 

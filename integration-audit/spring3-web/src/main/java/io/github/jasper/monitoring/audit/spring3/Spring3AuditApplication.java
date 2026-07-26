@@ -1,8 +1,6 @@
 package io.github.jasper.monitoring.audit.spring3;
 
-import io.github.jasper.monitoring.api.MonitorActionDefinition;
-import io.github.jasper.monitoring.api.SecurityEventType;
-import io.github.jasper.monitoring.core.application.MonitoringActionRegistry;
+import io.github.jasper.monitoring.api.management.ManagementAuthorizer;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -40,19 +38,15 @@ public class Spring3AuditApplication {
         return new SqlSessionFactoryBuilder().build(configuration);
     }
 
-    /** @return 服务调用埋点使用的固定动作定义 */
+    /** @return 宿主管理权限边界；审计夹具只允许访问自身系统范围 */
     @Bean
-    public MonitoringActionRegistry monitoringActionRegistry() {
-        return new MonitoringActionRegistry()
-            .register(MonitorActionDefinition.builder("audit:login-failure")
-                .eventType(SecurityEventType.LOGIN_FAILURE)
-                .resourceType("account")
-                .build())
-            .register(MonitorActionDefinition.builder("audit:export")
-                .eventType(SecurityEventType.EXPORT)
-                .resourceType("report")
-                .ruleTag("sensitive-data")
-                .build());
+    public ManagementAuthorizer managementAuthorizer() {
+        return (actor, operation, resource) -> {
+            if (!"audit-spring3-web".equals(actor.getSystemScope())
+                || !actor.getSystemScope().equals(resource.getSystemScope())) {
+                throw new SecurityException("Management scope is not authorized");
+            }
+        };
     }
 
     private static void initializeSchema(DataSource dataSource) throws Exception {
