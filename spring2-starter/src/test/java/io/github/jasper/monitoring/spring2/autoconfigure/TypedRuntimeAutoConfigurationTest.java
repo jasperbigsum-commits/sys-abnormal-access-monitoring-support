@@ -3,9 +3,6 @@ package io.github.jasper.monitoring.spring2.autoconfigure;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
-import io.github.jasper.monitoring.core.application.ActionEventRecorder;
-import io.github.jasper.monitoring.core.application.SecurityMonitor;
-import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import io.github.jasper.monitoring.spring.support.FrontendSignalRecorder;
@@ -37,9 +34,6 @@ class TypedRuntimeAutoConfigurationTest {
                 assertThat(context).hasSingleBean(TypedMonitorActionAspect.class);
                 assertThat(context).hasSingleBean(ResourceAccessGuard.class);
                 assertThat(context).hasSingleBean(FrontendSignalRecorder.class);
-                assertThat(context).doesNotHaveBean(SecurityMonitor.class);
-                assertThat(context).doesNotHaveBean(DefaultSecurityMonitor.class);
-                assertThat(context).doesNotHaveBean(ActionEventRecorder.class);
             });
     }
 

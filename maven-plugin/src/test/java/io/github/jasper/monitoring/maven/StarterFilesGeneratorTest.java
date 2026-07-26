@@ -40,8 +40,9 @@ class StarterFilesGeneratorTest {
         assertTrue(hostSpi.contains("HOST_SCOPE_AUTHORIZATION_NOT_IMPLEMENTED"));
 
         String actions = read(outputDirectory.resolve("host-spi/HostMonitoringActions.java"));
-        assertTrue(actions.contains("MonitoringActionRegistry"));
-        assertTrue(actions.contains("report:export"));
+        assertTrue(actions.contains("ActionCatalog"));
+        assertTrue(actions.contains("HostReportExport"));
+        assertTrue(actions.contains("FactBinding.forAction"));
 
         String controlHandler = read(outputDirectory.resolve("host-spi/HostControlHandler.java"));
         assertTrue(controlHandler.contains("implements ControlHandler"));

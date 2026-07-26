@@ -1,6 +1,5 @@
 package io.github.jasper.monitoring.mybatis;
 
-import io.github.jasper.monitoring.core.application.rule.InternalRuleRegistry;
 import io.github.jasper.monitoring.mybatis.po.PersistedRuleDefinition;
 import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.api.RuleMode;
@@ -23,8 +22,8 @@ public interface MonitoringAdministrationMapper {
     /**
      * 查询全部持久化规则版本，供管理端审计和版本对比。
      *
-     * <p>返回项来源固定为 {@code PERSISTED} 且可变。内部注册规则不在此查询中，管理端应从
-     * {@code InternalRuleRegistry.entries()} 单独读取，以免误认为能够在线改写代码规则。</p>
+     * <p>返回项来源固定为 {@code PERSISTED} 且可变。内置代码规则由只读 typed rule catalog
+     * 单独暴露，不在此查询中，以免误认为能够在线改写代码规则。</p>
      *
      * @return 按规则 ID、版本倒序排列的持久化规则版本
      */

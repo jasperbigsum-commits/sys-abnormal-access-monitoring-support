@@ -7,11 +7,7 @@ import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
 import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
-import io.github.jasper.monitoring.core.infrastructure.memory.InMemoryMonitoringRepository;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
-import io.github.jasper.monitoring.core.port.NotificationChannel;
-import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
-import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -19,13 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ControlTrigger;
-import io.github.jasper.monitoring.api.MonitoringMode;
 import java.lang.reflect.Proxy;
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -136,12 +128,6 @@ class AnnotatedControlHandlerTest {
             Arrays.<ControlHandler>asList(new AnnotatedControlHandler(new EmptyTarget())));
 
         assertTrue(handlers.isEmpty());
-        MonitoringConfigurationException exception = assertThrows(MonitoringConfigurationException.class,
-            () -> new DefaultSecurityMonitor(
-            "orders", Clock.fixed(Instant.parse("2026-07-22T00:00:00Z"), ZoneOffset.UTC),
-            new InMemoryMonitoringRepository(), Collections.<DetectionRule>emptyList(), MonitoringMode.ENFORCE,
-            handlers, NotificationChannel.noop()));
-        assertEquals(MonitoringErrorCode.ENFORCEMENT_HANDLER_REQUIRED, exception.getErrorCode());
     }
 
     private static ControlCommand command(ControlActionType action) {

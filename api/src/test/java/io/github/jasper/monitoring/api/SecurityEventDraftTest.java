@@ -67,19 +67,6 @@ class SecurityEventDraftTest {
     }
 
     @Test
-    void normalizesStaticActionAttributeKeysAndRejectsCaseInsensitiveDuplicates() {
-        MonitorActionDefinition definition = MonitorActionDefinition.builder("report:export")
-            .attribute("Sensitivity", "HIGH")
-            .build();
-
-        assertEquals("HIGH", definition.getAttributes().get("sensitivity"));
-        assertThrows(IllegalArgumentException.class, () -> MonitorActionDefinition.builder("report:export")
-            .attribute("Sensitivity", "HIGH")
-            .attribute("sensitivity", "LOW")
-            .build());
-    }
-
-    @Test
     void rejectsForbiddenMetadataKeys() {
         MonitoringValidationException exception = assertThrows(MonitoringValidationException.class,
             () -> SecurityEventDraft.builder()

@@ -7,7 +7,7 @@ import java.time.Instant;
  * Stores active controls for canonical IP addresses.
  *
  * <p>This bounded state deduplicates a key while its control remains active. Durable replay protection across
- * expiry, restart, or nodes belongs to the control repository used by {@code DefaultControlService}.</p>
+ * expiry, restart, or nodes belongs to the durable control execution store.</p>
  */
 public interface IpControlState {
     enum ActivationResult {
