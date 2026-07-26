@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class ManagementContractsTest {
     @Test
     void rejectsInvalidPageRequest() {
-        assertThrows(IllegalArgumentException.class, () -> ManagementPageRequest.of(0, 201, "createdAt"));
-        assertThrows(IllegalArgumentException.class, () -> ManagementPageRequest.of(-1, 20, "createdAt"));
+        assertThrows(IllegalArgumentException.class, () -> ManagementPageRequest.of(0, 201, AlertQuery.Sort.CREATED_AT));
+        assertThrows(IllegalArgumentException.class, () -> ManagementPageRequest.of(-1, 20, AlertQuery.Sort.CREATED_AT));
     }
 
     @Test
@@ -38,6 +38,6 @@ class ManagementContractsTest {
 
     @Test
     void queriesAreTypedAndDoNotExposeRawMaps() {
-        assertNotNull(AlertQuery.of(ManagementPageRequest.of(0, 20, "createdAt")));
+        assertNotNull(AlertQuery.of(ManagementPageRequest.of(0, 20, AlertQuery.Sort.CREATED_AT)));
     }
 }

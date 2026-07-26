@@ -1,0 +1,2 @@
+package io.github.jasper.monitoring.api.management.model;
+public class AlertSummary { private final String id,systemScope,status; private final long version; public AlertSummary(String id,String scope,String status,long version){this.id=id;this.systemScope=scope;this.status=status;this.version=version;} public String getId(){return id;} public String getSystemScope(){return systemScope;} public String getStatus(){return status;} public long getVersion(){return version;} }
