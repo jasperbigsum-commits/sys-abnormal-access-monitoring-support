@@ -1,5 +1,7 @@
 # 自建系统异常访问监测与控制组件
 
+> 文档治理入口：先读[组织角色与文档管理](docs/组织角色与文档管理.md)，再按角色进入对应文档。
+
 将方案 A 的事件采集、规则判定、告警、控制和审计封装为 Maven Reactor 组件。宿主系统保留认证、会话、数据权限和实际阻断能力；本组件提供统一事件模型、14 条基线规则、告警闭环、MyBatis 审计仓储和前端采集契约，避免多个系统重复实现。
 
 适用于 Spring Boot 2.7.x（`javax.servlet`）和 Spring Boot 3.x（`jakarta.servlet`）。这里的“Spring 2/3”指 Spring Boot 主版本，不支持传统 Spring Framework 2.x/3.x。
@@ -9,7 +11,7 @@
 | 模块 | 责任 |
 | --- | --- |
 | `api` | 框架无关的数据模型与宿主 SPI |
-| `core` | 规则、告警、控制、授权记录和内存仓储 |
+| `core` | 规则、告警、控制、授权记录和应用服务 |
 | `web-contract` | 浏览器信号模型、校验器与 JSON Schema |
 | `mybatis` | MyBatis 仓储、Mapper 与数据库迁移脚本 |
 | `integration-audit` | 独立的 Boot 2 / Boot 3 最小 Web 宿主、HTTP 集成验收与 Surefire 审计证据 |
@@ -28,7 +30,7 @@
 | `core.domain.rule` | 纯规则策略与基线规则，不写库、不通知、不执行控制 / deterministic rules without side effects |
 | `core.application` | 监测记录、告警生命周期、动作埋点等用例编排 / use-case orchestration |
 | `core.port` | 仓储、通知、控制和事务边界等可替换接口 / replaceable persistence and integration ports |
-| `core.infrastructure.memory` | 仅用于测试和本地观察模式的内存适配器 / local and test-only adapter |
+| `core.infrastructure` | 仅放置外部适配边界；生产持久化由 `mybatis` 提供 |
 
 宿主实现只能通过 `api` SPI 与 `core.port` 接入；规则实现不得反向依赖 Spring、MyBatis、Servlet 或业务授权框架。`core` 下旧的扁平包名不再存在，升级调用方需要按上表更新 import。
 
@@ -82,7 +84,7 @@ abnormal:
 
 必须实现并注册 `IdentityContextProvider`、`ResourceScopeAuthorizer` 和 `TrustedProxyResolver`。业务资源访问通过 `ResourceAccessGuard` 调用宿主授权器，组件只记录允许或拒绝结果，绝不把拒绝变为允许。未配置资源授权器时默认拒绝。
 
-生产环境配置数据源和任意兼容的 MyBatis `SqlSessionFactory` 后自动使用 `MyBatisMonitoringRepository`；没有它时会回退内存仓储，仅适用于本地开发或测试。两个 Starter 不再传递或锁定 `mybatis-spring-boot-starter`，因此宿主可按自身 Boot 生态选择并升级 MyBatis 集成版本；组件只要求 MyBatis 3.5.x 核心 API（默认构建版本为 `3.5.19`）。组件不自动建表，也不发布业务端点。前端补充信息由宿主后端 API 接收；组件统一 `FrontendSignal` v1 语义和 `FrontendSignalRecorder.record(signal, serverContext)` 入口，但不规定 URL、认证或响应 JSON。宿主负责认证、请求体大小限制、限流、JSON Schema 校验和可信服务器上下文构造，详见[前端补充信息统一接入](docs/集成指南.md#6-前端补充信息统一接入)。
+生产环境必须配置数据源和兼容的 MyBatis `SqlSessionFactory`，由 `MyBatisMonitoringRepository` 提供持久化；未配置时启动失败，不提供内存回退。两个 Starter 不传递或锁定 `mybatis-spring-boot-starter`，宿主可按自身 Boot 生态选择版本；组件只要求 MyBatis 3.5.x 核心 API。组件不自动建表，也不发布业务端点。前端补充信息由宿主后端 API 接收；组件统一 `FrontendSignal` v1 语义和 `FrontendSignalRecorder.record(signal, serverContext)` 入口，但不规定 URL、认证或响应 JSON。宿主负责认证、请求体大小限制、限流、JSON Schema 校验和可信服务器上下文构造，详见[前端补充信息统一接入](docs/集成指南.md#6-前端补充信息统一接入)。
 
 MyBatis 适配器内按人类可定位的职责组织：根包保留仓储、注册器、Mapper 与单一 `InstantTypeHandler`；`mybatis.po` 专门存放表行映射与规则版本查询投影。PO 不进入 `api`，也不替代 `core.domain` 的不可变领域对象；仓储是二者间唯一的转换位置。
 
