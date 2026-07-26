@@ -3,8 +3,10 @@ package io.github.jasper.monitoring.spring3.autoconfigure;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
+import io.github.jasper.monitoring.core.application.ActionEventRecorder;
+import io.github.jasper.monitoring.core.application.SecurityMonitor;
+import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
-import io.github.jasper.monitoring.core.port.MonitoringRepository;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisControlExecutionStore;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisMonitoringStore;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -31,6 +33,9 @@ class TypedRuntimeAutoConfigurationTest {
                 assertThat(context).hasSingleBean(MyBatisControlExecutionStore.class);
                 assertThat(context).hasSingleBean(ControlExecutionService.class);
                 assertThat(context).hasSingleBean(TypedMonitorActionAspect.class);
+                assertThat(context).doesNotHaveBean(SecurityMonitor.class);
+                assertThat(context).doesNotHaveBean(DefaultSecurityMonitor.class);
+                assertThat(context).doesNotHaveBean(ActionEventRecorder.class);
             });
     }
 
@@ -41,6 +46,5 @@ class TypedRuntimeAutoConfigurationTest {
             Mockito.when(factory.getConfiguration()).thenReturn(new org.apache.ibatis.session.Configuration());
             return factory;
         }
-        @Bean MonitoringRepository monitoringRepository() { return Mockito.mock(MonitoringRepository.class); }
     }
 }

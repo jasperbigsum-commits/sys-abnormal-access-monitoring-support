@@ -1,7 +1,6 @@
 package io.github.jasper.monitoring.spring2.autoconfigure;
 
 import io.github.jasper.monitoring.api.IdentityContext;
-import io.github.jasper.monitoring.api.EventEnricher;
 import io.github.jasper.monitoring.api.IdentityContextProvider;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
@@ -16,7 +15,6 @@ import io.github.jasper.monitoring.api.control.ControlType;
 import io.github.jasper.monitoring.api.fact.FactBinding;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
-import io.github.jasper.monitoring.core.application.ActionEventRecorder;
 import io.github.jasper.monitoring.core.application.DefaultMonitoringRuntime;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
@@ -28,22 +26,10 @@ import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
 import io.github.jasper.monitoring.core.domain.rule.DefaultRuleCatalog;
-import io.github.jasper.monitoring.core.application.DefaultSecurityMonitor;
-import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
-import io.github.jasper.monitoring.core.application.AlertLifecycleService;
-import io.github.jasper.monitoring.core.application.rule.InternalRuleContributor;
-import io.github.jasper.monitoring.core.application.rule.InternalRuleRegistry;
-import io.github.jasper.monitoring.core.application.MonitoringActionRegistry;
-import io.github.jasper.monitoring.core.port.MonitoringRepository;
 import io.github.jasper.monitoring.core.port.NotificationChannel;
-import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
-import io.github.jasper.monitoring.core.application.SecurityMonitor;
-import io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepository;
-import io.github.jasper.monitoring.mybatis.MyBatisMonitoringRepositoryRegistrar;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisControlExecutionStore;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisMonitoringStore;
 import io.github.jasper.monitoring.spring.support.ConfiguredTrustedProxyResolver;
-import io.github.jasper.monitoring.spring.support.FrontendSignalRecorder;
 import io.github.jasper.monitoring.spring.support.MdcTraceBridge;
 import io.github.jasper.monitoring.spring.support.control.GenericIpControlHandler;
 import io.github.jasper.monitoring.spring.support.control.IpControlState;
@@ -79,15 +65,6 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 @AutoConfigureAfter(name = "org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration")
 @EnableConfigurationProperties(AbnormalAccessMonitorProperties.class)
 public class AbnormalAccessMonitorAutoConfiguration {
-    /** 当宿主提供 MyBatis 会话工厂时注册 Mapper 并创建生产仓储。 */
-    @Bean
-    @ConditionalOnMissingBean(MonitoringRepository.class)
-    @ConditionalOnBean(SqlSessionFactory.class)
-    public MonitoringRepository abnormalAccessMyBatisMonitoringRepository(SqlSessionFactory sqlSessionFactory) {
-        MyBatisMonitoringRepositoryRegistrar.register(sqlSessionFactory);
-        return new MyBatisMonitoringRepository(sqlSessionFactory);
-    }
-
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(SqlSessionFactory.class)
@@ -157,13 +134,6 @@ public class AbnormalAccessMonitorAutoConfiguration {
             runtime, evaluator);
     }
 
-    /** 创建告警处置生命周期服务。 */
-    @Bean
-    @ConditionalOnMissingBean
-    public AlertLifecycleService abnormalAccessAlertLifecycleService(MonitoringRepository repository) {
-        return new AlertLifecycleService(repository, Clock.systemUTC());
-    }
-
     @Bean
     @ConditionalOnMissingBean
     public ControlHandlerRegistry abnormalAccessControlHandlerRegistry(ObjectProvider<ControlHandler> handlers,
@@ -204,42 +174,6 @@ public class AbnormalAccessMonitorAutoConfiguration {
         return NotificationChannel.noop();
     }
 
-    /**
-     * 创建内部代码规则注册器，收集基线规则、{@link DetectionRule} Bean 和规则贡献者。
-     * 注册器将在监测器创建前冻结，数据库规则配置不会修改这份运行期快照。
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    public InternalRuleRegistry abnormalAccessInternalRuleRegistry(ObjectProvider<DetectionRule> rules,
-                                                                    ObjectProvider<InternalRuleContributor> contributors) {
-        InternalRuleRegistry registry = new InternalRuleRegistry(DefaultRuleCatalog.initialRules());
-        for (DetectionRule rule : rules) {
-            registry.register(rule);
-        }
-        for (InternalRuleContributor contributor : contributors) {
-            contributor.register(registry);
-        }
-        return registry;
-    }
-
-    /** 创建手工埋点动作的启动期注册表；宿主可用同类型 Bean 覆盖。 */
-    @Bean
-    @ConditionalOnMissingBean
-    public MonitoringActionRegistry abnormalAccessMonitoringActionRegistry() {
-        return new MonitoringActionRegistry();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(SecurityMonitor.class)
-    public DefaultSecurityMonitor abnormalAccessSecurityMonitor(AbnormalAccessMonitorProperties properties,
-                                                                 MonitoringRepository repository,
-                                                                 ControlHandlerRegistry handlers,
-                                                                 NotificationChannel notifications,
-                                                                 InternalRuleRegistry rules) {
-        return new DefaultSecurityMonitor(properties.getSystemId(), Clock.systemUTC(), repository,
-            rules.freeze().rules(), properties.getMode(), handlers, notifications);
-    }
-
     @Bean
     @ConditionalOnMissingBean
     public IdentityContextProvider abnormalAccessIdentityContextProvider() {
@@ -259,21 +193,8 @@ public class AbnormalAccessMonitorAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public ResourceAccessGuard abnormalAccessResourceAccessGuard(ResourceScopeAuthorizer authorizer,
-                                                                   ActionEventRecorder recorder) {
-        return new ResourceAccessGuard(authorizer, recorder, Clock.systemUTC());
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
     public TrustedProxyResolver abnormalAccessTrustedProxyResolver(AbnormalAccessMonitorProperties properties) {
         return new ConfiguredTrustedProxyResolver(properties.getTrustedProxies());
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public FrontendSignalRecorder abnormalAccessFrontendSignalRecorder(SecurityMonitor monitor) {
-        return new FrontendSignalRecorder(monitor);
     }
 
     /** 创建可选日志 MDC 链路追踪桥接器；没有 SLF4J MDC 时自动退化为无操作。 */
@@ -281,18 +202,6 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnMissingBean
     public MdcTraceBridge abnormalAccessMdcTraceBridge(AbnormalAccessMonitorProperties properties) {
         return MdcTraceBridge.create(properties.getMdc().isEnabled(), properties.getMdc().getTraceIdKey());
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public ActionEventRecorder abnormalAccessActionEventRecorder(SecurityMonitor monitor,
-                                                                  MonitoringActionRegistry actions,
-                                                                  ObjectProvider<EventEnricher> enrichers) {
-        List<EventEnricher> values = new ArrayList<EventEnricher>();
-        for (EventEnricher enricher : enrichers) {
-            values.add(enricher);
-        }
-        return new ActionEventRecorder(monitor, Clock.systemUTC(), actions, values);
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -388,12 +297,6 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnProperty(prefix = "abnormal.access.monitor.instrumentation", name = "enabled", havingValue = "true", matchIfMissing = true)
     @EnableAspectJAutoProxy
     static class MvcInstrumentationConfiguration {
-        @Bean("abnormalAccessAnnotatedMonitoringAspect")
-        @ConditionalOnMissingBean(AnnotatedMonitoringAspect.class)
-        AnnotatedMonitoringAspect abnormalAccessAnnotatedMonitoringAspect(ListableBeanFactory beanFactory) {
-            return new AnnotatedMonitoringAspect(beanFactory);
-        }
-
         @Bean("abnormalAccessTypedMonitorActionAspect")
         @ConditionalOnMissingBean(TypedMonitorActionAspect.class)
         TypedMonitorActionAspect abnormalAccessTypedMonitorActionAspect(MonitoringService monitoring,
@@ -419,17 +322,6 @@ public class AbnormalAccessMonitorAutoConfiguration {
             return new RequestMetadataInterceptor(trustedProxyResolver, identityContextProvider, mdcTraceBridge);
         }
 
-        @Bean("abnormalAccessAnnotatedMonitoringInterceptor")
-        @ConditionalOnMissingBean(AnnotatedMonitoringInterceptor.class)
-        @ConditionalOnProperty(prefix = "abnormal.access.monitor.instrumentation", name = "enabled", havingValue = "true", matchIfMissing = true)
-        AnnotatedMonitoringInterceptor abnormalAccessAnnotatedMonitoringInterceptor(ActionEventRecorder recorder,
-                                                                                      TrustedProxyResolver trustedProxyResolver,
-                                                                                      IdentityContextProvider identityContextProvider,
-                                                                                      MdcTraceBridge mdcTraceBridge) {
-            return new AnnotatedMonitoringInterceptor(recorder, trustedProxyResolver, identityContextProvider,
-                mdcTraceBridge);
-        }
-
         @Bean("abnormalAccessMonitoringWebMvcConfigurer")
         org.springframework.web.servlet.config.annotation.WebMvcConfigurer abnormalAccessMonitoringWebMvcConfigurer(
             final RequestMetadataInterceptor interceptor) {
@@ -441,16 +333,5 @@ public class AbnormalAccessMonitorAutoConfiguration {
             };
         }
 
-        @Bean("abnormalAccessAnnotatedMonitoringWebMvcConfigurer")
-        @ConditionalOnProperty(prefix = "abnormal.access.monitor.instrumentation", name = "enabled", havingValue = "true", matchIfMissing = true)
-        org.springframework.web.servlet.config.annotation.WebMvcConfigurer abnormalAccessAnnotatedMonitoringWebMvcConfigurer(
-            final AnnotatedMonitoringInterceptor interceptor) {
-            return new org.springframework.web.servlet.config.annotation.WebMvcConfigurer() {
-                @Override
-                public void addInterceptors(org.springframework.web.servlet.config.annotation.InterceptorRegistry registry) {
-                    registry.addInterceptor(interceptor).order(1);
-                }
-            };
-        }
     }
 }
