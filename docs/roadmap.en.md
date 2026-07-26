@@ -12,7 +12,7 @@
 ## Explicitly deferred
 
 - Automatic schema migration: the host-controlled migration system remains authoritative.
-- Automatic `EventEnricher` discovery: the host must explicitly approve and invoke enrichment.
+- Automatic fact-provider discovery: facts must use an explicit `FactBinding` for target, scope, and `FactSource`; arbitrary host beans are never discovered and attached implicitly.
 - Automatic online activation of database rules: persisted versions remain management data until a governed loader exists.
 - A built-in HTTP error envelope: the component remains transport-neutral; hosts map the [error contract](error-contract.en.md).
 

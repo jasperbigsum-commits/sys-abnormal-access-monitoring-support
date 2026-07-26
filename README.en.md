@@ -1,48 +1,39 @@
-# Abnormal Access Monitoring and Control Support
+# Abnormal Access Monitoring Support
 
-This Maven reactor provides reusable abnormal-access monitoring for self-hosted Spring Boot systems. It records normalized security events, evaluates deterministic rules, maintains alert history, delegates controls to the host application, and persists an auditable trail without taking ownership of host authentication or authorization.
+A strict, typed monitoring component for Spring Boot 2.7 and Boot 3 hosts. The host remains authoritative for identity, resource authorization, sessions, endpoints, and real control effects. This component validates action facts, evaluates 14 built-in rules, persists alerts and durable controls through MyBatis, and exposes controller-ready management services.
 
-Spring Boot 2.7.x (`javax.servlet`) and Spring Boot 3.x (`jakarta.servlet`) are supported by separate starters. “Spring 2/3” means the Boot generation, not legacy Spring Framework 2.x/3.x.
+Production persistence is MyBatis-only. There is no in-memory repository fallback and no automatic DDL execution. Start in `OBSERVE`; `ENFORCE` refuses startup unless executable handlers cover every control type emitted by enabled built-in rules.
 
 ## Modules
 
-| Module | Purpose |
+| Module | Responsibility |
 | --- | --- |
-| `api` | Framework-neutral contracts, event drafts, and host SPIs. |
-| `core` | Domain model, rules, application services, and ports. |
-| `web-contract` | Browser signal model, validation, and JSON Schema. |
-| `mybatis` | MyBatis persistence adapter, annotated mappers, and schema migration. |
-| `spring-support` | Shared Spring integration helpers. |
-| `spring2-starter` / `spring3-starter` | Boot-specific auto-configuration. |
-| `maven-plugin` | Safe initialization templates. |
-| `bom` | Version management for the published modules. |
+| `api` | Typed Action, Fact, Rule, Control, and management contracts |
+| `core` | Event assembly, rule evaluation, alerts, durable controls, management use cases |
+| `mybatis` | The production persistence adapter, mappers, and schema |
+| `web-contract` | Supplemental browser signal schema |
+| `spring-support` | Shared Spring adapters |
+| `spring2-starter` / `spring3-starter` | Symmetric Boot auto-configuration |
+| `integration-audit` | Real Boot 2/3 HTTP and MyBatis acceptance hosts |
 
-## Quick start
+## Core Boundaries
 
-Production adoption follows seven evidence-based steps: one matching starter, controlled schema migration, trusted identity/authorization/proxy SPIs, `OBSERVE`, a safe test event, a tested real control handler, and only then `ENFORCE`. See the [Integration Guide](docs/integration-guide.en.md#fifteen-minute-path) for commands, omissions, and advanced features.
+- Actions are concrete `ActionType` classes, not free-form strings.
+- `ActionCatalog` owns static semantics and must be frozen before runtime creation.
+- Facts retain their Java value type through `FactType<T>`.
+- `FactBinding`, not the provider, owns provider applicability to an Action or Action Contract.
+- Fact sources are preserved per fact and checked by both Action and Rule definitions.
+- `MonitoringService` is the programmatic entry point; typed `@MonitorAction` is an MVC adapter.
+- Management services bind a trusted `ManagementAuthorizer` at construction time.
+- Control execution is a durable, versioned, idempotent state machine.
 
-Import the BOM, then add exactly one starter matching the host's Boot major version:
+## Start
 
-```xml
-<dependencyManagement>
-    <dependencies>
-        <dependency>
-            <groupId>io.github.jasperbigsum-commits</groupId>
-            <artifactId>sys-abnormal-access-monitoring-bom</artifactId>
-            <version>${abnormal-access-monitoring.version}</version>
-            <type>pom</type>
-            <scope>import</scope>
-        </dependency>
-    </dependencies>
-</dependencyManagement>
-
-<dependency>
-    <groupId>io.github.jasperbigsum-commits</groupId>
-    <artifactId>sys-abnormal-access-monitoring-spring3-starter</artifactId>
-</dependency>
-```
-
-Apply the controlled database migration at `mybatis/src/main/resources/db/monitoring-schema.sql`, provide the required host SPIs, and start in observation mode:
+1. Import the BOM and one starter matching the host Boot major version.
+2. Apply `mybatis/src/main/resources/db/monitoring-schema.sql` through the host migration process.
+3. Provide a working `SqlSessionFactory` and trusted identity/authorization adapters.
+4. Run in `OBSERVE` and verify events, alerts, management authorization, and audit rows.
+5. Register real idempotent handlers for all required built-in controls before enabling `ENFORCE`.
 
 ```yaml
 abnormal:
@@ -50,36 +41,30 @@ abnormal:
     monitor:
       system-id: order-service
       mode: OBSERVE
-      frontend:
+      instrumentation:
         enabled: true
+      trusted-proxies: [10.0.0.0/8]
 ```
 
-Implement and register `IdentityContextProvider`, `ResourceScopeAuthorizer`, and `TrustedProxyResolver`. The component records authorization conclusions but never promotes a denied request to allowed. Browser telemetry is supplementary evidence only; trusted identity, authorization, source IP, and session data must be established server-side.
+```java
+monitoringService.monitor(ActionExecution.of(
+    BuiltInActions.ReportExport.class,
+    requestContext,
+    identityContext,
+    ActionOutcome.success(latencyMs),
+    ActionFacts.builder()
+        .put(BuiltInFacts.ResourceId.class, reportId)
+        .put(BuiltInFacts.DataCount.class, exportedRows)
+        .build(),
+    FactSource.HOST_PROVIDER));
+```
 
-## Architecture and transactions
-
-The domain is isolated under `core.domain`; pure deterministic rules live in `core.domain.rule`; use cases are in `core.application`; replaceable integrations are declared in `core.port`. MyBatis, Spring, Servlet, and database details are outer adapters and must not leak back into domain rules.
-
-`MonitoringRepository.inTransaction(...)` commits an event, its evaluated alert state, and alert links atomically. Alert status changes and append-only dispositions use the same guarantee. Notifications and host controls execute after commit because those external operations cannot be safely rolled back. The monitoring transaction is separate from the host business transaction; use an outbox or an approved host adapter for a cross-resource atomic workflow.
-
-The starters do not force a MyBatis Boot Starter version. The adapter is compiled against MyBatis `3.5.19` and uses stable 3.5.x core APIs, so a host can retain its compatible MyBatis integration and expose a `SqlSessionFactory`.
-
-Within the MyBatis adapter, the root package retains the repository, registrar, mappers, and the single `InstantTypeHandler`; `mybatis.po` contains database-row mappings and the rule-version query projection. POs never leak into `api` or replace immutable `core.domain` objects. The repository is the only domain-to-PO conversion boundary.
-
-## Operational safety
-
-Keep `ENFORCE` disabled until at least one host `ControlHandler`, thresholds, and failure paths have been validated. The starter rejects `ENFORCE` when no executable host handler is present. Never record passwords, tokens, cookies, secrets, raw request bodies, or raw response bodies.
-
-Build and verify all modules with:
+When a host supplies `ManagementAuthorizer`, the starters expose `SecurityEventQueryService`, `AlertManagementService`, `RuleCatalogService`, `WhitelistManagementService`, and `ControlManagementService`. The host maps these services to its own controllers and frontend; authorization, optimistic locking, transactions, and `management_audit` remain inside the services.
 
 ```bash
 mvn clean verify -DskipTests=false
 ```
 
-## Documentation
+Never record passwords, tokens, cookies, keys, or unapproved raw payloads. Browser telemetry is supplemental only; server-side identity and authorization remain authoritative.
 
-- [Integration Guide](docs/integration-guide.en.md): fifteen-minute adoption, common omissions, advanced integration, and production acceptance.
-- [Public Error Contract](docs/error-contract.en.md): all 13 stable codes, hierarchy, retry guidance, and host transport mapping.
-- [Architecture and Transaction Boundaries](docs/architecture-and-transaction-boundaries.en.md): module isolation, runtime flow, persistence atomicity, and post-commit effects.
-- [Feature and Optimization Roadmap](docs/roadmap.en.md): M0-M3 priorities, completion signals, and explicitly deferred work.
-- [Chinese README](README.md): the Chinese documentation index.
+See the [integration guide](docs/integration-guide.en.md) and [architecture and operations](docs/architecture-and-transaction-boundaries.en.md).
