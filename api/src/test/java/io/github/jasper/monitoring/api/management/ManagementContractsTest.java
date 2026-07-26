@@ -1,6 +1,9 @@
 package io.github.jasper.monitoring.api.management;
 
 import io.github.jasper.monitoring.api.management.command.AlertAcknowledgeCommand;
+import io.github.jasper.monitoring.api.management.command.AlertCloseCommand;
+import io.github.jasper.monitoring.api.management.command.AlertFalsePositiveCommand;
+import io.github.jasper.monitoring.api.management.command.AlertStartInvestigationCommand;
 import io.github.jasper.monitoring.api.management.command.ControlApprovalCommand;
 import io.github.jasper.monitoring.api.management.command.ControlRejectionCommand;
 import io.github.jasper.monitoring.api.management.command.WhitelistGrantCommand;
@@ -46,6 +49,12 @@ class ManagementContractsTest {
             ControlRejectionCommand.of("c", 3L, "reject").getIdempotencyKey());
         assertNotEquals(WhitelistGrantCommand.of("w", 2L, "grant").getIdempotencyKey(),
             WhitelistRevokeCommand.of("w", 2L, "revoke").getIdempotencyKey());
+        assertNotEquals(AlertStartInvestigationCommand.of("a", 2L, "investigate").getIdempotencyKey(),
+            AlertCloseCommand.of("a", 2L, "close").getIdempotencyKey());
+        assertNotEquals(AlertCloseCommand.of("a", 2L, "close").getIdempotencyKey(),
+            AlertFalsePositiveCommand.of("a", 2L, "false-positive").getIdempotencyKey());
+        assertThrows(IllegalArgumentException.class,
+            () -> io.github.jasper.monitoring.api.management.command.VersionedReasonCommand.of("a", 2L, "generic"));
     }
 
     @Test

@@ -4,7 +4,12 @@ import java.util.Objects;
 public class VersionedReasonCommand {
  private final String resourceId, reason, idempotencyKey; private final long expectedVersion;
  protected VersionedReasonCommand(String id,long version,String reason,String key){if(version<1)throw new IllegalArgumentException("expectedVersion must be positive");this.resourceId=require(id,"resourceId");this.reason=requireBounded(reason,"reason",512);this.idempotencyKey=requireBounded(key,"idempotencyKey",128);this.expectedVersion=version;}
- public static VersionedReasonCommand of(String id,long version,String reason){return of(id,version,reason,operationKey("versioned",id,version));}
+ /**
+  * The generic command has no operation identity and therefore cannot safely
+  * derive a deterministic idempotency key. Callers must provide an explicit
+  * key, or use an operation-specific command type.
+  */
+ public static VersionedReasonCommand of(String id,long version,String reason){throw new IllegalArgumentException("idempotencyKey must be explicit for a generic command");}
  public static VersionedReasonCommand of(String id,long version,String reason,String key){return new VersionedReasonCommand(id,version,reason,key);}
  public String getResourceId(){return resourceId;} public long getExpectedVersion(){return expectedVersion;} public String getReason(){return reason;} public String getIdempotencyKey(){return idempotencyKey;}
  protected static String operationKey(String operation,String id,long version){return requireBounded(operation,"operation",32)+":"+require(id,"resourceId")+":"+version;}

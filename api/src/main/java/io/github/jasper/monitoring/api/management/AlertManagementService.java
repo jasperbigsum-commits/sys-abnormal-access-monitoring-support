@@ -5,7 +5,7 @@ public interface AlertManagementService {
     ManagementPage<AlertView> search(ManagementAuthorizer authorizer, ManagementActor actor, AlertQuery query);
     AlertView get(ManagementAuthorizer authorizer, ManagementActor actor, String alertId);
     AlertView acknowledge(ManagementAuthorizer authorizer, ManagementActor actor, AlertAcknowledgeCommand command);
-    AlertView startInvestigation(ManagementAuthorizer authorizer, ManagementActor actor, VersionedReasonCommand command);
-    AlertView close(ManagementAuthorizer authorizer, ManagementActor actor, VersionedReasonCommand command);
-    AlertView markFalsePositive(ManagementAuthorizer authorizer, ManagementActor actor, VersionedReasonCommand command);
+    AlertView startInvestigation(ManagementAuthorizer authorizer, ManagementActor actor, AlertStartInvestigationCommand command);
+    AlertView close(ManagementAuthorizer authorizer, ManagementActor actor, AlertCloseCommand command);
+    AlertView markFalsePositive(ManagementAuthorizer authorizer, ManagementActor actor, AlertFalsePositiveCommand command);
 }

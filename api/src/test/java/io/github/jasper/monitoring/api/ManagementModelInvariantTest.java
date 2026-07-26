@@ -6,6 +6,7 @@ import io.github.jasper.monitoring.api.management.model.AlertSummary;
 import io.github.jasper.monitoring.api.management.model.ControlAttemptView;
 import io.github.jasper.monitoring.api.management.model.ControlDetails;
 import io.github.jasper.monitoring.api.management.model.SecurityEventSummary;
+import io.github.jasper.monitoring.api.management.model.SecurityEventView;
 import java.util.Arrays;
 import java.util.Collections;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,13 @@ class ManagementModelInvariantTest {
             () -> new SecurityEventSummary("id", "scope", "data:query", "", 1));
         assertThrows(IllegalArgumentException.class,
             () -> new SecurityEventSummary("id", "scope", "data:query", "VALID", 0));
+    }
+
+    @Test
+    void rejectsBlankSecurityEventIdentity() {
+        assertThrows(NullPointerException.class, () -> SecurityEventView.of(null, "scope"));
+        assertThrows(IllegalArgumentException.class, () -> SecurityEventView.of("  ", "scope"));
+        assertThrows(IllegalArgumentException.class, () -> SecurityEventView.of("id", "  "));
     }
 
     @Test
