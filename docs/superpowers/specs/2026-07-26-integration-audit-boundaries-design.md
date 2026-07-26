@@ -1,149 +1,257 @@
-# 集成审计职责边界与真实导出设计
+# 建设方案 A 对齐的集成审计设计
 
-## 目标
+## 1. 依据、目标与范围
 
-重构 `integration-audit/spring2-web` 与 `integration-audit/spring3-web`，使两个宿主以相同语义证明认证、资源授权、真实报表导出、强类型监测、MyBatis 持久化和管理服务能够完整协作。
+本设计以上位文件《自建系统异常访问监测与控制建设方案（方案 A）》V1.0（2026-07-15）为验收依据，重点落实其第 3、5、7、8、11 章和附录 B。
 
-本次不新增 Maven 模块，不引入异步导出任务、临时文件存储或宿主前端。Boot 2 与 Boot 3 保持对称实现，公共模块继续遵守 Java 8、Servlet 命名空间和框架隔离边界。
+重构 `integration-audit/spring2-web` 与 `integration-audit/spring3-web`，使两个独立宿主以相同语义证明：认证、功能及资源授权、业务事件采集、规则判定、告警、控制、处置和审计可以在系统自身边界内形成闭环。
 
-## 决策
+本次同时修复审计暴露出的框架严格模式缺口。生产持久化只使用 MyBatis，不提供内存回退。审计数据库使用 H2，但业务模拟状态和监测状态均通过 MyBatis 保存，不以 `AtomicInteger`、无状态成功处理器或 mock 副作用作为最终验收证据。
 
-采用同步 XLSX 下载。导出场景参考 Jeecg 的查询条件复用、勾选导出、字段权限和大数据分页思想，但不引入 Jeecg 或 AutoPOI 运行依赖。集成宿主直接使用 Apache POI 生成并校验 XLSX。
+本次不新增 Maven 模块，不建设宿主前端，不引入异步文件任务或跨系统 SIEM/UEBA 能力。Boot 2 与 Boot 3 保持同编号、同业务语义和同数据库证据。
 
-资源授权采用 MVC `HandlerInterceptor`，不放入 Controller、AOP 切面或认证 Filter。Shiro Filter 只认证；资源拦截器是报表资源访问的唯一决策入口。
+## 2. 核心设计决策
 
-## 包与职责
+采用“状态化参考宿主 + 分层验收”：
 
-每个 Boot 宿主只增加必要的职责包，不继续细分层级：
+- `TC-01` 至 `TC-18` 直接对应建设方案附录 B，验证业务闭环；
+- `IA-01` 至 `IA-12` 验证框架默认装配、宿主接入和严格边界；
+- 单元测试验证规则窗口、目录冻结、启动扫描、状态机和错误分支；
+- 集成审计验证真实 HTTP、MyBatis 状态和业务副作用。
+
+同步报表导出参考 Jeecg 的查询条件复用、勾选导出、字段权限和分页取数语义，但不引入 Jeecg 或 AutoPOI。审计宿主使用 Apache POI 生成和读取真实 XLSX。
+
+资源授权采用 MVC `HandlerInterceptor`。Shiro Filter 只认证；资源拦截器是报表资源访问的唯一决策入口，拒绝时自行写入响应并返回 `false`，Controller 不执行第二次权限校验。
+
+## 3. 默认监听、宿主埋点与控制边界
+
+框架不存在能够自动识别所有业务语义的全局业务 Listener。所谓全局能力，仅指请求上下文拦截、显式注解扫描、可选 IP Filter 和控制触发器 Bean 扫描。业务事实必须来自宿主的服务端落点。
+
+| 能力 | 框架默认提供 | 宿主必须提供 | 验收 |
+| --- | --- | --- | --- |
+| HTTP 请求上下文 | MVC Interceptor 获取方法、路径、可信 IP、request/trace ID | `IdentityContextProvider`、可信代理配置 | 所有受测入口建立可信上下文，但不自动产生业务事件 |
+| 注解监听 | AOP 扫描显式 `@MonitorAction` 方法，记录返回、异常和耗时 | Action 声明及必要的事实绑定 | 未标注方法不产生 Action；HTTP 失败不得记录为成功 |
+| 业务事件 | 内置 Action、Fact、规则目录和装配器 | 登录结果、资源、组织、数量、敏感级别、审批及目标用户等服务端事实 | 每个 `TC-*` 标明埋点位置和来源 |
+| 资源授权 | `ResourceAccessGuard` 的失败关闭和授权审计 | `ResourceScopeAuthorizer`、资源拦截器和权限目录 | 单次判断；拒绝、异常和空决策均在拦截器终止 |
+| 控制触发 | 扫描 `@ControlTrigger` 并在规则命中后下发命令 | 真实、幂等的六类控制副作用 | 控制后业务状态可查询；默认跳过不算能力 |
+| IP 控制 | 可选 `IpControlFilter` 和通用 IP 处理器 | 显式启用、保护路径、可信代理、TTL、容量和规则范围 | 命中后目标 IP 的下一请求真实返回 429 |
+| 管理能力 | 授权、版本、审计和状态机服务 | `ManagementAuthorizer` 与 HTTP Controller | 管理 Actor 只来自服务端身份；服务再次授权并审计 |
+| 持久化 | MyBatis Mapper、事务和基线 Schema | `SqlSessionFactory`、迁移和数据源 | 事件、告警、控制、处置和管理审计可关联 |
+| 通知 | 告警提交后调用通知端口 | 渠道适配和有限重试策略 | 通知失败不回滚告警，重试不重复创建告警 |
+
+### 3.1 三种宿主埋点
+
+```text
+@MonitorAction
+  用于方法结果即可确定的动作，不需要额外业务 Fact
+
+@MonitorAction + @ActionFact
+  用于方法参数中已有且可安全提取的资源 ID、组织或目标账号
+
+MonitoringService.monitor(...)
+  用于实际返回条数、导出字段、审批结果、事务提交结果等运行期事实
+```
+
+`FactBinding` 只用于跨切面且确由服务端上下文提供的 Fact。`ActionFactProvider` 只产生值；`FactBinding` 独占 Action/Contract 适用范围、Fact 集合和来源声明。Provider 不能读取任意请求体或决定自身适用 Action。
+
+`@ActionFact` 当前只有 API 定义，没有生产读取实现。本次补齐受限属性路径提取、类型转换、来源标记和启动扫描。路径仅允许公共 Bean getter、公共字段、数组和 List 的非负索引；禁止 `class`、方法调用、Map、静态字段和任意反射访问。Action 不接受该 Fact、Fact 类型不匹配、来源不允许、路径非法或重复生产者时启动失败。
+
+实际返回条数等执行后数据不能由前置参数冒充，必须程序化提供服务端结果。客户端补充事实不能覆盖身份、授权、源 IP、资源范围或内置规则所需的权威事实。
+
+### 3.2 注解结果语义
+
+Starter 的结果解析器区分：正常业务返回、异常和 HTTP 错误响应。正常返回的 401/403/4xx/5xx `ResponseEntity` 不得记录为成功。非 HTTP Service、任务和消息消费不能依赖 Servlet 请求线程上下文，应使用程序化入口。
+
+## 4. 包和职责
+
+每个 Boot 宿主只增加必要的职责包，不继续拆分 Maven 模块或形成空层：
 
 ```text
 io.github.jasper.monitoring.audit.spring2|spring3
-  security/    认证、Realm、资源授权拦截器及其配置
-  report/      报表目录、请求模型、XLSX 服务、报表 Controller
-  monitoring/  登录失败、注解埋点和控制动作验收入口
-  management/  管理服务 HTTP 适配
+  security/    认证、Realm、账号/会话、资源授权拦截器及配置
+  report/      报表目录、查询、导出请求、风险前置控制、XLSX 和 Controller
+  monitoring/  业务埋点、宿主控制触发器和通知适配
+  management/  规则、白名单、告警处置及管理 HTTP 适配
+  persistence/ 审计宿主业务 MyBatis Mapper 与模型
   Spring*AuditApplication
 ```
 
-### 认证
+Controller 只做 HTTP 适配，不直接读取监测表、不调用 Shiro 权限 API、不组合规则、不执行第二次资源授权。业务 Service 负责业务事务和服务端事实；监测 Runtime 负责事件、规则、告警和控制；宿主控制处理器负责真实业务副作用。
 
-`AuditPrincipalFilter` 只把验收身份交给 Shiro 认证。缺少或未知身份时返回 401 并终止链路。`AuditRbacRealm` 只提供测试身份、角色和权限数据。
+## 5. 认证与资源授权链
 
-### 资源授权
+```text
+AuditPrincipalFilter
+  -> 身份缺失或未知：401，终止
+RequestMetadataInterceptor
+  -> 建立可信请求与身份上下文
+AuditReportAuthorizationInterceptor
+  -> 解析 Handler 策略、reportId 和服务端资源
+  -> ResourceAccessGuard.authorize(...)，严格一次
+  -> 拒绝/异常/空决策：外部统一响应，记录内部原因，终止
+  -> 允许：附加 AuthorizedReport
+ReportController
+  -> 只消费 AuthorizedReport，调用业务 Service
+```
 
-`AuditReportAuthorizationInterceptor` 读取 Handler 方法上的内部资源策略声明、URI 中的 `reportId` 和服务端资源目录，然后严格调用一次 `ResourceAccessGuard.authorize(...)`。
+功能权限不足统一返回 403。资源不存在和跨机构无权限统一返回 404，分别在内部保留 `RESOURCE_NOT_FOUND` 与 `RESOURCE_SCOPE_DENIED`，避免泄露对象存在性。
 
-- 资源不存在：返回 404，返回 `false`。
-- 授权拒绝、异常或空决策：失败关闭，返回 403，返回 `false`。
-- 授权允许：将已解析的可信报表写入 request attribute，继续调用 Controller。
+认证 Filter 不承担资源权限；Starter 的请求上下文 Interceptor 不承担授权；管理服务使用独立的管理授权边界，不复用报表拦截器。
 
-拦截器不会先调用 `Subject.isPermitted` 再调用 Guard。宿主的 `ResourceScopeAuthorizer` 负责组织范围和 Shiro 权限的单次组合判断，Guard 负责统一调用、失败关闭和允许/拒绝审计。
+## 6. 状态化参考宿主
 
-`ReportController` 不注入 Guard 或 Shiro，不重新查询资源，也不执行第二次权限判断。
+审计宿主使用独立 fixture 表和 MyBatis Mapper 模拟以下业务状态：
 
-### HTTP 适配
+| 业务域 | 状态与副作用 | 用例 |
+| --- | --- | --- |
+| 身份与会话 | 账号启停、登录失败、验证码、会话创建和撤销 | TC-01、TC-03、TC-11 |
+| 来源控制 | 同 IP 多账号、IP 限流和到期 | TC-02 |
+| 资源访问 | 功能权限、组织范围、拒绝次数和资源序列 | TC-04、TC-05、TC-06 |
+| 查询 | 服务端查询次数、结果规模和用户/接口限流 | TC-07 |
+| 报表导出 | 条件、勾选项、字段权限、单次/累计量和审批 | TC-08、TC-09 |
+| 权限管理 | 角色变更、自授权拒绝和事务边界 | TC-10 |
+| 白名单与规则 | 有效期、规则版本、阈值和模式 | TC-12、TC-16、TC-17 |
+| 控制执行 | 幂等键、状态、有效期、执行次数、失败和重试 | TC-13 |
+| 通知 | 投递状态、有限重试和错误摘要 | TC-14 |
+| 数据保护 | HTTP、持久化 Fact、控制和诊断日志 | TC-15 |
+| 告警运营 | 确认、分派、处置、关闭和追加时间线 | TC-18 |
+
+测试每次使用确定的 fixture 数据和受控时钟，避免依赖真实等待。业务 fixture Schema 与监测 Schema 分离，避免把审计宿主表误认为公共组件契约。
+
+## 7. 同步 XLSX 与高风险前置控制
+
+HTTP 入口：
 
 ```text
 GET  /audit/reports/{reportId}
 POST /audit/reports/{reportId}/exports
 ```
 
-`ReportController` 只解析 HTTP 请求、取得拦截器附加的 `AuthorizedReport`、调用应用服务并构造响应。
+导出请求支持与列表一致的查询条件、可选勾选 ID 和可选字段。存在勾选项时，数据集合为“勾选项、查询结果和数据权限”的交集；不存在勾选项时，分页导出当前查询结果。
 
-`MonitoringFixtureController` 承载登录失败和注解埋点验收入口。`ManagementController` 只依赖公开管理服务接口，将服务结果适配为 HTTP 响应。
+最终字段为“前端选择字段、服务端允许字段和当前身份字段权限”的交集。密码、密钥、内部权限标识和完整敏感字段永不进入允许集合。未知字段返回 400，不静默忽略错误调用。
 
-## 同步 XLSX 导出
-
-导出请求支持：
-
-- 与列表查询一致的服务端可识别查询条件；
-- 可选的勾选记录 ID；
-- 可选的前端选择字段。
-
-有勾选 ID 时，最终数据为“勾选项、查询结果和数据权限”的交集；没有勾选 ID 时，导出当前查询结果。客户端不能提供或覆盖导出行数。
-
-最终字段为“前端选择字段、服务端允许字段和当前身份字段权限”的交集。密码、密钥、内部权限标识等敏感字段永不进入允许集合。未知字段被视为无效请求并返回 400，避免静默掩盖错误调用。
-
-`ReportExportService` 的处理顺序：
+高风险导出链路：
 
 ```text
-规范化查询条件
-  -> 约束勾选 ID
-  -> 计算允许字段
-  -> 分页读取服务端数据
-  -> Apache POI 生成 XLSX
-  -> ExportResult(fileName, bytes, rowCount, exportedFields)
+资源授权拦截器
+  -> 服务端计算候选行数、字段敏感级别和当日累计量
+  -> ExportRiskGuard
+       -> 低于阈值：分页读取并生成 XLSX
+       -> 达到 EXPT-01/EXPT-02：记录 DENIED 导出事件
+          -> 内置规则生成告警及拒绝/审批控制
+          -> 返回统一拒绝或待审批响应
+          -> 不调用 XLSX 生成服务
+  -> 成功生成后记录 SUCCESS 导出事件及实际结果
 ```
 
-响应使用 XLSX Content-Type 和 RFC 兼容的 `Content-Disposition` 附件文件名。生成失败时返回 500，不发送半成品文件。
+`ExportRiskGuard` 只执行导出风险和审批前置策略，不重复资源权限判断。单次量、累计量、敏感级别和审批状态都来自服务端。
 
-成功生成后，`ReportExportAuditService` 使用服务端 `ExportResult` 记录强类型 `BuiltInActions.ReportExport`，绑定资源 ID 和实际导出行数。失败导出不得记录为成功。监测系统自身失败遵循现有可观测性策略，但不得把已完成的文件生成改写为权限决策。
+Apache POI 生成 XLSX，响应设置 XLSX Content-Type 和 RFC 兼容的 `Content-Disposition`。测试重新读取响应字节，验证工作表、字段、行、条件、选择语义和敏感列缺失。文件生成失败返回 500，不发送半成品，也不记录成功导出。
 
-## 请求链
+## 8. 规则模式和目录唯一性
 
-```text
-AuditPrincipalFilter
-  -> 认证失败：401，终止
-RequestMetadataInterceptor
-  -> 建立服务端监测上下文
-AuditReportAuthorizationInterceptor
-  -> 资源不存在：404，终止
-  -> 授权拒绝/异常：403，审计并终止
-  -> 授权允许：附加 AuthorizedReport
-ReportController
-  -> ReportExportService
-  -> ReportExportAuditService
-  -> XLSX 附件响应
-```
+只保留 `api.rule.RuleMode`，删除重复且未使用的旧 `api.RuleMode`。
 
-管理查询继续由管理服务自身执行系统边界授权和管理审计，不复用报表资源拦截器。
+规则模式语义：
 
-## 错误契约
+- `DISABLED`：不评估；
+- `OBSERVE`：持久化规则命中观察，不生成告警、通知或控制；
+- `ALERT_ONLY`：生成告警和通知，不执行控制；
+- `ENFORCE`：生成告警和通知；仅当全局模式也为 `ENFORCE` 时执行控制。
 
-| 情况 | HTTP | 副作用 |
+全局 `OBSERVE` 是部署安全上限，会将规则级 `ENFORCE` 限制为仅告警，但不关闭认证、授权和事件记录。`OBSERVE` 命中必须有持久化观察证据，不能计算后丢弃。
+
+冻结的规则目录是执行规则、模式和所需控制类型的唯一依据。覆盖规则执行器时不能继续用另一份内置硬编码列表扫描控制。
+
+Starter 对宿主显式 `ControlHandler`、通用处理器和 `@ControlTrigger` 做统一唯一性扫描。重复动作、非法签名、`RECORD` 绑定、空返回能力或默认 fallback 不得通过 `ENFORCE` 启动校验。默认 fallback 只产生可审计 `SKIPPED`，不代表业务已执行。
+
+## 9. 错误与故障契约
+
+| 情况 | 外部结果 | 持久化与副作用 |
 | --- | --- | --- |
 | 身份缺失或未知 | 401 | 不进入资源拦截器或 Controller |
-| 报表不存在 | 404 | 不进入 Controller 或导出服务 |
-| 权限拒绝、授权异常或空决策 | 403 | 记录拒绝证据；不进入 Controller 或导出服务 |
-| 查询、选择项或字段请求非法 | 400 | 不生成文件；不记录成功导出 |
+| 功能权限不足 | 403 | 记录拒绝；不进入业务 Service |
+| 资源不存在或跨组织 | 404 | 内部原因不同；不进入业务 Service |
+| 授权器异常或空决策 | 403 | 失败关闭并记录系统原因 |
+| 查询、选择项或字段非法 | 400 | 不生成文件；不记录成功导出 |
+| 导出需要审批或被拒绝 | 403/待审批业务响应 | 记录 DENIED 事件、告警和控制；不生成 XLSX |
 | XLSX 生成失败 | 500 | 不发送半成品；不记录成功导出 |
-| 成功 | 200 | 返回 XLSX；按实际结果记录导出事件 |
+| 通知失败 | 业务结果不回滚 | 告警保持权威，记录有限重试状态 |
+| 控制异常、空值或非法状态 | 控制失败 | 持久化 `FAILED` 和安全原因，允许受控重试 |
 
-## 编号验收矩阵
+安全模块异常不得绕过已有认证和授权。回退优先从自动控制降为仅告警，不关闭鉴权或审计。
 
-Boot 2 与 Boot 3 必须逐项实现相同编号和语义：
+## 10. 建设方案业务验收矩阵
 
-| 编号 | 要求 |
+| 编号 | 集成审计必须证明的结果 |
 | --- | --- |
-| IA-01 | 宿主只装配 `MyBatisMonitoringStore`，审计证据实际写入数据库 |
-| IA-02 | 缺失或未知身份由认证 Filter 返回 401，后续链路不执行 |
-| IA-03 | 同组织且具有读取权限时允许访问，资源授权严格调用一次 |
-| IA-04 | 跨组织读取或导出由资源拦截器返回 403，Controller 和导出服务不执行 |
-| IA-05 | 缺少导出权限时返回 403，并持久化拒绝审计 |
-| IA-06 | 资源不存在时由资源拦截器返回 404，业务链路不执行 |
-| IA-07 | 勾选导出遵循选择项、查询条件和数据权限交集，返回有效 XLSX |
-| IA-08 | 未勾选时分页导出当前查询结果，并由服务端计算行数 |
-| IA-09 | 导出字段按三方交集裁剪，非法或敏感字段不进入工作簿 |
-| IA-10 | 响应包含规范的 XLSX Content-Type、文件名和附件头 |
-| IA-11 | 成功导出记录强类型 `ReportExport`，事实来自实际结果并触发规则 |
-| IA-12 | 登录失败窗口产生 `AUTH-01`、验证码与限流控制证据 |
-| IA-13 | `@MonitorAction` MVC 路径产生强类型事件，HTTP 失败不记录为成功 |
-| IA-14 | 管理服务成功查询并写入 `SUCCEEDED` 管理审计 |
-| IA-15 | 跨系统管理查询被服务拒绝并写入 `DENIED` 管理审计 |
-| IA-16 | Boot 2/3 用例编号集合完全一致且连续 |
+| TC-01 | 第 5 次失败产生 AUTH-01，验证码/延迟状态生效，下一次登录受控 |
+| TC-02 | 同 IP 尝试 10 个账号后产生 AUTH-02，该 IP 后续请求 429，其他 IP 不受影响 |
+| TC-03 | 停用账号被认证服务拒绝，不创建会话，生成高风险事件和告警 |
+| TC-04 | 普通用户调用管理接口被拒，Controller 业务不执行，产生拒绝事件 |
+| TC-05 | 跨机构资源访问由拦截器终止，不泄露资源详情 |
+| TC-06 | 顺序访问 100 个资源触发 AUTHZ-02，会话撤销后旧会话不可用 |
+| TC-07 | 120 次查询触发 DATA-01，后续查询限流，其他用户不受影响 |
+| TC-08 | 4999 条允许下载；5000 条或高敏字段在文件生成前阻断并进入审批 |
+| TC-09 | 多次小额导出累计达到阈值触发 EXPT-02，不能只检查单次 |
+| TC-10 | 自授权在角色事务提交前拒绝，角色数据不变，生成 PRIV-01 |
+| TC-11 | 会话控制真实删除全部目标会话，重复命令不重复执行 |
+| TC-12 | 有效白名单抑制命中；过期后恢复告警，管理变更有审计 |
+| TC-13 | 相同幂等键只产生一次业务副作用，不延长原有效期 |
+| TC-14 | 通知失败不回滚告警，有限重试成功，不重复创建告警 |
+| TC-15 | 请求、响应、事件、Fact、控制和诊断日志不含密码、Token、Cookie 或完整敏感值 |
+| TC-16 | 规则修改生成新版本，记录前后值、操作人、审批人和时间；版本冲突返回 409 |
+| TC-17 | OBSERVE 不产生阻断；ENFORCE 才执行控制；切换不关闭认证、授权和日志 |
+| TC-18 | 管理 HTTP 完成确认、分派、处置、关闭，历史只追加且权限隔离 |
 
-每个用例方法以 `iaXX_` 开头，并使用 `@DisplayName("IA-XX ...")`。元测试反射检查编号唯一、连续、完整。文档逐项关联 HTTP 入口、测试方法、持久化证据和预期结果。
+## 11. 框架接入验收矩阵
 
-XLSX 验收必须用 Apache POI 重新读取响应字节，核对工作表、列、行、查询/选择语义以及敏感字段缺失。授权用例同时验证单次授权调用和拒绝时零业务调用。
+| 编号 | 基础检查 |
+| --- | --- |
+| IA-01 | MyBatis 是唯一生产仓储，缺少 `SqlSessionFactory` 启动失败 |
+| IA-02 | 全局请求拦截器只建立可信上下文，不凭空产生业务事件 |
+| IA-03 | `@MonitorAction` 只监听显式标注方法，正确处理返回、异常和 HTTP 失败 |
+| IA-04 | `@ActionFact` 类型、路径和来源受限，非法绑定启动失败 |
+| IA-05 | 实际结果 Fact 使用程序化埋点，客户端值不能覆盖 |
+| IA-06 | `FactBinding` 的 Action/Contract 适用范围唯一且启动期冻结 |
+| IA-07 | 资源拦截器只调用 Guard 一次，拒绝、异常和空决策自行熔断 |
+| IA-08 | `@ControlTrigger` 扫描校验签名、动作和唯一绑定 |
+| IA-09 | 默认跳过触发器不能满足 ENFORCE；缺失或重复处理器启动失败 |
+| IA-10 | 冻结规则目录同时决定执行规则、模式和控制覆盖 |
+| IA-11 | 管理 Controller 从服务端身份构造 Actor，管理服务再次授权并审计 |
+| IA-12 | Boot 2/3 的 `TC-*`、`IA-*` 编号集合完全一致 |
 
-## 验证
+每个测试方法以 `tcXX_` 或 `iaXX_` 开头，并使用包含相同编号的 `@DisplayName`。元测试检查编号唯一、连续和完整。授权允许、拒绝和异常路径验证调用次数严格为一次；拒绝路径通过持久业务状态证明 Controller/Service 未执行。
 
-按 TDD 逐项先增加失败用例，再实现最小行为并重构。完成后依次执行：
+## 12. 文档责任和验收证据
+
+不另建重复手册，按读者修订入口文档：
+
+- `README.md`：最短接入路径、默认能力和生产硬边界；
+- `docs/集成指南.md`：默认监听、宿主埋点、Fact、触发器和 ENFORCE 配置矩阵；
+- `docs/集成审计与基础项目验收.md`：逐项 TC/IA 的入口、准备、响应、数据库证据和测试方法；
+- `docs/架构与运维说明.md`：规则模式、通知故障、控制状态、回退和恢复；
+- `docs/组织角色与文档管理.md`：业务、安全、开发、测试和运维的确认项与交付证据；
+- `docs/领域模型与数据设计.md`：新增规则观察和 fixture/生产 Schema 边界。
+
+业务负责人确认正常访问量、敏感字段、导出审批和生产阈值；安全负责人确认规则模式、控制放行、脱敏和验收结论；开发负责宿主埋点、授权和控制适配；测试逐项执行 TC/IA；运维负责数据源、迁移、通知、回退和恢复证据。
+
+每个用例至少关联 HTTP/服务入口、事件 ID、规则 ID、告警 ID、控制幂等键、业务状态和管理审计。只有事件而无告警，或只有告警而不能控制和闭环处置，均不视为完整建成。
+
+## 13. TDD 与完成标准
+
+按 TDD 逐个编号增加失败用例并确认失败原因，再实现最小行为。严格模式修复先在所属模块建立单元失败用例，随后由审计宿主提供端到端证据。
+
+验证顺序：
 
 ```bash
+mvn -pl api,core,spring-support,spring2-starter,spring3-starter -am test
 mvn -pl integration-audit/spring2-web -am test
 mvn -pl integration-audit/spring3-web -am test
 mvn clean verify -DskipTests=false
 ```
 
-验收文档记录每个编号对应的测试证据。两个宿主的 Surefire 报告作为自动化证据，但不替代生产身份系统、目标数据库性能、数据留存、真实控制副作用和灾备验证。
+完成条件：TC-01 至 TC-18 和 IA-01 至 IA-12 在 Boot 2/3 全部通过；规则模式与控制唯一性缺口修复；入口文档与代码一致；全仓测试通过且没有内存生产适配、敏感 fixture 数据或未解释的测试跳过。
+
+Surefire 报告是自动化证据，但不能替代目标数据库性能、生产认证目录、真实消息渠道、留存制度、备份恢复和上线试运行。上述外部证据由对应责任人在生产验收材料中补齐。
