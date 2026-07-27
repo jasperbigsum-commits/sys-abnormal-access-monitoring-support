@@ -125,7 +125,7 @@ public final class MyBatisManagementRepository implements ManagementQueryReposit
     }
     @Override public Optional<WhitelistView> findWhitelistView(String scope,String id) {
         return read(session -> { ManagementRowPo row=session.getMapper(ManagementQueryMapper.class).whitelist(scope,id);
-            return row==null?Optional.<WhitelistView>empty():Optional.of(WhitelistView.of(row.getId(),scope)); });
+            return row==null?Optional.<WhitelistView>empty():Optional.of(whitelist(row,scope)); });
     }
     @Override public boolean transitionWhitelist(String scope,String id,long version,boolean active,String actorId,String reason) {
         return write(session -> session.getMapper(ManagementQueryMapper.class).transitionWhitelist(scope,id,version,
@@ -161,7 +161,8 @@ public final class MyBatisManagementRepository implements ManagementQueryReposit
     private static List<AlertView> alerts(List<ManagementRowPo> rows,String scope){List<AlertView> out=new ArrayList<AlertView>();for(ManagementRowPo r:rows)out.add(AlertView.of(r.getId(),scope,r.getStatus(),r.getAssigneeId(),r.getVersion()));return out;}
     private static List<RuleView> rules(List<ManagementRowPo> rows,String scope){List<RuleView> out=new ArrayList<RuleView>();for(ManagementRowPo r:rows)out.add(rule(r,scope));return out;}
     private static RuleView rule(ManagementRowPo row,String scope){return RuleView.of(row.getId(),scope,row.getVersion(),RuleMode.valueOf(row.getStatus()),row.getThreshold());}
-    private static List<WhitelistView> whitelists(List<ManagementRowPo> rows,String scope){List<WhitelistView> out=new ArrayList<WhitelistView>();for(ManagementRowPo r:rows)out.add(WhitelistView.of(r.getId(),scope));return out;}
+    private static List<WhitelistView> whitelists(List<ManagementRowPo> rows,String scope){List<WhitelistView> out=new ArrayList<WhitelistView>();for(ManagementRowPo r:rows)out.add(whitelist(r,scope));return out;}
+    private static WhitelistView whitelist(ManagementRowPo row,String scope){return WhitelistView.of(row.getId(),scope,row.getStatus(),row.getVersion());}
     private static List<ControlView> controls(List<ManagementRowPo> rows,String scope){List<ControlView> out=new ArrayList<ControlView>();for(ManagementRowPo r:rows)out.add(ControlView.of(r.getId(),scope,r.getStatus(),r.getVersion()));return out;}
     private static Optional<SecurityEventView> optionalEvent(ManagementRowPo r,String scope){return r==null?Optional.<SecurityEventView>empty():Optional.of(SecurityEventView.of(r.getId(),scope));}
     private static Optional<AlertView> optionalAlert(ManagementRowPo r,String scope){return r==null?Optional.<AlertView>empty():Optional.of(AlertView.of(r.getId(),scope,r.getStatus(),r.getAssigneeId(),r.getVersion()));}

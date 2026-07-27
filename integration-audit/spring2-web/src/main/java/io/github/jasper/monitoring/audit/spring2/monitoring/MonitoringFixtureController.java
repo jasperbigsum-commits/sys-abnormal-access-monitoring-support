@@ -6,9 +6,9 @@ import io.github.jasper.monitoring.api.action.MonitorAction;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
+import io.github.jasper.monitoring.api.fact.ActionFact;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
-import io.github.jasper.monitoring.audit.spring2.AuditExportRequest;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import java.util.LinkedHashMap;
@@ -42,10 +42,10 @@ public class MonitoringFixtureController {
     }
 
     @PostMapping("/export")
-    public Map<String, Object> export() {
+    public Map<String, Object> export(@RequestBody AuditExportRequest ignored) {
         ActionFacts facts = ActionFacts.builder()
             .put(BuiltInFacts.ResourceId.class, "audit-export-2026")
-            .put(BuiltInFacts.DataCount.class, Long.valueOf(5000L)).build();
+            .put(BuiltInFacts.DataCount.class, Long.valueOf(SERVER_REPORTED_ROW_COUNT)).build();
         return response(monitoring.monitor(ActionExecution.of(BuiltInActions.ReportExport.class,
             contexts.requestContext(), contexts.identityContext(), ActionOutcome.success(0L),
             facts, FactSource.HOST_PROVIDER)));
@@ -59,13 +59,23 @@ public class MonitoringFixtureController {
         return body;
     }
 
+    @GetMapping("/context-only")
+    public Map<String, Object> contextOnly() {
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("requestId", contexts.requestContext().getRequestId());
+        return body;
+    }
+
     @PostMapping("/annotated-export")
-    @MonitorAction(BuiltInActions.Query.class)
-    public Map<String, Object> annotatedExport(@RequestBody AuditExportRequest ignored) {
+    @MonitorAction(BuiltInActions.SensitiveView.class)
+    public Map<String, Object> annotatedExport(
+            @RequestBody @ActionFact(value = BuiltInFacts.DataCount.class, path = "report.rows")
+            AuditExportRequest ignored) {
         return exportResponse();
     }
 
     @PostMapping("/annotated-export-denied")
+    @MonitorAction(BuiltInActions.Query.class)
     public ResponseEntity<Map<String, Object>> annotatedExportDenied(@RequestBody AuditExportRequest ignored) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(exportResponse());
     }

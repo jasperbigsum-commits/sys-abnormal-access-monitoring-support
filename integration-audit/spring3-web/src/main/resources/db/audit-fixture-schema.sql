@@ -27,6 +27,8 @@ CREATE TABLE audit_report_row (
     row_id BIGINT NOT NULL,
     organization_id VARCHAR(128) NOT NULL,
     display_value VARCHAR(255) NOT NULL,
+    amount DECIMAL(18,2) NOT NULL,
+    sensitive_value VARCHAR(255) NOT NULL,
     PRIMARY KEY (report_id, row_id)
 );
 

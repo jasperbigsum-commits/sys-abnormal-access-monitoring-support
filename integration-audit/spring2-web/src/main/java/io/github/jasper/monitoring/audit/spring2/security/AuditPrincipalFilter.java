@@ -1,4 +1,4 @@
-package io.github.jasper.monitoring.audit.spring2;
+package io.github.jasper.monitoring.audit.spring2.security;
 
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;

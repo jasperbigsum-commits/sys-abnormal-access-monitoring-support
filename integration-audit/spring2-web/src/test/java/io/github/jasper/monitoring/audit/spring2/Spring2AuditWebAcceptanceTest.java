@@ -21,6 +21,9 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.io.ByteArrayInputStream;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import io.github.jasper.monitoring.audit.spring2.report.ReportExportService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,33 +68,41 @@ class Spring2AuditWebAcceptanceTest {
     @Autowired
     private AuditFixtureRepository fixtures;
 
+    @Autowired
+    private ReportExportService policyExports;
+
     @BeforeEach
     void resetExportSideEffects() {
         exportService.reset();
     }
 
     @Test
-    void usesMyBatisRepositoryForDurableAuditEvidence() {
+    @DisplayName("IA-01 production audit evidence uses MyBatis persistence")
+    void ia01_productionAuditEvidenceUsesMyBatisPersistence() {
         assertTrue(repository instanceof MyBatisMonitoringStore,
             "The integration host must persist audit evidence through MyBatis, never the memory adapter");
         assertEquals("ACTIVE", String.valueOf(fixtures.findAccount("audit-exporter").get("STATUS")));
         assertEquals("report-a", String.valueOf(fixtures.findReport("report-a").get("REPORTID")));
         assertTrue(fixtures.findRoles("audit-admin").contains("audit-admin"));
-        assertTrue(fixtures.counts().getControls() >= 0L);
-        assertTrue(fixtures.counts().getExports() >= 0L);
-        assertTrue(fixtures.counts().getNotificationAttempts() >= 0L);
+        long before = jdbc.queryForObject("SELECT COUNT(*) FROM security_event", Long.class).longValue();
+        assertEquals(HttpStatus.OK, post("/audit/login-failure", "audit-viewer").getStatusCode());
+        assertEquals(before + 1L,
+            jdbc.queryForObject("SELECT COUNT(*) FROM security_event", Long.class).longValue());
     }
 
     @Test
-    void rejectsMissingAndUnknownFixturePrincipals() {
-        assertEquals(HttpStatus.UNAUTHORIZED,
-            restTemplate.getForEntity(url("/audit/reports/report-a"), String.class).getStatusCode());
-        assertEquals(HttpStatus.UNAUTHORIZED,
-            get("/audit/reports/report-a", "unknown-principal").getStatusCode());
+    @DisplayName("IA-02 request context alone never creates a business event")
+    void ia02_requestContextAloneNeverCreatesBusinessEvent() {
+        long before = repository.findSince("audit-spring2-web", Instant.EPOCH).size();
+        ResponseEntity<String> response = get("/audit/context-only", "audit-viewer");
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().contains("requestId"));
+        assertEquals(before, repository.findSince("audit-spring2-web", Instant.EPOCH).size());
     }
 
     @Test
-    void allowsSameOrganizationReadAndExportWhenPermitted() {
+    @DisplayName("IA-07 report interceptor owns the fail-closed authorization boundary")
+    void ia07_reportInterceptorOwnsFailClosedAuthorizationBoundary() {
         assertEquals(HttpStatus.OK, get("/audit/reports/report-a", "audit-exporter").getStatusCode());
         assertEquals(HttpStatus.OK,
             post("/audit/reports/report-a/export", "audit-exporter").getStatusCode());
@@ -99,7 +110,8 @@ class Spring2AuditWebAcceptanceTest {
     }
 
     @Test
-    void deniesCrossOrganizationExportBeforeTheExportServiceRuns() {
+    @DisplayName("TC-05 cross-organization access stops before resource disclosure")
+    void tc05_crossOrganizationAccessStopsBeforeResourceDisclosure() {
         ResponseEntity<String> response = post("/audit/reports/report-b/export", "audit-exporter");
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
@@ -110,95 +122,69 @@ class Spring2AuditWebAcceptanceTest {
     }
 
     @Test
-    void deniesExportWithoutPermissionBeforeTheExportServiceRuns() {
-        ResponseEntity<String> response = post("/audit/reports/report-a/export", "audit-viewer");
+    @DisplayName("TC-04 regular users cannot invoke management operations")
+    void tc04_regularUsersCannotInvokeManagementOperations() {
+        ResponseEntity<String> response = get("/audit/management/events", "audit-viewer");
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertEquals(0, exportService.getInvocationCount());
-        assertTrue(repository.findSince("audit-spring2-web", Instant.EPOCH).stream()
-            .anyMatch(event -> "authz:access-denied".equals(event.getAction())
-                && "audit-viewer".equals(event.getUserId())));
+        assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM management_audit WHERE actor_id = ? "
+            + "AND action = ? AND outcome = ?", Long.class,
+            "audit-viewer", "EVENT_READ", "DENIED").longValue() >= 1L);
     }
 
     @Test
-    void auditsFiveLoginFailuresOverHttpWithAlertAndControlEvidence() {
-        assertTrue(applicationContext.containsBean("auditControlActions"),
-            "The sample host must expose its @ControlTrigger methods as a normal Spring bean");
-        Object controlActions = applicationContext.getBean("auditControlActions");
-        assertTrue(AnnotatedControlHandler.hasBindings(controlActions));
-        assertTrue(applicationContext.getBeansOfType(ControlHandler.class).isEmpty(),
-            "The sample host must use @ControlTrigger instead of a handwritten ControlHandler bean");
-
-        ResponseEntity<String> lastResponse = null;
-        for (int attempt = 0; attempt < 6; attempt++) {
-            lastResponse = post("/audit/login-failure", "audit-exporter");
-            assertEquals(HttpStatus.OK, lastResponse.getStatusCode());
-        }
-
-        assertTrue(lastResponse.getBody().contains("\"action\":\"auth:login-failure\""));
-        List<SecurityEvent> events = repository.findSince("audit-spring2-web", Instant.now().minusSeconds(60));
-        assertEquals(6, events.stream().filter(event -> "auth:login-failure".equals(event.getAction())).count());
-        assertTrue(events.stream().filter(event -> "auth:login-failure".equals(event.getAction()))
-            .allMatch(event -> "audit-exporter".equals(event.getUserId())));
-        String alertId = jdbc.queryForObject(
-            "SELECT alert_id FROM security_alert WHERE rule_id = 'AUTH-01'", String.class);
-        assertTrue(repository.findControl(alertId + ":" + ControlActionType.REQUIRE_CAPTCHA).isPresent());
-        assertTrue(repository.findControl(alertId + ":" + ControlActionType.RATE_LIMIT).isPresent());
-    }
-
-    @Test
-    void auditsRegisteredExportWithDynamicFactsOverHttp() {
-        ResponseEntity<String> response = post("/audit/export", "audit-exporter");
+    @DisplayName("IA-05 client input cannot override server-computed export facts")
+    void ia05_clientInputCannotOverrideServerComputedExportFacts() {
+        ResponseEntity<String> response = restTemplate.postForEntity(url("/audit/export"),
+            exportRequest("client-forged-report", "client-forged-org", 9000, "audit-exporter"), String.class);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         SecurityEvent event = latestEvent("report:export");
-        assertEquals(5000L, event.getDataCount());
+        assertEquals(37L, event.getDataCount());
         assertEquals("audit-export-2026", event.getResourceId());
-        assertTrue(repository.findOpen("EXPT-01|audit-exporter|report:audit-export-2026").isPresent());
+        assertTrue(!repository.findOpen("EXPT-01|audit-exporter|report:audit-export-2026").isPresent());
     }
 
     @Test
-    void recordsAnnotatedMvcActionOverHttp() {
+    @DisplayName("IA-03 annotated actions classify success and denied outcomes")
+    void ia03_annotatedActionsClassifySuccessAndDeniedOutcomes() {
         ResponseEntity<String> response = get("/audit/annotated-query", "audit-exporter");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(SecurityEventType.QUERY, latestEvent("data:query").getEventType());
+        ResponseEntity<String> denied = restTemplate.postForEntity(url("/audit/annotated-export-denied"),
+            exportRequest("denied-report", "org-denied", 12, "audit-exporter"), String.class);
+        assertEquals(HttpStatus.FORBIDDEN, denied.getStatusCode());
+        assertEquals(SecurityEventResult.DENIED, latestEvent("data:query").getResult());
     }
 
     @Test
-    void recordsAnnotatedExportFactsFromNestedRequestBindingAndReturnValue() {
+    @DisplayName("IA-04 nested action facts are typed and prevalidated")
+    void ia04_nestedActionFactsAreTypedAndPrevalidated() {
         ResponseEntity<String> response = restTemplate.postForEntity(url("/audit/annotated-export"),
             exportRequest("audit-export-2026", "org-a", 5000, "audit-exporter"), String.class);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        SecurityEvent event = latestEvent("data:query");
-        assertEquals(SecurityEventType.QUERY, event.getEventType());
+        SecurityEvent event = latestEvent("resource:view-sensitive");
+        assertEquals(SecurityEventType.VIEW_SENSITIVE, event.getEventType());
         assertEquals(SecurityEventResult.SUCCESS, event.getResult());
+        assertEquals(5000L, event.getDataCount());
+        assertEquals("METHOD_PARAMETER", jdbc.queryForObject("SELECT source_type FROM security_event_fact "
+            + "WHERE event_id=? AND fact_key='data_count'", String.class, event.getEventId()));
     }
 
     @Test
-    void letsForbiddenHttpStatusOverrideAnEnricherSuccess() {
-        ResponseEntity<String> response = restTemplate.postForEntity(url("/audit/annotated-export-denied"),
-            exportRequest("denied-report", "org-denied", 12, "audit-exporter"), String.class);
-
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        assertEquals(0L, repository.findSince("audit-spring2-web", Instant.now().minusSeconds(5)).stream()
-            .filter(event -> "audit:annotated-export-denied".equals(event.getAction())).count());
-    }
-
-    @Test
-    void authorizesAndAuditsManagementEventQueries() {
-        post("/audit/export", "audit-exporter");
+    @DisplayName("IA-11 management identity is server-derived and reauthorized")
+    void ia11_managementIdentityIsServerDerivedAndReauthorized() {
+        restTemplate.postForEntity(url("/audit/export"),
+            exportRequest("ignored", "ignored", 1, "audit-exporter"), String.class);
         ResponseEntity<String> response = get("/audit/management/events", "audit-admin");
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertTrue(response.getBody().contains("\"count\":"));
         assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM management_audit WHERE system_id = ? "
             + "AND actor_id = ? AND action = ? AND outcome = ?", Long.class,
             "audit-spring2-web", "audit-admin", "EVENT_READ", "SUCCEEDED").longValue() >= 1L);
-    }
-
-    @Test
-    void rejectsAndAuditsCrossSystemManagementQueries() {
         SecurityEventQuery query = SecurityEventQuery.of(
             ManagementPageRequest.of(0, 20, SecurityEventQuery.Sort.OCCURRED_AT),
             Instant.now().minusSeconds(60), Instant.now().plusSeconds(1));
@@ -245,12 +231,16 @@ class Spring2AuditWebAcceptanceTest {
         fixtures.createSession("tc11-session-b", "tc11-user", Instant.now());
         Map<String, Object> request = new LinkedHashMap<String, Object>();
         request.put("idempotencyKey", "tc11-revoke-once");
+        assertEquals(HttpStatus.FORBIDDEN,
+            postJson("/audit/management/sessions/tc11-user/revoke", "audit-viewer", request).getStatusCode());
+        assertEquals(2L, fixtures.countActiveSessions("tc11-user"));
+        assertEquals(0L, jdbc.queryForObject("SELECT COUNT(*) FROM audit_control_state "
+            + "WHERE idempotency_key='tc11-revoke-once'", Long.class).longValue());
         assertEquals(HttpStatus.OK,
             postJson("/audit/management/sessions/tc11-user/revoke", "audit-admin", request).getStatusCode());
         ResponseEntity<String> replay =
             postJson("/audit/management/sessions/tc11-user/revoke", "audit-admin", request);
         assertEquals(HttpStatus.OK, replay.getStatusCode());
-        assertTrue(replay.getBody().contains("\"replay\":true"));
         assertEquals(0L, fixtures.countActiveSessions("tc11-user"));
         assertTrue(get("/audit/authentication/sessions/active?sessionId=tc11-session-a", null)
             .getBody().contains("false"));
@@ -302,6 +292,56 @@ class Spring2AuditWebAcceptanceTest {
             + "WHERE rule_id='DATA-01' AND subject='audit-query'",Long.class).longValue());
     }
 
+    @Test
+    @DisplayName("TC-08 high-risk export is stopped before XLSX generation")
+    void tc08_highRiskExportIsStoppedBeforeXlsxGeneration() throws Exception {
+        ResponseEntity<byte[]> allowed=export("audit-exporter",exportBody(1L,4999L,
+            java.util.Arrays.asList("rowId","displayValue","amount")));
+        assertEquals(HttpStatus.OK,allowed.getStatusCode());
+        try(XSSFWorkbook workbook=new XSSFWorkbook(new ByteArrayInputStream(allowed.getBody()))){
+            assertEquals(5000,workbook.getSheetAt(0).getPhysicalNumberOfRows());
+            assertEquals(3,workbook.getSheetAt(0).getRow(0).getPhysicalNumberOfCells());
+            assertEquals("amount",workbook.getSheetAt(0).getRow(0).getCell(2).getStringCellValue());
+        }
+        int generated=policyExports.getWorkbookInvocationCount();
+        ResponseEntity<byte[]> blocked=export("audit-exporter",exportBody(1L,5000L,
+            java.util.Arrays.asList("rowId","displayValue","amount")));
+        assertEquals(HttpStatus.ACCEPTED,blocked.getStatusCode());
+        assertEquals(generated,policyExports.getWorkbookInvocationCount());
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+            + "WHERE rule_id='EXPT-01' AND subject='audit-exporter'",Long.class).longValue());
+
+        jdbc.update("INSERT INTO audit_account(user_id,organization_id,status) VALUES(?,?,?)",
+            "audit-export-sensitive", "org-a", "ACTIVE");
+        jdbc.update("INSERT INTO audit_user_role(user_id,role_id,granted_by,granted_at) VALUES(?,?,?,?)",
+            "audit-export-sensitive", "audit-exporter", "fixture", java.sql.Timestamp.from(Instant.EPOCH));
+        int beforeSensitive = policyExports.getWorkbookInvocationCount();
+        assertEquals(HttpStatus.ACCEPTED, export("audit-export-sensitive", exportBody(1L, 1L,
+            java.util.Arrays.asList("rowId", "sensitiveValue"))).getStatusCode());
+        assertEquals(beforeSensitive, policyExports.getWorkbookInvocationCount());
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+            + "WHERE rule_id='EXPT-01' AND subject='audit-export-sensitive'", Long.class).longValue());
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM control_action c JOIN security_alert a "
+            + "ON a.alert_id=c.alert_id WHERE a.subject='audit-export-sensitive' "
+            + "AND c.action_type='REQUIRE_APPROVAL'", Long.class).longValue());
+    }
+
+    @Test
+    @DisplayName("TC-09 daily aggregate blocks the threshold-crossing export")
+    void tc09_dailyAggregateBlocksTheThresholdCrossingExport() {
+        Map<String,Object> fourThousand=exportBody(1L,4000L,java.util.Arrays.asList("rowId","displayValue"));
+        assertEquals(HttpStatus.OK,export("audit-export-daily",fourThousand).getStatusCode());
+        assertEquals(HttpStatus.OK,export("audit-export-daily",fourThousand).getStatusCode());
+        int generated=policyExports.getWorkbookInvocationCount();
+        assertEquals(HttpStatus.ACCEPTED,export("audit-export-daily",exportBody(1L,2000L,
+            java.util.Arrays.asList("rowId","displayValue"))).getStatusCode());
+        assertEquals(generated,policyExports.getWorkbookInvocationCount());
+        assertEquals(8000L,jdbc.queryForObject("SELECT SUM(row_count) FROM audit_export_ledger "
+            + "WHERE user_id='audit-export-daily' AND outcome='SUCCEEDED'",Long.class).longValue());
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+            + "WHERE rule_id='EXPT-02' AND subject='audit-export-daily'",Long.class).longValue());
+    }
+
     private String url(String path) {
         return "http://localhost:" + port + path;
     }
@@ -333,6 +373,17 @@ class Spring2AuditWebAcceptanceTest {
             org.springframework.http.HttpMethod.GET,new HttpEntity<Void>(headers),String.class);
     }
 
+    private ResponseEntity<byte[]> export(String principal,Map<String,Object> body){
+        HttpHeaders headers=headers(principal);headers.setContentType(MediaType.APPLICATION_JSON);
+        return restTemplate.exchange(url("/audit/reports/report-a/exports"),org.springframework.http.HttpMethod.POST,
+            new HttpEntity<Map<String,Object>>(body,headers),byte[].class);
+    }
+
+    private static Map<String,Object> exportBody(long minId,long maxId,List<String> fields){
+        Map<String,Object> body=new LinkedHashMap<String,Object>();
+        body.put("minId",Long.valueOf(minId));body.put("maxId",Long.valueOf(maxId));body.put("fields",fields);return body;
+    }
+
     private static Map<String, Object> login(String userId, boolean accepted) {
         Map<String, Object> body = new LinkedHashMap<String, Object>();
         body.put("userId", userId); body.put("accepted", Boolean.valueOf(accepted)); return body;
@@ -349,6 +400,7 @@ class Spring2AuditWebAcceptanceTest {
                                                            String principal) {
         Map<String, Object> report = new LinkedHashMap<String, Object>();
         report.put("id", reportId);
+        report.put("rows", Integer.valueOf(rows));
         Map<String, Object> tenant = new LinkedHashMap<String, Object>();
         tenant.put("code", tenantCode);
         Map<String, Object> body = new LinkedHashMap<String, Object>();

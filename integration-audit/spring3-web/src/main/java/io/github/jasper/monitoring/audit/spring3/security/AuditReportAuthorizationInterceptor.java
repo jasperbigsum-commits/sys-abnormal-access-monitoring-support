@@ -4,7 +4,6 @@ import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
 import io.github.jasper.monitoring.audit.spring3.report.AuditReportCatalog;
-import io.github.jasper.monitoring.audit.spring3.AuditRbacRealm;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

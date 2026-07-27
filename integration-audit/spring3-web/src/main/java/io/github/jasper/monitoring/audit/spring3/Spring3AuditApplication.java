@@ -45,7 +45,10 @@ public class Spring3AuditApplication {
     public ManagementAuthorizer managementAuthorizer() {
         return (actor, operation, resource) -> {
             if (!"audit-spring3-web".equals(actor.getSystemScope())
-                || !actor.getSystemScope().equals(resource.getSystemScope())) {
+                || !actor.getSystemScope().equals(resource.getSystemScope())
+                || !("audit-admin".equals(actor.getActorId())
+                    || ("audit-approver".equals(actor.getActorId())
+                        && operation == io.github.jasper.monitoring.api.management.ManagementOperation.RULE_APPROVE))) {
                 throw new SecurityException("Management scope is not authorized");
             }
         };

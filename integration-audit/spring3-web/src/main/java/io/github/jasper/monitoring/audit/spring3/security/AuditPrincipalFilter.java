@@ -1,4 +1,4 @@
-package io.github.jasper.monitoring.audit.spring3;
+package io.github.jasper.monitoring.audit.spring3.security;
 
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;

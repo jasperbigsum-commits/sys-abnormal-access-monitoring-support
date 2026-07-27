@@ -5,6 +5,9 @@ import io.github.jasper.monitoring.api.management.ManagementActor;
 import io.github.jasper.monitoring.api.management.ManagementPage;
 import io.github.jasper.monitoring.api.management.ManagementPageRequest;
 import io.github.jasper.monitoring.api.management.SecurityEventQueryService;
+import io.github.jasper.monitoring.api.management.ControlManagementService;
+import io.github.jasper.monitoring.api.management.command.ControlExecutionCommand;
+import io.github.jasper.monitoring.api.management.model.ControlExecutionView;
 import io.github.jasper.monitoring.api.management.model.SecurityEventView;
 import io.github.jasper.monitoring.api.management.query.SecurityEventQuery;
 import java.time.Instant;
@@ -17,9 +20,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import io.github.jasper.monitoring.api.ControlActionType;
-import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
-import io.github.jasper.monitoring.core.domain.ControlCommand;
-import io.github.jasper.monitoring.core.domain.ControlExecution;
 
 /** Thin HTTP adapter over the public management service contract. */
 @RestController
@@ -27,10 +27,10 @@ import io.github.jasper.monitoring.core.domain.ControlExecution;
 public class MonitoringManagementController {
     private final MonitoringContextAccessor contexts;
     private final SecurityEventQueryService events;
-    private final ControlExecutionService controls;
+    private final ControlManagementService controls;
 
     public MonitoringManagementController(MonitoringContextAccessor contexts,
-                                          SecurityEventQueryService events, ControlExecutionService controls) {
+                                          SecurityEventQueryService events, ControlManagementService controls) {
         this.contexts = contexts;
         this.events = events;
         this.controls = controls;
@@ -51,13 +51,16 @@ public class MonitoringManagementController {
     @PostMapping("/sessions/{userId}/revoke")
     public Map<String, Object> revokeSessions(@PathVariable("userId") String userId,
                                               @RequestBody SessionRevokeRequest request) {
-        ControlExecution execution = controls.execute(new ControlCommand(request.getIdempotencyKey(),
-            "manual-session-revoke", userId, ControlActionType.REVOKE_SESSION,
-            Instant.now().plusSeconds(300), "TC-11"));
+        ControlExecutionView execution = controls.execute(actor(), ControlExecutionCommand.of(request.getIdempotencyKey(),
+            userId, ControlActionType.REVOKE_SESSION, Instant.now().plusSeconds(300)));
         Map<String, Object> body = new LinkedHashMap<String, Object>();
-        body.put("status", execution.getStatus().name());
+        body.put("status", execution.getStatus());
         body.put("replay", Boolean.valueOf(execution.isIdempotentReplay()));
         return body;
+    }
+
+    private ManagementActor actor() {
+        return ManagementActor.of(contexts.identityContext().getUserId(), "audit-spring2-web");
     }
 
     public static final class SessionRevokeRequest {

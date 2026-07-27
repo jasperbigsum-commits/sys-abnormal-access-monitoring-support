@@ -29,6 +29,36 @@
                     <useManifestOnlyJar>false</useManifestOnlyJar>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <id>verify-acceptance-ids</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target name="verify-acceptance-ids">
+                                <mkdir dir="${project.build.directory}/acceptance-id-verifier" />
+                                <javac srcdir="${project.basedir}/src/verify/java"
+                                       destdir="${project.build.directory}/acceptance-id-verifier"
+                                       encoding="UTF-8" source="8" target="8"
+                                       includeantruntime="false" />
+                                <java classname="AcceptanceIdVerifier" fork="true" failonerror="true">
+                                    <classpath>
+                                        <pathelement location="${project.build.directory}/acceptance-id-verifier" />
+                                    </classpath>
+                                    <arg value="${project.basedir}" />
+                                </java>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

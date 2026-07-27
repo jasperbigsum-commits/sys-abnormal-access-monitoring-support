@@ -3,6 +3,7 @@ package io.github.jasper.monitoring.audit.spring2.persistence;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.math.BigDecimal;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -40,6 +41,41 @@ public interface AuditFixtureMapper {
 
     @Select("SELECT report_id reportId, organization_id organizationId, sensitivity FROM audit_report WHERE report_id=#{reportId}")
     Map<String, Object> findReport(@Param("reportId") String reportId);
+
+    @Insert("INSERT INTO audit_report_row(report_id,row_id,organization_id,display_value,amount,sensitive_value) "
+        + "VALUES(#{reportId},#{rowId},#{organizationId},#{displayValue},#{amount},#{sensitiveValue})")
+    int insertReportRow(@Param("reportId") String reportId,@Param("rowId") long rowId,
+        @Param("organizationId") String organizationId,@Param("displayValue") String displayValue,
+        @Param("amount") BigDecimal amount,@Param("sensitiveValue") String sensitiveValue);
+
+    @Select({"<script>SELECT COUNT(*) FROM audit_report_row WHERE report_id=#{reportId}",
+        "<if test='minId != null'> AND row_id &gt;= #{minId}</if>",
+        "<if test='maxId != null'> AND row_id &lt;= #{maxId}</if>",
+        "<if test='selectedIds != null and !selectedIds.isEmpty()'> AND row_id IN",
+        "<foreach collection='selectedIds' item='id' open='(' separator=',' close=')'>#{id}</foreach></if>",
+        "</script>"})
+    long countReportRows(@Param("reportId") String reportId,@Param("minId") Long minId,
+        @Param("maxId") Long maxId,@Param("selectedIds") List<Long> selectedIds);
+
+    @Select({"<script>SELECT row_id rowId,display_value displayValue,amount,sensitive_value sensitiveValue",
+        "FROM audit_report_row WHERE report_id=#{reportId}",
+        "<if test='minId != null'> AND row_id &gt;= #{minId}</if>",
+        "<if test='maxId != null'> AND row_id &lt;= #{maxId}</if>",
+        "<if test='selectedIds != null and !selectedIds.isEmpty()'> AND row_id IN",
+        "<foreach collection='selectedIds' item='id' open='(' separator=',' close=')'>#{id}</foreach></if>",
+        "ORDER BY row_id</script>"})
+    List<Map<String,Object>> findReportRows(@Param("reportId") String reportId,@Param("minId") Long minId,
+        @Param("maxId") Long maxId,@Param("selectedIds") List<Long> selectedIds);
+
+    @Select("SELECT COALESCE(SUM(row_count),0) FROM audit_export_ledger WHERE user_id=#{userId} "
+        + "AND outcome='SUCCEEDED' AND occurred_at>=#{start} AND occurred_at<#{end}")
+    long sumExports(@Param("userId") String userId,@Param("start") Instant start,@Param("end") Instant end);
+
+    @Insert("INSERT INTO audit_export_ledger(export_id,user_id,report_id,row_count,outcome,occurred_at) "
+        + "VALUES(#{exportId},#{userId},#{reportId},#{rowCount},#{outcome},#{at})")
+    int insertExport(@Param("exportId") String exportId,@Param("userId") String userId,
+        @Param("reportId") String reportId,@Param("rowCount") long rowCount,@Param("outcome") String outcome,
+        @Param("at") Instant at);
 
     @Insert("INSERT INTO audit_user_role(user_id,role_id,granted_by,granted_at) VALUES(#{userId},#{roleId},#{actorId},#{at})")
     int insertRole(@Param("userId") String userId, @Param("roleId") String roleId,

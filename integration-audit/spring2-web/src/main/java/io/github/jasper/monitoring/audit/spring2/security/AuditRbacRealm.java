@@ -1,6 +1,6 @@
-package io.github.jasper.monitoring.audit.spring3;
+package io.github.jasper.monitoring.audit.spring2.security;
 
-import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureRepository;
+import io.github.jasper.monitoring.audit.spring2.persistence.AuditFixtureRepository;
 import java.util.List;
 import java.util.Map;
 import org.apache.shiro.authc.AuthenticationException;

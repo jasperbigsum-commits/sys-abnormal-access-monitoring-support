@@ -1,4 +1,4 @@
-package io.github.jasper.monitoring.audit.spring3;
+package io.github.jasper.monitoring.audit.spring3.security;
 
 import io.github.jasper.monitoring.api.AccountType;
 import io.github.jasper.monitoring.api.AuthorizationDecision;

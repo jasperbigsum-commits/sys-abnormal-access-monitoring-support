@@ -15,7 +15,7 @@ public class AuditWebSecurityConfiguration implements WebMvcConfigurer {
     public AuditWebSecurityConfiguration(ResourceAccessGuard guard, MonitoringContextAccessor contexts,
                                          AuditReportCatalog reports, org.apache.shiro.realm.Realm realm) {
         this.reportAuthorization = new AuditReportAuthorizationInterceptor(guard, contexts, reports,
-            (io.github.jasper.monitoring.audit.spring3.AuditRbacRealm) realm);
+            (AuditRbacRealm) realm);
     }
 
     @Override

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.math.BigDecimal;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.exceptions.PersistenceException;
@@ -34,6 +35,28 @@ public class AuditFixtureRepository {
         try (SqlSession session = sessions.openSession()) {
             return session.getMapper(AuditFixtureMapper.class).findRoles(userId);
         }
+    }
+
+    public long countReportRows(String reportId,Long minId,Long maxId,List<Long> selectedIds){
+        try(SqlSession session=sessions.openSession()){
+            return session.getMapper(AuditFixtureMapper.class).countReportRows(reportId,minId,maxId,selectedIds);
+        }
+    }
+
+    public List<Map<String,Object>> findReportRows(String reportId,Long minId,Long maxId,List<Long> selectedIds){
+        try(SqlSession session=sessions.openSession()){
+            return session.getMapper(AuditFixtureMapper.class).findReportRows(reportId,minId,maxId,selectedIds);
+        }
+    }
+
+    public long sumExports(String userId,Instant start,Instant end){
+        try(SqlSession session=sessions.openSession()){
+            return session.getMapper(AuditFixtureMapper.class).sumExports(userId,start,end);
+        }
+    }
+
+    public void recordExport(String id,String userId,String reportId,long rows,String outcome,Instant at){
+        write(mapper->mapper.insertExport(id,userId,reportId,rows,outcome,at));
     }
 
     public long countActiveSessions(String userId) {
@@ -93,6 +116,7 @@ public class AuditFixtureRepository {
             mapper.insertAccount("audit-viewer", "org-a", "ACTIVE");
             mapper.insertAccount("audit-exporter", "org-a", "ACTIVE");
             mapper.insertAccount("audit-admin", "org-a", "ACTIVE");
+            mapper.insertAccount("audit-approver", "org-a", "ACTIVE");
             mapper.insertAccount("audit-disabled", "org-a", "DISABLED");
             mapper.insertAccount("tc01-user", "org-a", "ACTIVE");
             mapper.insertAccount("tc11-user", "org-a", "ACTIVE");
@@ -100,6 +124,7 @@ public class AuditFixtureRepository {
             mapper.insertAccount("audit-query", "org-a", "ACTIVE");
             mapper.insertAccount("audit-query-other", "org-a", "ACTIVE");
             mapper.insertAccount("tc02-safe", "org-a", "ACTIVE");
+            mapper.insertAccount("audit-export-daily", "org-a", "ACTIVE");
             for (int index = 0; index < 10; index++) {
                 mapper.insertAccount(String.format("tc02-user-%02d", Integer.valueOf(index)), "org-a", "ACTIVE");
             }
@@ -108,9 +133,15 @@ public class AuditFixtureRepository {
             mapper.insertRole("audit-viewer", "audit-viewer", "fixture", Instant.EPOCH);
             mapper.insertRole("audit-exporter", "audit-exporter", "fixture", Instant.EPOCH);
             mapper.insertRole("audit-admin", "audit-admin", "fixture", Instant.EPOCH);
+            mapper.insertRole("audit-approver", "audit-approver", "fixture", Instant.EPOCH);
             mapper.insertRole("audit-traversal", "audit-query", "fixture", Instant.EPOCH);
             mapper.insertRole("audit-query", "audit-query", "fixture", Instant.EPOCH);
             mapper.insertRole("audit-query-other", "audit-query", "fixture", Instant.EPOCH);
+            mapper.insertRole("audit-export-daily", "audit-exporter", "fixture", Instant.EPOCH);
+            for(int row=1;row<=6000;row++){
+                mapper.insertReportRow("report-a",row,"org-a","row-"+row,
+                    BigDecimal.valueOf(row),"restricted-"+row);
+            }
             session.commit();
         }
     }

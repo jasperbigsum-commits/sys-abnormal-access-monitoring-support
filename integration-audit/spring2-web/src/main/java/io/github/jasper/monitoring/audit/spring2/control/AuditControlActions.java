@@ -1,10 +1,10 @@
-package io.github.jasper.monitoring.audit.spring3;
+package io.github.jasper.monitoring.audit.spring2.control;
 
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ControlTrigger;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
-import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureRepository;
+import io.github.jasper.monitoring.audit.spring2.persistence.AuditFixtureRepository;
 import java.time.Clock;
 import org.springframework.stereotype.Component;
 

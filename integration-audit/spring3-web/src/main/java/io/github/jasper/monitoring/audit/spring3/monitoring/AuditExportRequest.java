@@ -1,4 +1,4 @@
-package io.github.jasper.monitoring.audit.spring3;
+package io.github.jasper.monitoring.audit.spring3.monitoring;
 
 /** Request body used by the annotated export acceptance endpoints. */
 public class AuditExportRequest {
@@ -33,6 +33,7 @@ public class AuditExportRequest {
     /** Nested report reference bound by Jackson. */
     public static class Report {
         private String id;
+        private long rows;
 
         public String getId() {
             return id;
@@ -41,6 +42,10 @@ public class AuditExportRequest {
         public void setId(String id) {
             this.id = id;
         }
+
+        public long getRows() { return rows; }
+
+        public void setRows(long rows) { this.rows = rows; }
     }
 
     /** Nested tenant reference bound by Jackson. */
