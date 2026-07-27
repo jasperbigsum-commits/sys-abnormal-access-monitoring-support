@@ -5,6 +5,7 @@ import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.IdentityContextProvider;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
+import io.github.jasper.monitoring.audit.spring2.report.AuditReportCatalog;
 import java.util.Collections;
 import org.apache.shiro.SecurityUtils;
 import org.apache.shiro.realm.Realm;
@@ -42,16 +43,6 @@ public class AuditShiroRbacConfiguration {
         DefaultShiroFilterChainDefinition chain = new DefaultShiroFilterChainDefinition();
         chain.addPathDefinition("/audit/**", "auditPrincipalFilter");
         return chain;
-    }
-
-    @Bean
-    public AuditReportCatalog auditReportCatalog() {
-        return new AuditReportCatalog();
-    }
-
-    @Bean
-    public AuditExportService auditExportService() {
-        return new AuditExportService();
     }
 
     @Bean

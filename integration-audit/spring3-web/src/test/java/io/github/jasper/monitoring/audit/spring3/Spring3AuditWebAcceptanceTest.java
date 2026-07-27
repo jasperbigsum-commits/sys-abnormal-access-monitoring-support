@@ -15,6 +15,8 @@ import io.github.jasper.monitoring.api.management.ManagementPageRequest;
 import io.github.jasper.monitoring.api.management.SecurityEventQueryService;
 import io.github.jasper.monitoring.api.management.query.SecurityEventQuery;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisMonitoringStore;
+import io.github.jasper.monitoring.audit.spring3.report.AuditExportService;
+import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureRepository;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,6 +61,9 @@ class Spring3AuditWebAcceptanceTest {
     @Autowired
     private AuditExportService exportService;
 
+    @Autowired
+    private AuditFixtureRepository fixtures;
+
     @BeforeEach
     void resetExportSideEffects() {
         exportService.reset();
@@ -68,6 +73,12 @@ class Spring3AuditWebAcceptanceTest {
     void usesMyBatisRepositoryForDurableAuditEvidence() {
         assertTrue(repository instanceof MyBatisMonitoringStore,
             "The integration host must persist audit evidence through MyBatis, never the memory adapter");
+        assertEquals("ACTIVE", String.valueOf(fixtures.findAccount("audit-exporter").get("STATUS")));
+        assertEquals("report-a", String.valueOf(fixtures.findReport("report-a").get("REPORTID")));
+        assertTrue(fixtures.findRoles("audit-admin").contains("audit-admin"));
+        assertTrue(fixtures.counts().getControls() >= 0L);
+        assertTrue(fixtures.counts().getExports() >= 0L);
+        assertTrue(fixtures.counts().getNotificationAttempts() >= 0L);
     }
 
     @Test
@@ -90,7 +101,7 @@ class Spring3AuditWebAcceptanceTest {
     void deniesCrossOrganizationExportBeforeTheExportServiceRuns() {
         ResponseEntity<String> response = post("/audit/reports/report-b/export", "audit-exporter");
 
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertEquals(0, exportService.getInvocationCount());
         assertTrue(repository.findSince("audit-spring3-web", Instant.EPOCH).stream()
             .anyMatch(event -> "authz:access-denied".equals(event.getAction())

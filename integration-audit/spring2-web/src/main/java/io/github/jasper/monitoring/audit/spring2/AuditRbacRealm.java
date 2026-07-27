@@ -23,7 +23,7 @@ public final class AuditRbacRealm extends AuthorizingRealm {
         return PRINCIPALS.contains(principal);
     }
 
-    static String organization(String principal) {
+    public static String organization(String principal) {
         return supportsPrincipal(principal) ? "org-a" : null;
     }
 
