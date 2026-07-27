@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.core;
 
 import io.github.jasper.monitoring.api.rule.RuleCatalog;
+import io.github.jasper.monitoring.api.rule.RuleMode;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.action.ActionDefinition;
 import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
@@ -25,6 +26,8 @@ class DefaultRuleCatalogTypedIntegrationTest {
         assertEquals(14, DefaultRuleCatalog.typedRules().size());
         for (DetectionRule<?> rule : DefaultRuleCatalog.typedRules()) {
             assertEquals(rule.definition().getId(), rule.getRuleId());
+            assertEquals(RuleMode.ENFORCE, rule.definition().getMode(),
+                "Built-in rules must use the global mode as the deployment safety ceiling");
             assertTrue(catalog.asMap().containsKey(rule.type()));
         }
     }

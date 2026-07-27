@@ -2,17 +2,20 @@ package io.github.jasper.monitoring.core.port;
 
 import io.github.jasper.monitoring.api.management.ManagementPage;
 import io.github.jasper.monitoring.api.management.model.AlertView;
+import io.github.jasper.monitoring.api.management.model.AlertAssignmentView;
 import io.github.jasper.monitoring.api.management.model.ControlView;
 import io.github.jasper.monitoring.api.management.model.RuleView;
 import io.github.jasper.monitoring.api.management.model.SecurityEventView;
 import io.github.jasper.monitoring.api.management.model.WhitelistView;
 import io.github.jasper.monitoring.api.management.query.AlertQuery;
+import io.github.jasper.monitoring.api.management.query.AlertAssignmentQuery;
 import io.github.jasper.monitoring.api.management.query.ControlQuery;
 import io.github.jasper.monitoring.api.management.query.RuleQuery;
 import io.github.jasper.monitoring.api.management.query.SecurityEventQuery;
 import io.github.jasper.monitoring.api.management.query.WhitelistQuery;
 import java.util.Optional;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
+import io.github.jasper.monitoring.api.rule.RuleMode;
 
 /** Database-backed management projections and optimistic state transitions. */
 public interface ManagementQueryRepository {
@@ -20,10 +23,19 @@ public interface ManagementQueryRepository {
     Optional<SecurityEventView> findEventView(String scope, String id);
     ManagementPage<AlertView> searchAlerts(String scope, AlertQuery query);
     Optional<AlertView> findAlertView(String scope, String id);
+    ManagementPage<AlertAssignmentView> searchAlertAssignments(String scope, String id, AlertAssignmentQuery query);
     boolean transitionAlert(String scope, String id, long version, String status, String actorId, String reason,
                             String dispositionId);
+    boolean assignAlert(String scope, String id, long version, String actorId, String assigneeId, String reason,
+                        String dispositionId);
+    Optional<AlertView> findAlertAssignment(String scope, String id, long version, String actorId, String assigneeId,
+                                            String reason, String dispositionId);
     ManagementPage<RuleView> searchRules(String scope, RuleQuery query);
     Optional<RuleView> findRuleView(String scope, String id);
+    boolean changeRule(String scope, String id, long version, RuleMode mode, long threshold, String actorId,
+                       String approverId, String reason, String idempotencyKey);
+    Optional<RuleView> findRuleChange(String scope, String id, long version, RuleMode mode, long threshold,
+                                      String actorId, String approverId, String reason, String idempotencyKey);
     ManagementPage<WhitelistView> searchWhitelists(String scope, WhitelistQuery query);
     Optional<WhitelistView> findWhitelistView(String scope, String id);
     boolean transitionWhitelist(String scope, String id, long version, boolean active, String actorId, String reason);

@@ -32,6 +32,19 @@ CREATE INDEX idx_security_event_occurred_at ON security_event (occurred_at);
 CREATE INDEX idx_security_event_subject_at ON security_event (user_id, source_ip, occurred_at);
 CREATE INDEX idx_security_event_system_at ON security_event (system_id, occurred_at, event_id);
 
+CREATE TABLE rule_observation (
+    observation_id VARCHAR(64) NOT NULL COMMENT '观察证据唯一标识',
+    rule_id VARCHAR(128) NOT NULL COMMENT '命中规则标识',
+    event_id VARCHAR(128) NOT NULL COMMENT '关联安全事件标识',
+    subject VARCHAR(256) NOT NULL COMMENT '规则评估主体',
+    observed_at TIMESTAMP NOT NULL COMMENT '观察记录时间',
+    PRIMARY KEY (observation_id),
+    CONSTRAINT fk_rule_observation_event FOREIGN KEY (event_id) REFERENCES security_event (event_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='仅观察规则命中证据';
+
+CREATE INDEX idx_rule_observation_rule_at ON rule_observation (rule_id, observed_at, observation_id);
+CREATE INDEX idx_rule_observation_event ON rule_observation (event_id);
+
 CREATE TABLE security_event_fact (
     event_id VARCHAR(128) NOT NULL,
     fact_key VARCHAR(128) NOT NULL,
@@ -66,17 +79,24 @@ CREATE TABLE security_event_input_issue (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件输入质量问题表';
 
 CREATE TABLE security_rule (
+    system_id VARCHAR(128) NOT NULL COMMENT '规则所属宿主系统标识',
     rule_id VARCHAR(128) NOT NULL COMMENT '规则稳定标识',
     rule_version INTEGER NOT NULL COMMENT '规则版本号',
     rule_name VARCHAR(256) NOT NULL COMMENT '规则名称',
     rule_definition LONGTEXT NOT NULL COMMENT '规则定义内容',
     risk_level VARCHAR(32) NOT NULL COMMENT '风险等级',
     rule_mode VARCHAR(32) NOT NULL COMMENT '规则运行模式',
+    rule_threshold BIGINT NOT NULL DEFAULT 1 COMMENT '规则触发阈值',
     enabled TINYINT(1) NOT NULL COMMENT '管理侧启用状态',
     created_at TIMESTAMP NOT NULL COMMENT '创建时间',
     created_by VARCHAR(128) NOT NULL COMMENT '创建人标识',
-    PRIMARY KEY (rule_id, rule_version)
+    change_reason VARCHAR(512) COMMENT '版本变更原因',
+    approved_by VARCHAR(128) COMMENT '版本变更审批人',
+    idempotency_key VARCHAR(128) COMMENT '版本变更幂等键',
+    PRIMARY KEY (system_id, rule_id, rule_version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='持久化安全规则版本表';
+
+CREATE UNIQUE INDEX uk_security_rule_idempotency ON security_rule (system_id, idempotency_key);
 
 CREATE TABLE security_alert (
     alert_id VARCHAR(128) NOT NULL COMMENT '告警唯一标识',
@@ -123,6 +143,8 @@ CREATE TABLE alert_disposition (
     alert_id VARCHAR(128) NOT NULL COMMENT '告警唯一标识',
     disposition_type VARCHAR(64) NOT NULL CHECK (disposition_type IN ('ACKNOWLEDGED', 'IN_PROGRESS', 'CLOSED', 'FALSE_POSITIVE')) COMMENT '处置类型',
     operator_id VARCHAR(128) NOT NULL COMMENT '操作人标识',
+    assignee_id VARCHAR(128) COMMENT '本次分配的受理人标识',
+    expected_version BIGINT COMMENT '触发本次处置的告警期望版本',
     comment_text VARCHAR(1024) COMMENT '处置说明',
     evidence_summary VARCHAR(1024) COMMENT '证据摘要',
     created_at TIMESTAMP NOT NULL COMMENT '创建时间',
@@ -163,9 +185,16 @@ CREATE TABLE notification_delivery (
     channel VARCHAR(128) NOT NULL,
     aggregate_id VARCHAR(128) NOT NULL,
     status VARCHAR(32) NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMP NULL,
+    failure_category VARCHAR(64) NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (delivery_id),
-    UNIQUE (channel, aggregate_id)
+    UNIQUE (channel, aggregate_id),
+    INDEX idx_notification_retry (channel, status, next_attempt_at, delivery_id),
+    INDEX idx_notification_pending (channel, status, updated_at, delivery_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知投递状态';
 
 CREATE TABLE management_audit (

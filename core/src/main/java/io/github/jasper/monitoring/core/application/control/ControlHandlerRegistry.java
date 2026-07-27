@@ -4,16 +4,21 @@ import io.github.jasper.monitoring.core.port.ControlHandler;
 
 
 import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
  * 按控制动作类型解析宿主控制处理器。
  *
- * <p>宿主处理器始终优先于默认回退处理器；同一层内按列表顺序选择第一个支持动作的处理器。</p>
+ * <p>每个可执行动作只能由一个宿主或显式通用处理器提供。默认回退处理器不参与唯一性约束，
+ * 且不能证明宿主具备强制控制能力。</p>
  */
 public final class ControlHandlerRegistry {
     private final List<ControlHandler> hostHandlers;
@@ -52,6 +57,7 @@ public final class ControlHandlerRegistry {
         this.hostHandlers = immutableCopy(hostHandlers, "hostHandlers");
         this.genericHandlers = immutableCopy(genericHandlers, "genericHandlers");
         this.defaultHandlers = immutableCopy(defaultHandlers, "defaultHandlers");
+        validateUniqueExecutableBindings(this.hostHandlers, this.genericHandlers);
     }
     /** @return 不含处理器的注册表，仅适用于观察模式 */
     public static ControlHandlerRegistry empty() { return new ControlHandlerRegistry(Collections.<ControlHandler>emptyList()); }
@@ -112,5 +118,28 @@ public final class ControlHandlerRegistry {
     private static List<ControlHandler> immutableCopy(List<ControlHandler> handlers, String name) {
         Objects.requireNonNull(handlers, name);
         return Collections.unmodifiableList(new ArrayList<ControlHandler>(handlers));
+    }
+
+    private static void validateUniqueExecutableBindings(List<ControlHandler> hostHandlers,
+            List<ControlHandler> genericHandlers) {
+        Map<ControlActionType, ControlHandler> bindings =
+            new EnumMap<ControlActionType, ControlHandler>(ControlActionType.class);
+        register(bindings, hostHandlers);
+        register(bindings, genericHandlers);
+    }
+
+    private static void register(Map<ControlActionType, ControlHandler> bindings,
+            List<ControlHandler> handlers) {
+        for (ControlHandler handler : handlers) {
+            if (handler.isFallback()) continue;
+            for (ControlActionType action : ControlActionType.values()) {
+                if (!action.requiresHostHandler() || !handler.supports(action)) continue;
+                if (bindings.put(action, handler) != null) {
+                    throw new MonitoringConfigurationException(
+                        MonitoringErrorCode.DUPLICATE_CONTROL_BINDING,
+                        "Multiple executable control handlers bind " + action.name());
+                }
+            }
+        }
     }
 }

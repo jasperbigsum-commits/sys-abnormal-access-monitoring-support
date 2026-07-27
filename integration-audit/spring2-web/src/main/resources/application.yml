@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:audit-spring2;MODE=MySQL;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:mem:audit-spring2;MODE=MySQL;DB_CLOSE_DELAY=0
     username: sa
     password:
     driver-class-name: org.h2.Driver
@@ -14,4 +14,4 @@ abnormal:
         enabled: false # 不接收浏览器补充信号；服务端埋点仍生效
       instrumentation:
         enabled: true # 自动拦截 MVC 方法上的 @MonitorAction
-      trusted-proxies: [] # 本地直连，不信任 X-Forwarded-For
+      trusted-proxies: [127.0.0.1/32, "::1/128"] # 验收宿主把本地测试客户端视为显式可信代理

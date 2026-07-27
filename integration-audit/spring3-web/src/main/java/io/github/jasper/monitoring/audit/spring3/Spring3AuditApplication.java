@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.audit.spring3;
 
 import io.github.jasper.monitoring.api.management.ManagementAuthorizer;
+import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureMapper;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -35,6 +36,7 @@ public class Spring3AuditApplication {
         initializeSchema(dataSource);
         Configuration configuration = new Configuration(new org.apache.ibatis.mapping.Environment(
             "audit-spring3", new JdbcTransactionFactory(), dataSource));
+        configuration.addMapper(AuditFixtureMapper.class);
         return new SqlSessionFactoryBuilder().build(configuration);
     }
 
@@ -43,16 +45,24 @@ public class Spring3AuditApplication {
     public ManagementAuthorizer managementAuthorizer() {
         return (actor, operation, resource) -> {
             if (!"audit-spring3-web".equals(actor.getSystemScope())
-                || !actor.getSystemScope().equals(resource.getSystemScope())) {
+                || !actor.getSystemScope().equals(resource.getSystemScope())
+                || !("audit-admin".equals(actor.getActorId())
+                    || ("audit-approver".equals(actor.getActorId())
+                        && operation == io.github.jasper.monitoring.api.management.ManagementOperation.RULE_APPROVE))) {
                 throw new SecurityException("Management scope is not authorized");
             }
         };
     }
 
     private static void initializeSchema(DataSource dataSource) throws Exception {
-        InputStream schema = Spring3AuditApplication.class.getResourceAsStream("/db/monitoring-schema.sql");
+        runSchema(dataSource, "/db/monitoring-schema.sql");
+        runSchema(dataSource, "/db/audit-fixture-schema.sql");
+    }
+
+    private static void runSchema(DataSource dataSource, String location) throws Exception {
+        InputStream schema = Spring3AuditApplication.class.getResourceAsStream(location);
         if (schema == null) {
-            throw new IllegalStateException("Monitoring schema is unavailable");
+            throw new IllegalStateException("Required schema is unavailable: " + location);
         }
         try (Connection connection = dataSource.getConnection();
              InputStreamReader reader = new InputStreamReader(schema, StandardCharsets.UTF_8)) {

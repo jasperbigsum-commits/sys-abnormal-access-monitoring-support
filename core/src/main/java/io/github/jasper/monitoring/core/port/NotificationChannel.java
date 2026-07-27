@@ -12,17 +12,19 @@ public interface NotificationChannel {
     /**
      * 发送一条告警通知。
      *
-     * <p>实现仅应针对投递失败抛出异常；监测器无论通知是否成功都会保留告警记录。</p>
+     * <p>实现仅应针对投递失败抛出异常；监测器无论通知是否成功都会保留告警记录。
+     * 租约过期恢复可能使用同一 {@code deliveryId} 再次调用，因此实现必须按该标识幂等。</p>
      *
+     * @param deliveryId 稳定的投递幂等键；实现应将其传递给下游提供方
      * @param alert 待通知的告警摘要
      */
-    void notify(SecurityAlert alert);
+    void notify(String deliveryId, SecurityAlert alert);
 
     /** @return 有意抑制外部投递、但保留完整监测行为的空通知通道 */
     static NotificationChannel noop() {
         return new NotificationChannel() {
             @Override
-            public void notify(SecurityAlert alert) {
+            public void notify(String deliveryId, SecurityAlert alert) {
                 // Notifications are intentionally best-effort and never control a business transaction.
             }
         };

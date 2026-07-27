@@ -3,6 +3,14 @@ package io.github.jasper.monitoring.core;
 import io.github.jasper.monitoring.core.domain.rule.DefaultRuleCatalog;
 import io.github.jasper.monitoring.core.domain.rule.DetectionRule;
 import io.github.jasper.monitoring.api.control.ControlType;
+import io.github.jasper.monitoring.api.rule.RuleCatalog;
+import io.github.jasper.monitoring.api.rule.RuleMode;
+import io.github.jasper.monitoring.api.rule.RuleType;
+import io.github.jasper.monitoring.api.rule.RuleDefinition;
+import io.github.jasper.monitoring.api.rule.RuleSource;
+import io.github.jasper.monitoring.api.RiskLevel;
+import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.action.BuiltInActions;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.util.HashSet;
 import java.util.Set;
@@ -29,4 +37,32 @@ class DefaultRuleCatalogCoverageTest {
             ControlType.REVOKE_SESSION, ControlType.REQUIRE_MFA, ControlType.DENY,
             ControlType.REQUIRE_APPROVAL), DefaultRuleCatalog.requiredControlTypes());
     }
+
+    @Test
+    void frozenCatalogDerivesControlsOnlyFromEnforceRules() {
+        RuleCatalog catalog = new RuleCatalog();
+        catalog.register(definition(EnforceRule.class, "ENFORCE", RuleMode.ENFORCE,
+            ControlActionType.DENY, ControlActionType.RECORD));
+        catalog.register(definition(AlertRule.class, "ALERT", RuleMode.ALERT_ONLY,
+            ControlActionType.REQUIRE_MFA));
+        catalog.register(definition(DisabledRule.class, "DISABLED", RuleMode.DISABLED,
+            ControlActionType.REQUIRE_APPROVAL));
+        catalog.freeze();
+
+        assertEquals(java.util.EnumSet.of(ControlType.DENY), catalog.requiredControlTypes());
+    }
+
+    private static <R extends RuleType> RuleDefinition<R> definition(Class<R> type, String id,
+            RuleMode mode, ControlActionType... controls) {
+        RuleDefinition.Builder<R> builder = RuleDefinition.builder(type, id)
+            .appliesTo(BuiltInActions.LoginFailure.class)
+            .historyWindow(java.time.Duration.ZERO).threshold(1).risk(RiskLevel.HIGH)
+            .mode(mode).source(RuleSource.INTERNAL);
+        for (ControlActionType control : controls) builder.control(control);
+        return builder.build();
+    }
+
+    static final class EnforceRule implements RuleType { }
+    static final class AlertRule implements RuleType { }
+    static final class DisabledRule implements RuleType { }
 }
