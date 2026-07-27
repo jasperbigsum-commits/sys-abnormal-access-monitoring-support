@@ -13,6 +13,7 @@ import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
+import io.github.jasper.monitoring.core.application.notification.NotificationDeliveryService;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import io.github.jasper.monitoring.spring.support.FrontendSignalRecorder;
 import io.github.jasper.monitoring.spring.support.ActionFactExtractor;
@@ -42,11 +43,27 @@ class TypedRuntimeAutoConfigurationTest {
                 assertThat(context).hasSingleBean(MyBatisMonitoringStore.class);
                 assertThat(context).hasSingleBean(MyBatisControlExecutionStore.class);
                 assertThat(context).hasSingleBean(ControlExecutionService.class);
+                assertThat(context).hasSingleBean(NotificationDeliveryService.class);
+                assertThat(context).hasSingleBean(
+                    AbnormalAccessMonitorAutoConfiguration.NotificationRetryConfiguration.class);
                 assertThat(context).hasSingleBean(TypedMonitorActionAspect.class);
                 assertThat(context).hasSingleBean(ResourceAccessGuard.class);
                 assertThat(context).hasSingleBean(FrontendSignalRecorder.class);
                 assertThat(context).hasSingleBean(ActionFactExtractor.class);
                 assertThat(context).hasSingleBean(MonitorActionContractValidator.class);
+            });
+    }
+
+    @Test
+    void disablesOnlyTheNotificationRetryDriverWhenConfigured() {
+        new WebApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
+            .withUserConfiguration(PersistenceConfiguration.class)
+            .withPropertyValues("abnormal.access.monitor.notification.retry-enabled=false")
+            .run(context -> {
+                assertThat(context).hasSingleBean(NotificationDeliveryService.class);
+                assertThat(context).doesNotHaveBean(
+                    AbnormalAccessMonitorAutoConfiguration.NotificationRetryConfiguration.class);
             });
     }
 

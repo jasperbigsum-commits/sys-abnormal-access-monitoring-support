@@ -20,6 +20,7 @@ public class AbnormalAccessMonitorProperties {
     private Instrumentation instrumentation = new Instrumentation();
     private Mdc mdc = new Mdc();
     private IpControl ipControl = new IpControl();
+    private Notification notification = new Notification();
     private List<String> trustedProxies = new ArrayList<String>();
 
     /** @return 写入每个安全事件的稳定系统标识 */
@@ -59,6 +60,14 @@ public class AbnormalAccessMonitorProperties {
     /** @param ipControl 通用 IP 控制配置；{@code null} 时恢复禁用状态 */
     public void setIpControl(IpControl ipControl) {
         this.ipControl = ipControl == null ? new IpControl() : ipControl;
+    }
+
+    /** @return 外部告警通知及有限重试配置 */
+    public Notification getNotification() { return notification; }
+
+    /** @param notification 外部告警通知及有限重试配置；{@code null} 时恢复安全默认值 */
+    public void setNotification(Notification notification) {
+        this.notification = notification == null ? new Notification() : notification;
     }
 
     /** 前端补充证据与请求元数据采集配置。 */
@@ -132,5 +141,31 @@ public class AbnormalAccessMonitorProperties {
         private static List<String> copy(List<String> values) {
             return values == null ? new ArrayList<String>() : new ArrayList<String>(values);
         }
+    }
+
+    /** 持久化通知投递与调度配置。 */
+    public static class Notification {
+        private boolean retryEnabled = true;
+        private String channel = "primary";
+        private int maxAttempts = 3;
+        private Duration retryDelay = Duration.ofMinutes(1);
+        private Duration leaseDuration = Duration.ofMinutes(5);
+        private long scanIntervalMs = 60000L;
+        private int batchSize = 100;
+
+        public boolean isRetryEnabled() { return retryEnabled; }
+        public void setRetryEnabled(boolean retryEnabled) { this.retryEnabled = retryEnabled; }
+        public String getChannel() { return channel; }
+        public void setChannel(String channel) { this.channel = channel; }
+        public int getMaxAttempts() { return maxAttempts; }
+        public void setMaxAttempts(int maxAttempts) { this.maxAttempts = maxAttempts; }
+        public Duration getRetryDelay() { return retryDelay; }
+        public void setRetryDelay(Duration retryDelay) { this.retryDelay = retryDelay; }
+        public Duration getLeaseDuration() { return leaseDuration; }
+        public void setLeaseDuration(Duration leaseDuration) { this.leaseDuration = leaseDuration; }
+        public long getScanIntervalMs() { return scanIntervalMs; }
+        public void setScanIntervalMs(long scanIntervalMs) { this.scanIntervalMs = scanIntervalMs; }
+        public int getBatchSize() { return batchSize; }
+        public void setBatchSize(int batchSize) { this.batchSize = batchSize; }
     }
 }

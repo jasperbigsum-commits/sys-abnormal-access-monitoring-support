@@ -185,9 +185,16 @@ CREATE TABLE notification_delivery (
     channel VARCHAR(128) NOT NULL,
     aggregate_id VARCHAR(128) NOT NULL,
     status VARCHAR(32) NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMP NULL,
+    failure_category VARCHAR(64) NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (delivery_id),
-    UNIQUE (channel, aggregate_id)
+    UNIQUE (channel, aggregate_id),
+    INDEX idx_notification_retry (channel, status, next_attempt_at, delivery_id),
+    INDEX idx_notification_pending (channel, status, updated_at, delivery_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知投递状态';
 
 CREATE TABLE management_audit (

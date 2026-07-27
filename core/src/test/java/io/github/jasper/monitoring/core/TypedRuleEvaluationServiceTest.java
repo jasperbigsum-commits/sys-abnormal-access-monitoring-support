@@ -24,9 +24,11 @@ import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.application.TypedRuleEvaluationService;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
+import io.github.jasper.monitoring.core.application.notification.NotificationDeliveryService;
 import io.github.jasper.monitoring.core.domain.AlertDisposition;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.RuleMatch;
+import io.github.jasper.monitoring.core.domain.NotificationDelivery;
 import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.WhitelistEntry;
@@ -40,6 +42,7 @@ import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.port.EventRepository;
 import io.github.jasper.monitoring.core.port.MonitoringTransaction;
 import io.github.jasper.monitoring.core.port.NotificationChannel;
+import io.github.jasper.monitoring.core.port.NotificationDeliveryRepository;
 import io.github.jasper.monitoring.core.port.RuleObservationRepository;
 import io.github.jasper.monitoring.core.port.WhitelistRepository;
 import java.time.Clock;
@@ -49,6 +52,8 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -138,7 +143,7 @@ class TypedRuleEvaluationServiceTest {
             ControlCatalog.<ControlHandler>builder().freeze(), clock);
         TypedRuleEvaluationService evaluator = new TypedRuleEvaluationService(store, store, store, store, store,
             Collections.<DetectionRule<? extends RuleType>>singletonList(new MatchingRule()),
-            MonitoringMode.OBSERVE, controls, NotificationChannel.noop(), clock);
+            MonitoringMode.OBSERVE, controls, notifications(store, NotificationChannel.noop(), clock), clock);
         ActionDefinition action = ActionDefinition.builder("data:query").eventType(SecurityEventType.QUERY)
             .resourceType("report").failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
         MonitoringService service = new MonitoringService(store, new SecurityEventAssembler("demo", clock),
@@ -149,6 +154,45 @@ class TypedRuleEvaluationServiceTest {
 
         assertEquals(1, store.alerts.size());
         assertEquals("QUERY-01", store.alerts.get(0).getRuleId());
+    }
+
+    @Test
+    void deliversNotificationOnlyAfterTheAlertTransactionCompletes() {
+        TrackingStore store = new TrackingStore();
+        Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
+        boolean[] notified = new boolean[1];
+        boolean[] registered = new boolean[1];
+        TestNotificationDeliveries deliveryStore = new TestNotificationDeliveries() {
+            @Override public boolean create(NotificationDelivery delivery) {
+                assertEquals(true, store.inTransaction);
+                registered[0] = true;
+                return super.create(delivery);
+            }
+        };
+        NotificationDeliveryService notifications = new NotificationDeliveryService("test", (deliveryId, alert) -> {
+            assertEquals(false, store.inTransaction);
+            notified[0] = true;
+        }, deliveryStore, store, clock, 3, Duration.ofMinutes(1), Duration.ofMinutes(5));
+
+        monitorMatchingRule(store, notifications, clock);
+
+        assertEquals(1, store.alertCount());
+        assertEquals(true, registered[0]);
+        assertEquals(true, notified[0]);
+    }
+
+    @Test
+    void keepsTheCommittedAlertWhenTheExternalChannelFails() {
+        TrackingStore store = new TrackingStore();
+        Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
+        NotificationDeliveryService notifications = notifications(store, (deliveryId, alert) -> {
+            throw new IllegalStateException("provider unavailable");
+        }, clock);
+
+        monitorMatchingRule(store, notifications, clock);
+
+        assertEquals(1, store.alertCount());
+        assertEquals(false, store.inTransaction);
     }
 
     @Test
@@ -192,7 +236,21 @@ class TypedRuleEvaluationServiceTest {
             ControlCatalog.<ControlHandler>builder().freeze(), clock);
         return new TypedRuleEvaluationService(store, store, store, store, store,
             Collections.<DetectionRule<? extends RuleType>>singletonList(rule),
-            MonitoringMode.OBSERVE, controls, NotificationChannel.noop(), clock);
+            MonitoringMode.OBSERVE, controls, notifications(store, NotificationChannel.noop(), clock), clock);
+    }
+
+    private static void monitorMatchingRule(Store store, NotificationDeliveryService notifications, Clock clock) {
+        ControlExecutionService controls = new ControlExecutionService(new UnusedControlStore(),
+            ControlCatalog.<ControlHandler>builder().freeze(), clock);
+        TypedRuleEvaluationService evaluator = new TypedRuleEvaluationService(store, store, store, store, store,
+            Collections.<DetectionRule<? extends RuleType>>singletonList(new MatchingRule()),
+            MonitoringMode.OBSERVE, controls, notifications, clock);
+        ActionDefinition action = ActionDefinition.builder("data:query").eventType(SecurityEventType.QUERY)
+            .resourceType("report").failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
+        MonitoringService service = new MonitoringService(store, new SecurityEventAssembler("demo", clock),
+            new FixedRuntime(action), evaluator);
+        service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(),
+            ActionOutcome.success(1L)));
     }
 
     private static MonitoringRequestContext request() {
@@ -264,7 +322,7 @@ class TypedRuleEvaluationServiceTest {
                 ControlCatalog.<ControlHandler>builder().freeze(), clock);
             TypedRuleEvaluationService evaluator = new TypedRuleEvaluationService(store, store, store, store, store,
                 Collections.<DetectionRule<? extends RuleType>>singletonList(rule), monitoringMode,
-                controls, notifications, clock);
+                controls, notifications(store, notifications, clock), clock);
             ActionDefinition action = ActionDefinition.builder("data:query")
                 .eventType(SecurityEventType.QUERY).resourceType("report")
                 .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
@@ -308,7 +366,42 @@ class TypedRuleEvaluationServiceTest {
 
     static final class RecordingNotifications implements NotificationChannel {
         private final List<SecurityAlert> alerts = new ArrayList<SecurityAlert>();
-        @Override public void notify(SecurityAlert alert) { alerts.add(alert); }
+        @Override public void notify(String deliveryId, SecurityAlert alert) { alerts.add(alert); }
+    }
+
+    private static NotificationDeliveryService notifications(Store store, NotificationChannel channel, Clock clock) {
+        return new NotificationDeliveryService("test", channel, new TestNotificationDeliveries(), store, clock,
+            3, Duration.ofMinutes(1), Duration.ofMinutes(5));
+    }
+
+    static class TestNotificationDeliveries implements NotificationDeliveryRepository {
+        private final Map<String, NotificationDelivery> values =
+            new LinkedHashMap<String, NotificationDelivery>();
+        @Override public Optional<NotificationDelivery> find(String channel, String aggregateId) {
+            for (NotificationDelivery value : values.values()) {
+                if (value.getChannel().equals(channel) && value.getAggregateId().equals(aggregateId)) {
+                    return Optional.of(value);
+                }
+            }
+            return Optional.empty();
+        }
+        @Override public boolean create(NotificationDelivery delivery) {
+            return values.put(delivery.getDeliveryId(), delivery) == null;
+        }
+        @Override public boolean update(NotificationDelivery delivery, long expectedVersion) {
+            NotificationDelivery current = values.get(delivery.getDeliveryId());
+            if (current == null || current.getVersion() != expectedVersion) return false;
+            values.put(delivery.getDeliveryId(), delivery);
+            return true;
+        }
+            @Override public List<NotificationDelivery> findDue(String channel, Instant at, int limit) {
+            List<NotificationDelivery> result = new ArrayList<NotificationDelivery>();
+            for (NotificationDelivery value : values.values()) {
+                if (result.size() == limit) break;
+                if (value.isDueAt(channel, at)) result.add(value);
+            }
+            return result;
+        }
     }
 
     static final class RecordingControlStore implements ControlExecutionStore {
@@ -354,6 +447,7 @@ class TypedRuleEvaluationServiceTest {
         @Override public Optional<SecurityEvent> findEvent(String id) { return Optional.empty(); }
         @Override public List<SecurityEvent> findSince(String systemId, Instant since) { return new ArrayList<SecurityEvent>(events); }
         @Override public void save(SecurityAlert alert) { alerts.add(alert); }
+        int alertCount() { return alerts.size(); }
         @Override public Optional<SecurityAlert> findAlert(String id) { return Optional.empty(); }
         @Override public Optional<SecurityAlert> findOpen(String fingerprint) { return Optional.empty(); }
         @Override public void linkEvent(String alertId, String eventId) { }
@@ -363,6 +457,18 @@ class TypedRuleEvaluationServiceTest {
         @Override public boolean isActive(String ruleId, String subject, Instant at) { return false; }
         @Override public void add(WhitelistEntry entry) { }
         @Override public <T> T required(io.github.jasper.monitoring.core.port.TransactionWork<T> work) { return work.execute(); }
+    }
+
+    static final class TrackingStore extends Store {
+        private boolean inTransaction;
+        @Override public <T> T required(io.github.jasper.monitoring.core.port.TransactionWork<T> work) {
+            inTransaction = true;
+            try {
+                return work.execute();
+            } finally {
+                inTransaction = false;
+            }
+        }
     }
 
     static final class EmptyHistoryStore extends Store {

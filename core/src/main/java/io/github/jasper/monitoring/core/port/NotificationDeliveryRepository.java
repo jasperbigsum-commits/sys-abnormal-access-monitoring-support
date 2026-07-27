@@ -1,6 +1,14 @@
 package io.github.jasper.monitoring.core.port;
 
-/** Persistence boundary for durable notification delivery state. */
+import io.github.jasper.monitoring.core.domain.NotificationDelivery;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
+/** Persistence boundary for durable, optimistic notification delivery state. */
 public interface NotificationDeliveryRepository {
-    void record(String deliveryId, String channel, String aggregateId, String status);
+    Optional<NotificationDelivery> find(String channel, String aggregateId);
+    boolean create(NotificationDelivery delivery);
+    boolean update(NotificationDelivery delivery, long expectedVersion);
+    List<NotificationDelivery> findDue(String channel, Instant at, int limit);
 }

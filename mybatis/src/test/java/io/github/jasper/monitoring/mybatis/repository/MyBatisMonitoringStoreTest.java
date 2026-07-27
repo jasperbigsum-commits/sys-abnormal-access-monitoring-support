@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.mybatis.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
@@ -22,7 +23,9 @@ import io.github.jasper.monitoring.core.domain.ControlRecord;
 import io.github.jasper.monitoring.core.domain.SecurityAlert;
 import io.github.jasper.monitoring.core.domain.WhitelistEntry;
 import io.github.jasper.monitoring.core.domain.EventFact;
+import io.github.jasper.monitoring.core.domain.NotificationDelivery;
 import io.github.jasper.monitoring.core.domain.rule.RuleObservation;
+import io.github.jasper.monitoring.core.application.notification.NotificationDeliveryService;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.core.port.EventRepository;
 import io.github.jasper.monitoring.mybatis.mapper.RuleObservationMapper;
@@ -31,6 +34,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 import org.apache.ibatis.datasource.unpooled.UnpooledDataSource;
 import org.apache.ibatis.jdbc.ScriptRunner;
@@ -107,11 +114,100 @@ class MyBatisMonitoringStoreTest {
         DataSource dataSource = dataSource("store-notification");
         executeSchema(dataSource);
         MyBatisMonitoringStore store = new MyBatisMonitoringStore(factory(dataSource));
-        store.record("delivery-1", "email", "alert-1", "PENDING");
-        try (java.sql.Connection connection = dataSource.getConnection(); java.sql.PreparedStatement statement = connection.prepareStatement("SELECT status FROM notification_delivery WHERE delivery_id = ?")) {
-            statement.setString(1, "delivery-1");
-            try (java.sql.ResultSet result = statement.executeQuery()) { result.next(); assertEquals("PENDING", result.getString(1)); }
+        Instant at = Instant.parse("2026-07-26T01:00:00Z");
+        NotificationDelivery pending = NotificationDelivery.pending("delivery-1", "email", "alert-1", at);
+
+        assertTrue(store.create(pending));
+        assertEquals(false, store.create(pending));
+        NotificationDelivery claimed = pending.claim(at.plusSeconds(1), at.plusSeconds(60));
+        assertTrue(store.update(claimed, 0));
+        assertEquals(false, store.update(claimed, 0));
+        NotificationDelivery retry = claimed.failedAttempt("CHANNEL_FAILURE", at.plusSeconds(60), false,
+            at.plusSeconds(2));
+        assertTrue(store.update(retry, 1));
+
+        NotificationDelivery stored = store.find("email", "alert-1").get();
+        assertEquals(NotificationDelivery.Status.RETRY_PENDING, stored.getStatus());
+        assertEquals(1, stored.getAttemptCount());
+        assertEquals("CHANNEL_FAILURE", stored.getFailureCategory());
+        assertEquals(0, store.findDue("email", at.plusSeconds(59), 10).size());
+        assertEquals("delivery-1", store.findDue("email", at.plusSeconds(60), 10).get(0).getDeliveryId());
+
+        NotificationDelivery retryClaim = retry.claim(at.plusSeconds(60), at.plusSeconds(120));
+        assertTrue(store.update(retryClaim, retry.getVersion()));
+        NotificationDelivery delivered = retryClaim.delivered(at.plusSeconds(61));
+        assertTrue(store.update(delivered, retryClaim.getVersion()));
+        assertEquals(NotificationDelivery.Status.DELIVERED,
+            store.find("email", "alert-1").get().getStatus());
+        assertEquals(0, store.findDue("email", at.plusSeconds(120), 10).size());
+    }
+
+    @Test
+    void recoversACommittedPendingIntentBeforeItsFirstDelivery() throws Exception {
+        DataSource dataSource = dataSource("store-notification-pending-recovery");
+        executeSchema(dataSource);
+        MyBatisMonitoringStore store = new MyBatisMonitoringStore(factory(dataSource));
+        Instant at = Instant.parse("2026-07-26T01:00:00Z");
+        SecurityAlert alert = new SecurityAlert("alert-pending-recovery", "AUTH-01", RiskLevel.HIGH,
+            "fp-recovery", "alice", AlertStatus.NEW, at, at, 1);
+        AtomicInteger calls = new AtomicInteger();
+        NotificationDeliveryService deliveries = new NotificationDeliveryService("email",
+            (deliveryId, value) -> calls.incrementAndGet(), store, store,
+            Clock.fixed(at, ZoneOffset.UTC), 3, Duration.ofMinutes(1), Duration.ofMinutes(5));
+
+        store.required(() -> {
+            store.save(alert);
+            deliveries.register(alert);
+            return null;
+        });
+        assertEquals(NotificationDelivery.Status.PENDING,
+            store.find("email", alert.getAlertId()).get().getStatus());
+
+        deliveries.retryDue(10);
+
+        assertEquals(1, calls.get());
+        assertEquals(NotificationDelivery.Status.DELIVERED,
+            store.find("email", alert.getAlertId()).get().getStatus());
+    }
+
+    @Test
+    void upgradesLegacyNotificationRowsToVersionedState() throws Exception {
+        DataSource dataSource = dataSource("store-notification-upgrade");
+        try (java.sql.Connection connection = dataSource.getConnection();
+             java.sql.Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE notification_delivery (delivery_id VARCHAR(128) NOT NULL PRIMARY KEY, "
+                + "channel VARCHAR(128) NOT NULL, aggregate_id VARCHAR(128) NOT NULL, status VARCHAR(32) NOT NULL, "
+                + "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(channel, aggregate_id))");
+            statement.execute("INSERT INTO notification_delivery (delivery_id, channel, aggregate_id, status) "
+                + "VALUES ('legacy-delivery', 'email', 'legacy-alert', 'PENDING')");
+            statement.execute("INSERT INTO notification_delivery (delivery_id, channel, aggregate_id, status) "
+                + "VALUES ('legacy-delivered', 'email', 'legacy-delivered-alert', 'DELIVERED')");
+            statement.execute("INSERT INTO notification_delivery (delivery_id, channel, aggregate_id, status) "
+                + "VALUES ('legacy-failed', 'email', 'legacy-failed-alert', 'FAILED')");
+            statement.execute("INSERT INTO notification_delivery (delivery_id, channel, aggregate_id, status) "
+                + "VALUES ('legacy-retry', 'email', 'legacy-retry-alert', 'RETRY_PENDING')");
         }
+        executeScript(dataSource, "/db/upgrade/monitoring-notification-retry-v7.sql");
+
+        NotificationDelivery stored = new MyBatisMonitoringStore(factory(dataSource))
+            .find("email", "legacy-alert").get();
+
+        assertEquals("legacy-delivery", stored.getDeliveryId());
+        assertEquals(NotificationDelivery.Status.PENDING, stored.getStatus());
+        assertEquals(0, stored.getAttemptCount());
+        assertEquals(0L, stored.getVersion());
+        NotificationDelivery delivered = new MyBatisMonitoringStore(factory(dataSource))
+            .find("email", "legacy-delivered-alert").get();
+        assertEquals(NotificationDelivery.Status.DELIVERED, delivered.getStatus());
+        assertEquals(1, delivered.getAttemptCount());
+        NotificationDelivery failed = new MyBatisMonitoringStore(factory(dataSource))
+            .find("email", "legacy-failed-alert").get();
+        assertEquals("LEGACY_FAILURE", failed.getFailureCategory());
+        NotificationDelivery retry = new MyBatisMonitoringStore(factory(dataSource))
+            .find("email", "legacy-retry-alert").get();
+        assertEquals(NotificationDelivery.Status.RETRY_PENDING, retry.getStatus());
+        assertEquals("LEGACY_RETRY_PENDING", retry.getFailureCategory());
+        assertNotNull(retry.getNextAttemptAt());
     }
 
     @Test
@@ -149,7 +245,10 @@ class MyBatisMonitoringStoreTest {
         return new SqlSessionFactoryBuilder().build(new Configuration(new Environment("test", new JdbcTransactionFactory(), dataSource)));
     }
     private void executeSchema(DataSource dataSource) throws Exception {
-        InputStream input = getClass().getResourceAsStream("/db/monitoring-schema.sql");
+        executeScript(dataSource, "/db/monitoring-schema.sql");
+    }
+    private void executeScript(DataSource dataSource, String resource) throws Exception {
+        InputStream input = getClass().getResourceAsStream(resource);
         try (InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8);
              java.sql.Connection connection = dataSource.getConnection()) {
             ScriptRunner runner = new ScriptRunner(connection);

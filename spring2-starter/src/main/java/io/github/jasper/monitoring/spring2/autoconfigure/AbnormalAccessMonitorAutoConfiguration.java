@@ -36,6 +36,7 @@ import io.github.jasper.monitoring.core.application.control.DefaultControlAction
 import io.github.jasper.monitoring.core.port.ControlHandler;
 import io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
+import io.github.jasper.monitoring.core.application.notification.NotificationDeliveryService;
 import io.github.jasper.monitoring.core.domain.rule.DefaultRuleCatalog;
 import io.github.jasper.monitoring.core.port.NotificationChannel;
 import io.github.jasper.monitoring.mybatis.repository.MyBatisControlExecutionStore;
@@ -69,6 +70,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 
 /**
  * Spring Boot 2 ({@code javax.servlet}) auto-configuration for the monitoring component.
@@ -192,10 +195,63 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @Bean @ConditionalOnBean(ManagementServices.class) @ConditionalOnMissingBean ControlManagementService abnormalAccessControlManagementService(ManagementServices services) { return services.controls(); }
 
     @Bean
+    @ConditionalOnMissingBean
+    public NotificationDeliveryService abnormalAccessNotificationDeliveryService(
+            MyBatisMonitoringStore store, NotificationChannel channel,
+            AbnormalAccessMonitorProperties properties) {
+        AbnormalAccessMonitorProperties.Notification config = properties.getNotification();
+        validateNotification(config);
+        return new NotificationDeliveryService(config.getChannel(), channel, store, store, Clock.systemUTC(),
+            config.getMaxAttempts(), config.getRetryDelay(), config.getLeaseDuration());
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @EnableScheduling
+    @ConditionalOnBean(SqlSessionFactory.class)
+    @ConditionalOnProperty(prefix = "abnormal.access.monitor.notification", name = "retry-enabled",
+        havingValue = "true", matchIfMissing = true)
+    static class NotificationRetryConfiguration {
+        private final NotificationDeliveryService deliveries;
+        private final AbnormalAccessMonitorProperties properties;
+
+        NotificationRetryConfiguration(NotificationDeliveryService deliveries,
+                AbnormalAccessMonitorProperties properties) {
+            this.deliveries = deliveries;
+            this.properties = properties;
+        }
+
+        @Scheduled(fixedDelayString = "${abnormal.access.monitor.notification.scan-interval-ms:60000}",
+            initialDelayString = "${abnormal.access.monitor.notification.scan-interval-ms:60000}")
+        public void retryNotifications() {
+            try {
+                deliveries.retryDue(properties.getNotification().getBatchSize());
+            } catch (RuntimeException unavailable) {
+                java.util.logging.Logger.getLogger(NotificationRetryConfiguration.class.getName())
+                    .warning("Notification retry scan failed [category=PERSISTENCE_UNAVAILABLE]");
+            }
+        }
+    }
+
+    private static void validateNotification(AbnormalAccessMonitorProperties.Notification config) {
+        if (config.getChannel() == null || config.getChannel().trim().isEmpty()) {
+            throw new MonitoringConfigurationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "notification channel must not be blank");
+        }
+        if (config.getMaxAttempts() < 1 || config.getRetryDelay() == null
+            || config.getRetryDelay().isZero() || config.getRetryDelay().isNegative()
+            || config.getLeaseDuration() == null || config.getLeaseDuration().isZero()
+            || config.getLeaseDuration().isNegative() || config.getScanIntervalMs() < 1
+            || config.getBatchSize() < 1 || config.getBatchSize() > 200) {
+            throw new MonitoringConfigurationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "notification retry configuration is invalid");
+        }
+    }
+
+    @Bean
     @ConditionalOnMissingBean(MonitoringService.RuleEvaluationPort.class)
     public TypedRuleEvaluationService abnormalAccessTypedRuleEvaluationService(
             MyBatisMonitoringStore store, AbnormalAccessMonitorProperties properties,
-            ControlExecutionService controls, NotificationChannel notifications) {
+            ControlExecutionService controls, NotificationDeliveryService notifications) {
         return new TypedRuleEvaluationService(store, store, store, store, store,
             DefaultRuleCatalog.typedRules(),
             properties.getMode(), controls, notifications, Clock.systemUTC());

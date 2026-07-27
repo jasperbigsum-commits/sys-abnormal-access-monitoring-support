@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.github.jasper.monitoring.api.AlertStatus;
 import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.core.domain.SecurityAlert;
+import io.github.jasper.monitoring.core.domain.NotificationDelivery;
 import io.github.jasper.monitoring.core.port.AlertRepository;
 import io.github.jasper.monitoring.core.port.MonitoringTransaction;
 import java.io.InputStream;
@@ -33,10 +34,12 @@ class MyBatisTransactionTest {
 
         assertThrows(IllegalStateException.class, () -> transaction.required(() -> {
             alerts.save(new SecurityAlert("alert-rollback", "AUTH-01", RiskLevel.HIGH, "fp", "alice", AlertStatus.NEW, now, now, 1));
+            store.create(NotificationDelivery.pending("delivery-rollback", "email", "alert-rollback", now));
             throw new IllegalStateException("rollback");
         }));
 
         assertFalse(alerts.findAlert("alert-rollback").isPresent());
+        assertFalse(store.find("email", "alert-rollback").isPresent());
     }
     private SqlSessionFactory factory(DataSource dataSource) {
         return new SqlSessionFactoryBuilder().build(new Configuration(new Environment("test", new JdbcTransactionFactory(), dataSource)));
