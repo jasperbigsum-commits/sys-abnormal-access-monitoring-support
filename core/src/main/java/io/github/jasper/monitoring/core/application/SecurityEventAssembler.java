@@ -66,6 +66,14 @@ public final class SecurityEventAssembler {
         if (resourceId != null) draft.resourceId(resourceId);
         if (dataCount != null) draft.dataCount(dataCount.longValue());
         if (sensitivity != null) draft.attribute("sensitivity", sensitivity);
+        putAttribute(draft, "different_networks", facts.get(BuiltInFacts.DifferentNetworks.class));
+        putAttribute(draft, "sequential_access", facts.get(BuiltInFacts.SequentialAccess.class));
+        putAttribute(draft, "sensitive", facts.get(BuiltInFacts.Sensitive.class));
+        putAttribute(draft, "work_hours", facts.get(BuiltInFacts.WorkHours.class));
+        putAttribute(draft, "privilege_increase", facts.get(BuiltInFacts.PrivilegeIncrease.class));
+        putAttribute(draft, "high_privilege", facts.get(BuiltInFacts.HighPrivilege.class));
+        putAttribute(draft, "target_user_id", facts.get(BuiltInFacts.TargetUserId.class));
+        putAttribute(draft, "baseline_ratio", facts.get(BuiltInFacts.BaselineRatio.class));
         List<ObservationIssue> observations = new ArrayList<ObservationIssue>();
         List<EventInputIssue> inputIssues = new ArrayList<EventInputIssue>();
         for (Class<? extends FactType<?>> fact : action.getRequiredFacts()) {
@@ -85,6 +93,10 @@ public final class SecurityEventAssembler {
         java.util.Set<Class<? extends RuleType>> ineligible = new java.util.LinkedHashSet<Class<? extends RuleType>>();
         if (!inputIssues.isEmpty()) ineligible.addAll(action.getRuleTypes());
         return new AssemblyResult(event, facts, outcome, observations, ineligible);
+    }
+
+    private static void putAttribute(SecurityEventDraft.Builder draft, String key, String value) {
+        if (value != null) draft.attribute(key, value);
     }
 
     private static SecurityEvent copyWithFacts(SecurityEvent event, List<EventFact> facts) {

@@ -26,7 +26,10 @@ class SecurityEventAssemblerTest {
     @Test
     void writesApprovedBuiltInFactsToStandardEventFields() {
         ActionFacts facts = ActionFacts.builder().put(BuiltInFacts.ResourceId.class, "report-7")
-            .put(BuiltInFacts.DataCount.class, 12L).put(BuiltInFacts.Sensitivity.class, "HIGH").build();
+            .put(BuiltInFacts.DataCount.class, 12L).put(BuiltInFacts.Sensitivity.class, "HIGH")
+            .put(BuiltInFacts.SequentialAccess.class, "true")
+            .put(BuiltInFacts.TargetUserId.class, "target-7")
+            .put(BuiltInFacts.PrivilegeIncrease.class, "false").build();
         SecurityEventAssembler.AssemblyResult result = new SecurityEventAssembler("demo", fixedClock())
             .assemble(ExportAction.class, ACTION, ActionExecution.of(ExportAction.class, request(),
                 IdentityContext.anonymous(), ActionOutcome.success(1L)), facts);
@@ -34,6 +37,9 @@ class SecurityEventAssemblerTest {
         assertEquals("report-7", result.getEvent().getResourceId());
         assertEquals(12L, result.getEvent().getDataCount());
         assertEquals("HIGH", result.getEvent().getAttribute("sensitivity"));
+        assertEquals("true", result.getEvent().getAttribute("sequential_access"));
+        assertEquals("target-7", result.getEvent().getAttribute("target_user_id"));
+        assertEquals("false", result.getEvent().getAttribute("privilege_increase"));
     }
     private static final ActionDefinition ACTION = ActionDefinition.builder("demo:export")
         .eventType(SecurityEventType.EXPORT).resourceType("report")

@@ -25,6 +25,8 @@ public final class BuiltInActions {
             .eventType(SecurityEventType.EXPORT)
             .resourceType("report")
             .ruleTag("export")
+            .optional(BuiltInFacts.Sensitivity.class, FactSource.TRUSTED_REQUEST, FactSource.HOST_PROVIDER)
+            .optional(BuiltInFacts.BaselineRatio.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
             .failurePolicy(ActionFailurePolicy.FAIL_CLOSED)
             .build());
         catalog.register(LoginFailure.class, action("auth:login-failure", SecurityEventType.LOGIN_FAILURE));
@@ -32,11 +34,21 @@ public final class BuiltInActions {
             .eventType(SecurityEventType.QUERY).resourceType("resource")
             .optional(BuiltInFacts.ResourceId.class, FactSource.TRUSTED_REQUEST,
                 FactSource.HOST_PROVIDER)
+            .optional(BuiltInFacts.SequentialAccess.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
             .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build());
-        catalog.register(SessionConcurrent.class, action("session:concurrent", SecurityEventType.SESSION_CONCURRENT));
+        catalog.register(SessionConcurrent.class, ActionDefinition.builder("session:concurrent")
+            .eventType(SecurityEventType.SESSION_CONCURRENT).resourceType("monitoring")
+            .optional(BuiltInFacts.DataCount.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+            .optional(BuiltInFacts.DifferentNetworks.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+            .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build());
         catalog.register(AccessDenied.class, access("authz:access-denied", SecurityEventType.ACCESS_DENIED));
         catalog.register(AccessAllowed.class, access("authz:access-allowed", SecurityEventType.ACCESS_ALLOWED));
-        catalog.register(PrivilegeChange.class, action("privilege:change", SecurityEventType.ROLE_GRANT));
+        catalog.register(PrivilegeChange.class, ActionDefinition.builder("privilege:change")
+            .eventType(SecurityEventType.ROLE_GRANT).resourceType("monitoring")
+            .require(BuiltInFacts.TargetUserId.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+            .require(BuiltInFacts.PrivilegeIncrease.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+            .optional(BuiltInFacts.HighPrivilege.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+            .failurePolicy(ActionFailurePolicy.FAIL_CLOSED).build());
         catalog.register(SecurityChange.class, action("security:configuration-change", SecurityEventType.RULE_CHANGE));
         catalog.register(SensitiveView.class, ActionDefinition.builder("resource:view-sensitive")
             .eventType(SecurityEventType.VIEW_SENSITIVE)
@@ -46,6 +58,9 @@ public final class BuiltInActions {
                 FactSource.TRUSTED_REQUEST, FactSource.HOST_PROVIDER)
             .optional(BuiltInFacts.ResourceId.class, FactSource.TRUSTED_REQUEST,
                 FactSource.HOST_PROVIDER)
+            .optional(BuiltInFacts.DataCount.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+            .optional(BuiltInFacts.Sensitive.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+            .optional(BuiltInFacts.WorkHours.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
             .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY)
             .build());
         catalog.register(FrontendSignal.class, ActionDefinition.builder("frontend:signal")

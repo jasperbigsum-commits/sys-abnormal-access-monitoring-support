@@ -14,6 +14,10 @@ class FactCatalogTest {
         catalog.freeze();
 
         assertEquals(BuiltInFacts.DATA_COUNT, catalog.require(BuiltInFacts.DataCount.class));
+        assertEquals("true", BuiltInFacts.SEQUENTIAL_ACCESS.encode(" TRUE "));
+        assertEquals("3.5", BuiltInFacts.BASELINE_RATIO.encode("3.5"));
+        assertThrows(IllegalArgumentException.class, () -> BuiltInFacts.SEQUENTIAL_ACCESS.encode("yes"));
+        assertThrows(IllegalArgumentException.class, () -> BuiltInFacts.BASELINE_RATIO.encode("NaN"));
         assertThrows(MonitoringConfigurationException.class,
             () -> catalog.register(BuiltInFacts.DATA_COUNT));
     }
