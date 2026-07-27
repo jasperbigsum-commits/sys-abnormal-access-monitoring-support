@@ -3,11 +3,13 @@ package io.github.jasper.monitoring.mybatis.repository;
 import io.github.jasper.monitoring.api.management.ManagementPage;
 import io.github.jasper.monitoring.api.management.ManagementPageRequest;
 import io.github.jasper.monitoring.api.management.model.AlertView;
+import io.github.jasper.monitoring.api.management.model.AlertAssignmentView;
 import io.github.jasper.monitoring.api.management.model.ControlView;
 import io.github.jasper.monitoring.api.management.model.RuleView;
 import io.github.jasper.monitoring.api.management.model.SecurityEventView;
 import io.github.jasper.monitoring.api.management.model.WhitelistView;
 import io.github.jasper.monitoring.api.management.query.AlertQuery;
+import io.github.jasper.monitoring.api.management.query.AlertAssignmentQuery;
 import io.github.jasper.monitoring.api.management.query.ControlQuery;
 import io.github.jasper.monitoring.api.management.query.RuleQuery;
 import io.github.jasper.monitoring.api.management.query.SecurityEventQuery;
@@ -19,13 +21,18 @@ import io.github.jasper.monitoring.mybatis.mapper.ManagementAuditMapper;
 import io.github.jasper.monitoring.mybatis.mapper.ManagementQueryMapper;
 import io.github.jasper.monitoring.mybatis.po.ManagementRowPo;
 import io.github.jasper.monitoring.mybatis.po.ControlActionPo;
+import io.github.jasper.monitoring.mybatis.po.AlertAssignmentPo;
+import io.github.jasper.monitoring.mybatis.po.RuleChangePo;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
+import io.github.jasper.monitoring.api.rule.RuleMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionManager;
+import org.apache.ibatis.exceptions.PersistenceException;
+import java.sql.SQLException;
 
 /** MyBatis-only adapter for scope-constrained management views and append-only audit. */
 public final class MyBatisManagementRepository implements ManagementQueryRepository, ManagementAuditRepository {
@@ -54,13 +61,63 @@ public final class MyBatisManagementRepository implements ManagementQueryReposit
             if(mapper.transitionAlert(scope,id,version,status)!=1)return false;
             mapper.insertAlertDisposition(dispositionId,id,status,actorId,reason);return true;});
     }
+    @Override public ManagementPage<AlertAssignmentView> searchAlertAssignments(String scope,String id,
+        AlertAssignmentQuery query) {
+        return read(session -> {ManagementQueryMapper mapper=session.getMapper(ManagementQueryMapper.class);
+            ManagementPageRequest p=query.getPage();List<AlertAssignmentPo> rows=mapper.alertAssignments(scope,id,
+                p.getSort().name(),p.isDescending(),p.getSize(),offset(p));
+            List<AlertAssignmentView> views=new ArrayList<AlertAssignmentView>();
+            for(AlertAssignmentPo row:rows)views.add(AlertAssignmentView.of(row.getId(),row.getAlertId(),
+                row.getOperatorId(),row.getAssigneeId(),row.getReason(),row.getExpectedVersion(),row.getCreatedAt()));
+            return page(views,p,mapper.countAlertAssignments(scope,id));});
+    }
+    @Override public boolean assignAlert(String scope,String id,long version,String actorId,String assigneeId,String reason,String dispositionId) {
+        try {
+            return write(session -> {ManagementQueryMapper mapper=session.getMapper(ManagementQueryMapper.class);
+                if(mapper.assignAlert(scope,id,version)!=1)return false;
+                mapper.insertAlertAssignment(dispositionId,id,version,actorId,assigneeId,reason);return true;});
+        } catch (PersistenceException failure) {
+            if (isConstraintViolation(failure)) return false;
+            throw failure;
+        }
+    }
+    @Override public Optional<AlertView> findAlertAssignment(String scope,String id,long version,String actorId,
+        String assigneeId,String reason,String dispositionId) {
+        return read(session -> {ManagementQueryMapper mapper=session.getMapper(ManagementQueryMapper.class);
+            AlertAssignmentPo row=mapper.alertAssignment(scope,id,dispositionId);
+            if(row==null||row.getExpectedVersion()!=version||!dispositionId.equals(row.getId())
+                ||!id.equals(row.getAlertId())||!actorId.equals(row.getOperatorId())
+                ||!assigneeId.equals(row.getAssigneeId())||!reason.equals(row.getReason()))return Optional.empty();
+            return optionalAlert(mapper.alert(scope,id),scope);});
+    }
     @Override public ManagementPage<RuleView> searchRules(String scope, RuleQuery query) {
         return read(session -> { ManagementQueryMapper mapper=session.getMapper(ManagementQueryMapper.class); ManagementPageRequest p=query.getPage();
-            return page(rules(mapper.rules(p.getSize(),offset(p)),scope),p,mapper.countRules()); });
+            return page(rules(mapper.rules(scope,p.getSize(),offset(p)),scope),p,mapper.countRules(scope)); });
     }
     @Override public Optional<RuleView> findRuleView(String scope,String id) {
-        return read(session -> { ManagementRowPo row=session.getMapper(ManagementQueryMapper.class).rule(id);
-            return row==null?Optional.<RuleView>empty():Optional.of(RuleView.of(row.getId(),scope)); });
+        return read(session -> { ManagementRowPo row=session.getMapper(ManagementQueryMapper.class).rule(scope,id);
+            return row==null?Optional.<RuleView>empty():Optional.of(rule(row,scope)); });
+    }
+    @Override public boolean changeRule(String scope,String id,long version,RuleMode mode,long threshold,String actorId,
+                                        String approverId,String reason,String idempotencyKey) {
+        try {
+            return write(session -> session.getMapper(ManagementQueryMapper.class).changeRule(scope,id,version,
+                mode.name(),threshold,actorId,approverId,reason,idempotencyKey)==1);
+        } catch (PersistenceException failure) {
+            if (isConstraintViolation(failure)) return false;
+            throw failure;
+        }
+    }
+    @Override public Optional<RuleView> findRuleChange(String scope,String id,long version,RuleMode mode,long threshold,
+        String actorId,String approverId,String reason,String idempotencyKey) {
+        return read(session -> {RuleChangePo row=session.getMapper(ManagementQueryMapper.class).ruleChange(scope,id,
+            idempotencyKey);
+            if(row==null||row.getVersion()!=version+1||row.getThreshold()!=threshold||!id.equals(row.getId())
+                ||!mode.name().equals(row.getMode())||!actorId.equals(row.getActorId())
+                ||!approverId.equals(row.getApproverId())||!reason.equals(row.getReason())
+                ||!idempotencyKey.equals(row.getIdempotencyKey()))return Optional.empty();
+            return Optional.of(RuleView.of(row.getId(),scope,row.getVersion(),RuleMode.valueOf(row.getMode()),
+                row.getThreshold()));});
     }
     @Override public ManagementPage<WhitelistView> searchWhitelists(String scope,WhitelistQuery query) {
         return read(session -> { ManagementQueryMapper mapper=session.getMapper(ManagementQueryMapper.class); ManagementPageRequest p=query.getPage();
@@ -101,11 +158,17 @@ public final class MyBatisManagementRepository implements ManagementQueryReposit
     private static long offset(ManagementPageRequest p){return ((long)p.getPage())*p.getSize();}
     private static <T> ManagementPage<T> page(List<T> rows,ManagementPageRequest p,long total){return ManagementPage.of(rows,p.getPage(),p.getSize(),total);}
     private static List<SecurityEventView> events(List<ManagementRowPo> rows,String scope){List<SecurityEventView> out=new ArrayList<SecurityEventView>();for(ManagementRowPo r:rows)out.add(SecurityEventView.of(r.getId(),scope));return out;}
-    private static List<AlertView> alerts(List<ManagementRowPo> rows,String scope){List<AlertView> out=new ArrayList<AlertView>();for(ManagementRowPo r:rows)out.add(AlertView.of(r.getId(),scope,r.getVersion()));return out;}
-    private static List<RuleView> rules(List<ManagementRowPo> rows,String scope){List<RuleView> out=new ArrayList<RuleView>();for(ManagementRowPo r:rows)out.add(RuleView.of(r.getId(),scope));return out;}
+    private static List<AlertView> alerts(List<ManagementRowPo> rows,String scope){List<AlertView> out=new ArrayList<AlertView>();for(ManagementRowPo r:rows)out.add(AlertView.of(r.getId(),scope,r.getStatus(),r.getAssigneeId(),r.getVersion()));return out;}
+    private static List<RuleView> rules(List<ManagementRowPo> rows,String scope){List<RuleView> out=new ArrayList<RuleView>();for(ManagementRowPo r:rows)out.add(rule(r,scope));return out;}
+    private static RuleView rule(ManagementRowPo row,String scope){return RuleView.of(row.getId(),scope,row.getVersion(),RuleMode.valueOf(row.getStatus()),row.getThreshold());}
     private static List<WhitelistView> whitelists(List<ManagementRowPo> rows,String scope){List<WhitelistView> out=new ArrayList<WhitelistView>();for(ManagementRowPo r:rows)out.add(WhitelistView.of(r.getId(),scope));return out;}
     private static List<ControlView> controls(List<ManagementRowPo> rows,String scope){List<ControlView> out=new ArrayList<ControlView>();for(ManagementRowPo r:rows)out.add(ControlView.of(r.getId(),scope,r.getStatus(),r.getVersion()));return out;}
     private static Optional<SecurityEventView> optionalEvent(ManagementRowPo r,String scope){return r==null?Optional.<SecurityEventView>empty():Optional.of(SecurityEventView.of(r.getId(),scope));}
-    private static Optional<AlertView> optionalAlert(ManagementRowPo r,String scope){return r==null?Optional.<AlertView>empty():Optional.of(AlertView.of(r.getId(),scope,r.getVersion()));}
+    private static Optional<AlertView> optionalAlert(ManagementRowPo r,String scope){return r==null?Optional.<AlertView>empty():Optional.of(AlertView.of(r.getId(),scope,r.getStatus(),r.getAssigneeId(),r.getVersion()));}
     private static Optional<ControlView> optionalControl(ManagementRowPo r,String scope){return r==null?Optional.<ControlView>empty():Optional.of(ControlView.of(r.getId(),scope,r.getStatus(),r.getVersion()));}
+    private static boolean isConstraintViolation(Throwable failure) {
+        Throwable current=failure;
+        while(current!=null){if(current instanceof SQLException){SQLException sql=(SQLException)current;String state=sql.getSQLState();if("23505".equals(state)||sql.getErrorCode()==1062)return true;}current=current.getCause();}
+        return false;
+    }
 }

@@ -79,17 +79,24 @@ CREATE TABLE security_event_input_issue (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件输入质量问题表';
 
 CREATE TABLE security_rule (
+    system_id VARCHAR(128) NOT NULL COMMENT '规则所属宿主系统标识',
     rule_id VARCHAR(128) NOT NULL COMMENT '规则稳定标识',
     rule_version INTEGER NOT NULL COMMENT '规则版本号',
     rule_name VARCHAR(256) NOT NULL COMMENT '规则名称',
     rule_definition LONGTEXT NOT NULL COMMENT '规则定义内容',
     risk_level VARCHAR(32) NOT NULL COMMENT '风险等级',
     rule_mode VARCHAR(32) NOT NULL COMMENT '规则运行模式',
+    rule_threshold BIGINT NOT NULL DEFAULT 1 COMMENT '规则触发阈值',
     enabled TINYINT(1) NOT NULL COMMENT '管理侧启用状态',
     created_at TIMESTAMP NOT NULL COMMENT '创建时间',
     created_by VARCHAR(128) NOT NULL COMMENT '创建人标识',
-    PRIMARY KEY (rule_id, rule_version)
+    change_reason VARCHAR(512) COMMENT '版本变更原因',
+    approved_by VARCHAR(128) COMMENT '版本变更审批人',
+    idempotency_key VARCHAR(128) COMMENT '版本变更幂等键',
+    PRIMARY KEY (system_id, rule_id, rule_version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='持久化安全规则版本表';
+
+CREATE UNIQUE INDEX uk_security_rule_idempotency ON security_rule (system_id, idempotency_key);
 
 CREATE TABLE security_alert (
     alert_id VARCHAR(128) NOT NULL COMMENT '告警唯一标识',
@@ -136,6 +143,8 @@ CREATE TABLE alert_disposition (
     alert_id VARCHAR(128) NOT NULL COMMENT '告警唯一标识',
     disposition_type VARCHAR(64) NOT NULL CHECK (disposition_type IN ('ACKNOWLEDGED', 'IN_PROGRESS', 'CLOSED', 'FALSE_POSITIVE')) COMMENT '处置类型',
     operator_id VARCHAR(128) NOT NULL COMMENT '操作人标识',
+    assignee_id VARCHAR(128) COMMENT '本次分配的受理人标识',
+    expected_version BIGINT COMMENT '触发本次处置的告警期望版本',
     comment_text VARCHAR(1024) COMMENT '处置说明',
     evidence_summary VARCHAR(1024) COMMENT '证据摘要',
     created_at TIMESTAMP NOT NULL COMMENT '创建时间',

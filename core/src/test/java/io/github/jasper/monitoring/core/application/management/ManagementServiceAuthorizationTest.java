@@ -1,20 +1,28 @@
 package io.github.jasper.monitoring.core.application.management;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.jasper.monitoring.api.error.ManagementAccessDeniedException;
 import io.github.jasper.monitoring.api.management.ManagementActor;
+import io.github.jasper.monitoring.api.management.ManagementOperation;
 import io.github.jasper.monitoring.api.management.ManagementAuthorizer;
 import io.github.jasper.monitoring.api.management.ManagementPage;
 import io.github.jasper.monitoring.api.management.ManagementPageRequest;
 import io.github.jasper.monitoring.api.management.command.AlertAcknowledgeCommand;
+import io.github.jasper.monitoring.api.management.command.AlertAssignmentCommand;
+import io.github.jasper.monitoring.api.management.command.RuleChangeCommand;
+import io.github.jasper.monitoring.api.rule.RuleMode;
+import io.github.jasper.monitoring.api.error.ManagementConflictException;
 import io.github.jasper.monitoring.api.management.model.AlertView;
+import io.github.jasper.monitoring.api.management.model.AlertAssignmentView;
 import io.github.jasper.monitoring.api.management.model.ControlView;
 import io.github.jasper.monitoring.api.management.model.RuleView;
 import io.github.jasper.monitoring.api.management.model.SecurityEventView;
 import io.github.jasper.monitoring.api.management.model.WhitelistView;
 import io.github.jasper.monitoring.api.management.query.AlertQuery;
+import io.github.jasper.monitoring.api.management.query.AlertAssignmentQuery;
 import io.github.jasper.monitoring.api.management.query.ControlQuery;
 import io.github.jasper.monitoring.api.management.query.RuleQuery;
 import io.github.jasper.monitoring.api.management.query.SecurityEventQuery;
@@ -34,6 +42,7 @@ import org.junit.jupiter.api.Test;
 
 class ManagementServiceAuthorizationTest {
     private final ManagementActor actor = ManagementActor.of("operator-1", "system-a");
+    private final ManagementActor approver = ManagementActor.of("approver-1", "system-a");
     private final RecordingAudits audits = new RecordingAudits();
     private final FakeQueries queries = new FakeQueries();
     private final MonitoringTransaction transaction = new MonitoringTransaction() {
@@ -73,6 +82,88 @@ class ManagementServiceAuthorizationTest {
         assertEquals(ManagementAuditRecord.Outcome.SUCCEEDED, audits.records.get(0).getOutcome());
     }
 
+    @Test
+    void ruleChangeAppendsVersionAndAuditsSuccess() {
+        DefaultRuleCatalogService service = new DefaultRuleCatalogService(
+            new ManagementAccessGuard((principal, operation, resource) -> { }, audits, clock), queries, transaction);
+
+        RuleView result = service.change(actor, approver, RuleChangeCommand.of("rule-1", 1, RuleMode.ENFORCE, 5,
+            "approved adjustment", "rule-change-1"));
+
+        assertEquals(2, result.getVersion());
+        assertEquals(RuleMode.ENFORCE, result.getMode());
+        assertEquals(ManagementOperation.RULE_APPROVE, audits.records.get(0).getOperation());
+        assertEquals("approver-1", audits.records.get(0).getActorId());
+        assertEquals(ManagementOperation.RULE_CHANGE, audits.records.get(1).getOperation());
+    }
+
+    @Test
+    void staleRuleChangeIsRejectedWithoutSuccessAudit() {
+        DefaultRuleCatalogService service = new DefaultRuleCatalogService(
+            new ManagementAccessGuard((principal, operation, resource) -> { }, audits, clock), queries, transaction);
+
+        assertThrows(ManagementConflictException.class, () -> service.change(actor, approver,
+            RuleChangeCommand.of("rule-1", 3, RuleMode.ALERT_ONLY, 5, "stale", "stale-3")));
+
+        assertTrue(audits.records.isEmpty());
+    }
+
+    @Test
+    void alertAssignmentUsesDedicatedPortAndAdvancesVersion() {
+        DefaultAlertManagementService service = new DefaultAlertManagementService(
+            new ManagementAccessGuard((principal, operation, resource) -> { }, audits, clock), queries, transaction);
+
+        AlertView result = service.assign(actor,
+            AlertAssignmentCommand.of("alert-1", 1, "analyst-1", "triage", "assign-1"));
+
+        assertEquals(2, result.getVersion());
+        assertEquals(1, queries.assignments);
+        assertEquals(ManagementOperation.ALERT_ASSIGN, audits.records.get(0).getOperation());
+    }
+
+    @Test
+    void newlyCreatedVersionZeroAlertCanBeAssigned() {
+        DefaultAlertManagementService service = new DefaultAlertManagementService(
+            new ManagementAccessGuard((principal, operation, resource) -> { }, audits, clock), queries, transaction);
+
+        service.assign(actor, AlertAssignmentCommand.of("alert-1", 0, "analyst-1", "initial triage", "assign-0"));
+
+        assertEquals(1, queries.assignmentWrites);
+    }
+
+    @Test
+    void ruleChangeRequiresDistinctAuthorizedApprover() {
+        DefaultRuleCatalogService service = new DefaultRuleCatalogService(
+            new ManagementAccessGuard((principal, operation, resource) -> { }, audits, clock), queries, transaction);
+
+        assertThrows(ManagementAccessDeniedException.class, () -> service.change(actor, actor,
+            RuleChangeCommand.of("rule-1", 1, RuleMode.ENFORCE, 5, "self approved", "self-1")));
+
+        assertEquals(ManagementAuditRecord.Outcome.DENIED, audits.records.get(0).getOutcome());
+        assertEquals(1, queries.rule.getVersion());
+    }
+
+    @Test
+    void successfulManagementWritesCanBeReplayedWithoutRepeatingSideEffects() {
+        DefaultRuleCatalogService rules = new DefaultRuleCatalogService(
+            new ManagementAccessGuard((principal, operation, resource) -> { }, audits, clock), queries, transaction);
+        RuleChangeCommand ruleCommand = RuleChangeCommand.of("rule-1", 1, RuleMode.ENFORCE, 5,
+            "approved adjustment", "rule-replay-1");
+        rules.change(actor, approver, ruleCommand);
+        RuleView replayedRule = rules.change(actor, approver, ruleCommand);
+
+        DefaultAlertManagementService alerts = new DefaultAlertManagementService(
+            new ManagementAccessGuard((principal, operation, resource) -> { }, audits, clock), queries, transaction);
+        AlertAssignmentCommand assignment = AlertAssignmentCommand.of("alert-1", 1, "analyst-1", "triage",
+            "assignment-replay-1");
+        alerts.assign(actor, assignment);
+        AlertView replayedAssignment = alerts.assign(actor, assignment);
+
+        assertEquals(2, replayedRule.getVersion());
+        assertEquals(2, replayedAssignment.getVersion());
+        assertEquals(1, queries.assignmentWrites);
+    }
+
     private static final class RecordingAudits implements ManagementAuditRepository {
         private final List<ManagementAuditRecord> records = new ArrayList<ManagementAuditRecord>();
         @Override public void append(ManagementAuditRecord record) { records.add(record); }
@@ -81,13 +172,46 @@ class ManagementServiceAuthorizationTest {
     private static final class FakeQueries implements ManagementQueryRepository {
         private int reads;
         private int transitions;
+        private int assignments;
+        private int assignmentWrites;
+        private RuleView rule = RuleView.of("rule-1", "system-a", 1, RuleMode.ALERT_ONLY, 1);
+        private String ruleKey;
+        private String assignmentKey;
         @Override public ManagementPage<SecurityEventView> searchEvents(String scope, SecurityEventQuery query) { reads++; return page(); }
         @Override public Optional<SecurityEventView> findEventView(String scope, String id) { reads++; return Optional.of(SecurityEventView.of(id, scope)); }
         @Override public ManagementPage<AlertView> searchAlerts(String scope, AlertQuery query) { reads++; return page(); }
-        @Override public Optional<AlertView> findAlertView(String scope, String id) { reads++; return Optional.of(AlertView.of(id, scope, 2)); }
+        @Override public Optional<AlertView> findAlertView(String scope, String id) { reads++; return Optional.of(AlertView.of(id, scope, "IN_PROGRESS", "analyst-1", 2)); }
+        @Override public ManagementPage<AlertAssignmentView> searchAlertAssignments(String scope,String id,
+            AlertAssignmentQuery query) { reads++; return page(); }
         @Override public boolean transitionAlert(String scope, String id, long version, String status,String actor,String reason,String dispositionId) { transitions++; return version == 1; }
+        @Override public boolean assignAlert(String scope, String id, long version, String actor, String assignee,
+                                             String reason, String dispositionId) {
+            assignments++;
+            if ((version != 0 && version != 1) || assignmentKey != null) return false;
+            assignmentKey = dispositionId;
+            assignmentWrites++;
+            return true;
+        }
+        @Override public Optional<AlertView> findAlertAssignment(String scope, String id, long version, String actor,
+                                                                 String assignee, String reason, String dispositionId) {
+            return dispositionId.equals(assignmentKey) && version == 1 && "analyst-1".equals(assignee)
+                ? Optional.of(AlertView.of(id, scope, "IN_PROGRESS", assignee, 2)) : Optional.<AlertView>empty();
+        }
         @Override public ManagementPage<RuleView> searchRules(String scope, RuleQuery query) { reads++; return page(); }
-        @Override public Optional<RuleView> findRuleView(String scope, String id) { reads++; return Optional.of(RuleView.of(id, scope)); }
+        @Override public Optional<RuleView> findRuleView(String scope, String id) { reads++; return Optional.of(rule); }
+        @Override public boolean changeRule(String scope, String id, long version, RuleMode mode, long threshold,
+                                            String actorId, String approverId, String reason, String idempotencyKey) {
+            if (version != rule.getVersion()) return false;
+            rule = RuleView.of(id, scope, version + 1, mode, threshold);
+            ruleKey = idempotencyKey;
+            return true;
+        }
+        @Override public Optional<RuleView> findRuleChange(String scope, String id, long version, RuleMode mode,
+                                                           long threshold, String actorId, String approverId,
+                                                           String reason, String idempotencyKey) {
+            return idempotencyKey.equals(ruleKey) && version + 1 == rule.getVersion()
+                ? Optional.of(rule) : Optional.<RuleView>empty();
+        }
         @Override public ManagementPage<WhitelistView> searchWhitelists(String scope, WhitelistQuery query) { reads++; return page(); }
         @Override public Optional<WhitelistView> findWhitelistView(String scope, String id) { reads++; return Optional.of(WhitelistView.of(id, scope)); }
         @Override public boolean transitionWhitelist(String scope, String id, long version, boolean active, String actorId, String reason) { transitions++; return true; }

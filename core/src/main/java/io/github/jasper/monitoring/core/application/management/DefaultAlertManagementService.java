@@ -5,12 +5,15 @@ import io.github.jasper.monitoring.api.management.ManagementActor;
 import io.github.jasper.monitoring.api.management.ManagementOperation;
 import io.github.jasper.monitoring.api.management.ManagementPage;
 import io.github.jasper.monitoring.api.management.command.AlertAcknowledgeCommand;
+import io.github.jasper.monitoring.api.management.command.AlertAssignmentCommand;
 import io.github.jasper.monitoring.api.management.command.AlertCloseCommand;
 import io.github.jasper.monitoring.api.management.command.AlertFalsePositiveCommand;
 import io.github.jasper.monitoring.api.management.command.AlertStartInvestigationCommand;
 import io.github.jasper.monitoring.api.management.command.VersionedReasonCommand;
 import io.github.jasper.monitoring.api.management.model.AlertView;
+import io.github.jasper.monitoring.api.management.model.AlertAssignmentView;
 import io.github.jasper.monitoring.api.management.query.AlertQuery;
+import io.github.jasper.monitoring.api.management.query.AlertAssignmentQuery;
 import io.github.jasper.monitoring.core.port.ManagementQueryRepository;
 import io.github.jasper.monitoring.core.port.MonitoringTransaction;
 import java.util.Objects;
@@ -33,6 +36,39 @@ public final class DefaultAlertManagementService extends AbstractManagementServi
     @Override public AlertView acknowledge(ManagementActor actor, AlertAcknowledgeCommand command) {
         return change(actor, ManagementOperation.ALERT_ACKNOWLEDGE, command.getAlertId(), command.getExpectedVersion(),
             command.getReason(), command.getIdempotencyKey(), "ACKNOWLEDGED");
+    }
+    @Override public ManagementPage<AlertAssignmentView> assignmentHistory(final ManagementActor actor,
+        final String alertId, final AlertAssignmentQuery query) {
+        Objects.requireNonNull(query, "query");
+        access.require(actor, ManagementOperation.ALERT_ASSIGNMENT_READ, "alert", alertId);
+        return transaction.required(() -> {
+            require(queries.findAlertView(actor.getSystemScope(), alertId), "alert", alertId);
+            ManagementPage<AlertAssignmentView> page = queries.searchAlertAssignments(actor.getSystemScope(),
+                alertId, query);
+            success(actor, ManagementOperation.ALERT_ASSIGNMENT_READ, "alert", alertId);
+            return page;
+        });
+    }
+    @Override public AlertView assign(final ManagementActor actor, final AlertAssignmentCommand command) {
+        Objects.requireNonNull(command, "command");
+        final String id = command.getAlertId();
+        access.require(actor, ManagementOperation.ALERT_ASSIGN, "alert", id);
+        return transaction.required(() -> {
+            boolean changed = queries.assignAlert(actor.getSystemScope(), id, command.getExpectedVersion(),
+                actor.getActorId(), command.getAssigneeId(), command.getReason(), command.getIdempotencyKey());
+            AlertView view;
+            if (changed) {
+                view = require(queries.findAlertView(actor.getSystemScope(), id), "alert", id);
+            } else {
+                java.util.Optional<AlertView> replay = queries.findAlertAssignment(actor.getSystemScope(), id,
+                    command.getExpectedVersion(), actor.getActorId(), command.getAssigneeId(), command.getReason(),
+                    command.getIdempotencyKey());
+                requireUpdated(replay.isPresent());
+                view = replay.get();
+            }
+            success(actor, ManagementOperation.ALERT_ASSIGN, "alert", id);
+            return view;
+        });
     }
     @Override public AlertView startInvestigation(ManagementActor actor, AlertStartInvestigationCommand command) {
         return change(actor, ManagementOperation.ALERT_INVESTIGATE, command, "IN_PROGRESS");

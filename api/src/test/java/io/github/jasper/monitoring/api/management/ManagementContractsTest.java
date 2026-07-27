@@ -8,8 +8,12 @@ import io.github.jasper.monitoring.api.management.command.ControlApprovalCommand
 import io.github.jasper.monitoring.api.management.command.ControlRejectionCommand;
 import io.github.jasper.monitoring.api.management.command.WhitelistGrantCommand;
 import io.github.jasper.monitoring.api.management.command.WhitelistRevokeCommand;
+import io.github.jasper.monitoring.api.management.command.RuleChangeCommand;
+import io.github.jasper.monitoring.api.management.command.AlertAssignmentCommand;
+import io.github.jasper.monitoring.api.rule.RuleMode;
 import io.github.jasper.monitoring.api.management.model.AlertView;
 import io.github.jasper.monitoring.api.management.query.AlertQuery;
+import io.github.jasper.monitoring.api.management.query.AlertAssignmentQuery;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -25,7 +29,7 @@ class ManagementContractsTest {
 
     @Test
     void pageIsImmutable() {
-        ManagementPage<AlertView> page = ManagementPage.of(Collections.singletonList(AlertView.of("a", "sys", 1L)), 0, 20, 1);
+        ManagementPage<AlertView> page = ManagementPage.of(Collections.singletonList(AlertView.of("a", "sys", "NEW", null, 1L)), 0, 20, 1);
         assertThrows(UnsupportedOperationException.class, () -> page.getItems().clear());
     }
 
@@ -71,7 +75,8 @@ class ManagementContractsTest {
         AlertAcknowledgeCommand command = AlertAcknowledgeCommand.of("a", 3L, "triaged", "ack-3");
         assertEquals(3L, command.getExpectedVersion());
         assertEquals("triaged", command.getReason());
-        assertThrows(IllegalArgumentException.class, () -> AlertAcknowledgeCommand.of("a", 0L, "x", "ack-0"));
+        assertEquals(0L, AlertAcknowledgeCommand.of("a", 0L, "x", "ack-0").getExpectedVersion());
+        assertThrows(IllegalArgumentException.class, () -> AlertAcknowledgeCommand.of("a", -1L, "x", "ack-negative"));
     }
 
     @Test
@@ -110,5 +115,31 @@ class ManagementContractsTest {
     @Test
     void queriesAreTypedAndDoNotExposeRawMaps() {
         assertNotNull(AlertQuery.of(ManagementPageRequest.of(0, 20, AlertQuery.Sort.CREATED_AT)));
+        assertNotNull(AlertAssignmentQuery.of(ManagementPageRequest.of(0, 20,
+            AlertAssignmentQuery.Sort.CREATED_AT)));
+        assertThrows(IllegalArgumentException.class, () -> AlertAssignmentQuery.of(
+            ManagementPageRequest.of(0, 20, AlertQuery.Sort.ID)));
+    }
+
+    @Test
+    void ruleChangeAndAlertAssignmentCommandsAreCompleteAndValidated() {
+        RuleChangeCommand rule = RuleChangeCommand.of("AUTH-01", 3L, RuleMode.ALERT_ONLY,
+            7L, "tune threshold", "rule-change-3");
+        assertEquals(3L, rule.getExpectedVersion());
+        assertEquals(RuleMode.ALERT_ONLY, rule.getMode());
+        assertEquals(7L, rule.getThreshold());
+        assertEquals("rule-change-3", rule.getIdempotencyKey());
+        assertThrows(IllegalArgumentException.class, () -> RuleChangeCommand.of("AUTH-01", 3L,
+            RuleMode.ENFORCE, 0L, "reason", "key"));
+        assertThrows(IllegalArgumentException.class, () -> RuleChangeCommand.of("AUTH-01", 0L,
+            RuleMode.ENFORCE, 1L, "reason", "key"));
+        assertThrows(IllegalArgumentException.class, () -> RuleChangeCommand.of("AUTH-01", 3L,
+            RuleMode.ENFORCE, 1L, " ", "key"));
+
+        AlertAssignmentCommand assignment = AlertAssignmentCommand.of("alert-1", 2L,
+            "analyst-1", "triage", "assign-2");
+        assertEquals("analyst-1", assignment.getAssigneeId());
+        assertThrows(IllegalArgumentException.class, () -> AlertAssignmentCommand.of("alert-1", 2L,
+            " ", "triage", "assign-2"));
     }
 }

@@ -6,7 +6,7 @@ import java.security.NoSuchAlgorithmException;
 /** Immutable versioned command with a bounded replay/idempotency key. */
 public class VersionedReasonCommand {
  private final String resourceId, reason, idempotencyKey; private final long expectedVersion;
- protected VersionedReasonCommand(String id,long version,String reason,String key){if(version<1)throw new IllegalArgumentException("expectedVersion must be positive");this.resourceId=require(id,"resourceId");this.reason=requireBounded(reason,"reason",512);this.idempotencyKey=requireBounded(key,"idempotencyKey",128);this.expectedVersion=version;}
+ protected VersionedReasonCommand(String id,long version,String reason,String key){if(version<0)throw new IllegalArgumentException("expectedVersion must be non-negative");this.resourceId=require(id,"resourceId");this.reason=requireBounded(reason,"reason",512);this.idempotencyKey=requireBounded(key,"idempotencyKey",128);this.expectedVersion=version;}
  /**
   * The generic command has no operation identity and therefore cannot safely
   * derive a deterministic idempotency key. Callers must provide an explicit
