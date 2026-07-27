@@ -18,6 +18,22 @@ public interface AuditFixtureMapper {
         + "challenge_until challengeUntil, query_block_until queryBlockUntil FROM audit_account WHERE user_id=#{userId}")
     Map<String, Object> findAccount(@Param("userId") String userId);
 
+    @Update("UPDATE audit_account SET failed_login_count=failed_login_count+1 WHERE user_id=#{userId}")
+    int incrementFailedLogins(@Param("userId") String userId);
+
+    @Insert("INSERT INTO audit_control_state(idempotency_key,subject,control_type,expires_at,execution_count) "
+        + "VALUES(#{key},#{subject},#{type},#{expiresAt},1)")
+    int insertControl(@Param("key") String key, @Param("subject") String subject,
+                      @Param("type") String type, @Param("expiresAt") Instant expiresAt);
+
+    @Select("SELECT COUNT(*) FROM audit_control_state WHERE subject=#{subject} AND control_type=#{type} "
+        + "AND (expires_at IS NULL OR expires_at>#{now})")
+    long countActiveControl(@Param("subject") String subject, @Param("type") String type,
+                            @Param("now") Instant now);
+
+    @Select("SELECT execution_count FROM audit_control_state WHERE idempotency_key=#{key}")
+    Integer controlExecutionCount(@Param("key") String key);
+
     @Insert("INSERT INTO audit_report(report_id,organization_id,sensitivity) VALUES(#{reportId},#{organizationId},#{sensitivity})")
     int insertReport(@Param("reportId") String reportId, @Param("organizationId") String organizationId,
                      @Param("sensitivity") String sensitivity);
@@ -41,6 +57,9 @@ public interface AuditFixtureMapper {
 
     @Select("SELECT COUNT(*) FROM audit_session WHERE user_id=#{userId} AND status='ACTIVE'")
     long countActiveSessions(@Param("userId") String userId);
+
+    @Select("SELECT COUNT(*) FROM audit_session WHERE session_id=#{sessionId} AND status='ACTIVE'")
+    long isActiveSession(@Param("sessionId") String sessionId);
 
     @Select("SELECT COUNT(*) FROM audit_control_state") long countControls();
     @Select("SELECT COUNT(*) FROM audit_export_ledger") long countExports();

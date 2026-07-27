@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
+import org.apache.ibatis.exceptions.PersistenceException;
 import org.springframework.stereotype.Repository;
 
 /** Transaction-owning fixture repository; no production in-memory fallback exists. */
@@ -41,6 +42,36 @@ public class AuditFixtureRepository {
         }
     }
 
+    public boolean isActiveSession(String sessionId) {
+        try (SqlSession session = sessions.openSession()) {
+            return session.getMapper(AuditFixtureMapper.class).isActiveSession(sessionId) == 1L;
+        }
+    }
+
+    public int incrementFailedLogins(String userId) {
+        return write(mapper -> mapper.incrementFailedLogins(userId));
+    }
+
+    public boolean activateControl(String key, String subject, String type, Instant expiresAt) {
+        try {
+            return write(mapper -> mapper.insertControl(key, subject, type, expiresAt)) == 1;
+        } catch (PersistenceException duplicate) {
+            try (SqlSession session = sessions.openSession()) {
+                Integer count = session.getMapper(AuditFixtureMapper.class).controlExecutionCount(key);
+                if (count != null) {
+                    return false;
+                }
+            }
+            throw duplicate;
+        }
+    }
+
+    public boolean hasActiveControl(String subject, String type, Instant now) {
+        try (SqlSession session = sessions.openSession()) {
+            return session.getMapper(AuditFixtureMapper.class).countActiveControl(subject, type, now) > 0L;
+        }
+    }
+
     public int createSession(String sessionId, String userId, Instant at) {
         return write(mapper -> mapper.insertSession(sessionId, userId, at));
     }
@@ -63,11 +94,23 @@ public class AuditFixtureRepository {
             mapper.insertAccount("audit-exporter", "org-a", "ACTIVE");
             mapper.insertAccount("audit-admin", "org-a", "ACTIVE");
             mapper.insertAccount("audit-disabled", "org-a", "DISABLED");
+            mapper.insertAccount("tc01-user", "org-a", "ACTIVE");
+            mapper.insertAccount("tc11-user", "org-a", "ACTIVE");
+            mapper.insertAccount("audit-traversal", "org-a", "ACTIVE");
+            mapper.insertAccount("audit-query", "org-a", "ACTIVE");
+            mapper.insertAccount("audit-query-other", "org-a", "ACTIVE");
+            mapper.insertAccount("tc02-safe", "org-a", "ACTIVE");
+            for (int index = 0; index < 10; index++) {
+                mapper.insertAccount(String.format("tc02-user-%02d", Integer.valueOf(index)), "org-a", "ACTIVE");
+            }
             mapper.insertReport("report-a", "org-a", "NORMAL");
             mapper.insertReport("report-b", "org-b", "NORMAL");
             mapper.insertRole("audit-viewer", "audit-viewer", "fixture", Instant.EPOCH);
             mapper.insertRole("audit-exporter", "audit-exporter", "fixture", Instant.EPOCH);
             mapper.insertRole("audit-admin", "audit-admin", "fixture", Instant.EPOCH);
+            mapper.insertRole("audit-traversal", "audit-query", "fixture", Instant.EPOCH);
+            mapper.insertRole("audit-query", "audit-query", "fixture", Instant.EPOCH);
+            mapper.insertRole("audit-query-other", "audit-query", "fixture", Instant.EPOCH);
             session.commit();
         }
     }

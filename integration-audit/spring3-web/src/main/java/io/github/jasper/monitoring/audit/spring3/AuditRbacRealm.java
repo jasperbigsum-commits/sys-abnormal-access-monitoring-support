@@ -1,8 +1,8 @@
 package io.github.jasper.monitoring.audit.spring3;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
+import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureRepository;
+import java.util.List;
+import java.util.Map;
 import org.apache.shiro.authc.AuthenticationException;
 import org.apache.shiro.authc.AuthenticationInfo;
 import org.apache.shiro.authc.AuthenticationToken;
@@ -13,26 +13,27 @@ import org.apache.shiro.authz.SimpleAuthorizationInfo;
 import org.apache.shiro.realm.AuthorizingRealm;
 import org.apache.shiro.subject.PrincipalCollection;
 
-/** In-memory identities used only by this integration audit fixture. */
+/** Shiro adapter over the reference host's MyBatis account and role state. */
 public final class AuditRbacRealm extends AuthorizingRealm {
     static final String FIXTURE_CREDENTIAL = "audit-fixture";
-    private static final Set<String> PRINCIPALS = new HashSet<String>(
-        Arrays.asList("audit-viewer", "audit-exporter", "audit-admin"));
+    private final AuditFixtureRepository fixtures;
 
-    static boolean supportsPrincipal(String principal) {
-        return PRINCIPALS.contains(principal);
+    public AuditRbacRealm(AuditFixtureRepository fixtures) { this.fixtures = fixtures; }
+
+    public boolean supportsPrincipal(String principal) {
+        Map<String, Object> account = fixtures.findAccount(principal);
+        return !account.isEmpty() && "ACTIVE".equals(String.valueOf(account.get("STATUS")));
     }
 
-    public static String organization(String principal) {
-        return supportsPrincipal(principal) ? "org-a" : null;
+    public String organization(String principal) {
+        Map<String, Object> account = fixtures.findAccount(principal);
+        return account.isEmpty() ? null : String.valueOf(account.get("ORGANIZATIONID"));
     }
 
     @Override
     protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken token) throws AuthenticationException {
         String principal = String.valueOf(token.getPrincipal());
-        if (!supportsPrincipal(principal)) {
-            throw new UnknownAccountException("Unknown audit fixture principal");
-        }
+        if (!supportsPrincipal(principal)) throw new UnknownAccountException("Unknown or disabled audit fixture principal");
         return new SimpleAuthenticationInfo(principal, FIXTURE_CREDENTIAL, getName());
     }
 
@@ -40,14 +41,12 @@ public final class AuditRbacRealm extends AuthorizingRealm {
     protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principals) {
         String principal = String.valueOf(principals.getPrimaryPrincipal());
         SimpleAuthorizationInfo info = new SimpleAuthorizationInfo();
-        if ("audit-exporter".equals(principal)) {
-            info.addRole("audit-exporter");
-            info.addStringPermission("report:read");
-            info.addStringPermission("report:export");
-        } else if ("audit-viewer".equals(principal)) {
-            info.addRole("audit-viewer");
-            info.addStringPermission("report:read");
-        }
+        List<String> roles = fixtures.findRoles(principal);
+        info.addRoles(roles);
+        if (roles.contains("audit-exporter")) { info.addStringPermission("report:read"); info.addStringPermission("report:export"); }
+        if (roles.contains("audit-viewer")) info.addStringPermission("report:read");
+        if (roles.contains("audit-admin")) info.addStringPermission("monitoring:manage");
+        if (roles.contains("audit-query")) info.addStringPermission("report:read");
         return info;
     }
 }

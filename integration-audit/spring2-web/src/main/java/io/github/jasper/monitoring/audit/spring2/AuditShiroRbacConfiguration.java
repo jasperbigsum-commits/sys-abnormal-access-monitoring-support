@@ -6,6 +6,7 @@ import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.IdentityContextProvider;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.audit.spring2.report.AuditReportCatalog;
+import io.github.jasper.monitoring.audit.spring2.persistence.AuditFixtureRepository;
 import java.util.Collections;
 import org.apache.shiro.SecurityUtils;
 import org.apache.shiro.realm.Realm;
@@ -20,13 +21,13 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class AuditShiroRbacConfiguration {
     @Bean
-    public Realm auditRbacRealm() {
-        return new AuditRbacRealm();
+    public Realm auditRbacRealm(AuditFixtureRepository fixtures) {
+        return new AuditRbacRealm(fixtures);
     }
 
     @Bean
-    public AuditPrincipalFilter auditPrincipalFilter() {
-        return new AuditPrincipalFilter();
+    public AuditPrincipalFilter auditPrincipalFilter(Realm realm) {
+        return new AuditPrincipalFilter((AuditRbacRealm) realm);
     }
 
     @Bean
@@ -41,6 +42,7 @@ public class AuditShiroRbacConfiguration {
     @Bean
     public ShiroFilterChainDefinition shiroFilterChainDefinition() {
         DefaultShiroFilterChainDefinition chain = new DefaultShiroFilterChainDefinition();
+        chain.addPathDefinition("/audit/authentication/**", "anon");
         chain.addPathDefinition("/audit/**", "auditPrincipalFilter");
         return chain;
     }
@@ -51,7 +53,7 @@ public class AuditShiroRbacConfiguration {
     }
 
     @Bean
-    public ResourceScopeAuthorizer auditResourceScopeAuthorizer(AuditReportCatalog catalog) {
+    public ResourceScopeAuthorizer auditResourceScopeAuthorizer(AuditReportCatalog catalog, Realm realm) {
         return (identity, request) -> {
             Subject subject = SecurityUtils.getSubject();
             String principal = subject.getPrincipal() == null ? null : String.valueOf(subject.getPrincipal());
@@ -64,7 +66,7 @@ public class AuditShiroRbacConfiguration {
                 && principal.equals(identity.getUserId())
                 && report != null
                 && report.getOrganization().equals(request.getOrgScope())
-                && report.getOrganization().equals(AuditRbacRealm.organization(principal))
+                && report.getOrganization().equals(((AuditRbacRealm) realm).organization(principal))
                 && subject.isPermitted(permission);
             return allowed ? AuthorizationDecision.allowed()
                 : AuthorizationDecision.denied("RESOURCE_SCOPE_DENIED");

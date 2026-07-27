@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -208,6 +209,99 @@ class Spring3AuditWebAcceptanceTest {
             "foreign-system", "foreign-admin", "EVENT_READ", "DENIED").longValue() >= 1L);
     }
 
+    @Test
+    @DisplayName("TC-01 fifth failure activates challenge and controls the next login")
+    void tc01_fifthFailureActivatesChallengeAndControlsNextLogin() {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            assertEquals(HttpStatus.FORBIDDEN,
+                postJson("/audit/authentication/login", null, login("tc01-user", false)).getStatusCode());
+        }
+        ResponseEntity<String> challenged =
+            postJson("/audit/authentication/login", null, login("tc01-user", true));
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, challenged.getStatusCode());
+        assertTrue(challenged.getBody().contains("CHALLENGE_REQUIRED"));
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM audit_control_state "
+            + "WHERE subject='tc01-user' AND control_type='REQUIRE_CAPTCHA'", Long.class).longValue());
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM audit_control_state "
+            + "WHERE subject='tc01-user' AND control_type='RATE_LIMIT'", Long.class).longValue());
+    }
+
+    @Test
+    @DisplayName("TC-03 disabled account is rejected without creating a session")
+    void tc03_disabledAccountIsRejectedWithoutCreatingSession() {
+        ResponseEntity<String> response =
+            postJson("/audit/authentication/login", null, login("audit-disabled", true));
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        assertTrue(response.getBody().contains("ACCOUNT_DISABLED"));
+        assertEquals(0L, fixtures.countActiveSessions("audit-disabled"));
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+            + "WHERE rule_id='AUTH-03' AND subject='audit-disabled'", Long.class).longValue());
+    }
+
+    @Test
+    @DisplayName("TC-11 session revocation is durable and idempotent")
+    void tc11_sessionRevocationIsDurableAndIdempotent() {
+        fixtures.createSession("tc11-session-a", "tc11-user", Instant.now());
+        fixtures.createSession("tc11-session-b", "tc11-user", Instant.now());
+        Map<String, Object> request = new LinkedHashMap<String, Object>();
+        request.put("idempotencyKey", "tc11-revoke-once");
+        assertEquals(HttpStatus.OK,
+            postJson("/audit/management/sessions/tc11-user/revoke", "audit-admin", request).getStatusCode());
+        ResponseEntity<String> replay =
+            postJson("/audit/management/sessions/tc11-user/revoke", "audit-admin", request);
+        assertEquals(HttpStatus.OK, replay.getStatusCode());
+        assertTrue(replay.getBody().contains("\"replay\":true"));
+        assertEquals(0L, fixtures.countActiveSessions("tc11-user"));
+        assertTrue(get("/audit/authentication/sessions/active?sessionId=tc11-session-a", null)
+            .getBody().contains("false"));
+        assertEquals(1L, jdbc.queryForObject("SELECT execution_count FROM audit_control_state "
+            + "WHERE idempotency_key='tc11-revoke-once'", Long.class).longValue());
+    }
+
+    @Test
+    @DisplayName("TC-02 multi-account attack rate limits only the trusted source IP")
+    void tc02_multiAccountAttackRateLimitsOnlySourceIp() {
+        for (int index = 0; index < 10; index++) {
+            String userId=String.format("tc02-user-%02d",Integer.valueOf(index));
+            assertEquals(HttpStatus.FORBIDDEN,
+                postJsonFrom("/audit/authentication/login",null,login(userId,false),"198.51.100.10").getStatusCode());
+        }
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS,
+            postJsonFrom("/audit/authentication/login",null,login("tc02-safe",true),"198.51.100.10").getStatusCode());
+        assertEquals(HttpStatus.OK,
+            postJsonFrom("/audit/authentication/login",null,login("tc02-safe",true),"198.51.100.11").getStatusCode());
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM audit_control_state "
+            + "WHERE subject='ip:198.51.100.10' AND control_type='RATE_LIMIT'",Long.class).longValue());
+    }
+
+    @Test
+    @DisplayName("TC-06 resource enumeration revokes the active session")
+    void tc06_resourceEnumerationRevokesTheActiveSession() {
+        fixtures.createSession("tc06-session","audit-traversal",Instant.now());
+        for(int index=0;index<100;index++){
+            assertEquals(HttpStatus.OK,getQuery("audit-traversal","resource-"+index,true,"tc06-session").getStatusCode());
+        }
+        assertEquals(0L,fixtures.countActiveSessions("audit-traversal"));
+        assertEquals(HttpStatus.UNAUTHORIZED,
+            getQuery("audit-traversal","resource-after-control",true,"tc06-session").getStatusCode());
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+            + "WHERE rule_id='AUTHZ-02' AND subject='audit-traversal'",Long.class).longValue());
+    }
+
+    @Test
+    @DisplayName("TC-07 query threshold rate limits only the target user")
+    void tc07_queryThresholdRateLimitsOnlyTheTargetUser() {
+        for(int index=0;index<120;index++){
+            assertEquals(HttpStatus.OK,getQuery("audit-query","query-resource",false,null).getStatusCode());
+        }
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS,
+            getQuery("audit-query","query-resource",false,null).getStatusCode());
+        assertEquals(HttpStatus.OK,
+            getQuery("audit-query-other","query-resource",false,null).getStatusCode());
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+            + "WHERE rule_id='DATA-01' AND subject='audit-query'",Long.class).longValue());
+    }
+
     private String url(String path) {
         return "http://localhost:" + port + path;
     }
@@ -219,6 +313,29 @@ class Spring3AuditWebAcceptanceTest {
 
     private ResponseEntity<String> post(String path, String principal) {
         return restTemplate.postForEntity(url(path), new HttpEntity<Void>(headers(principal)), String.class);
+    }
+
+    private ResponseEntity<String> postJson(String path, String principal, Map<String, Object> body) {
+        HttpHeaders headers = headers(principal);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return restTemplate.postForEntity(url(path), new HttpEntity<Map<String, Object>>(body, headers), String.class);
+    }
+
+    private ResponseEntity<String> postJsonFrom(String path,String principal,Map<String,Object> body,String sourceIp){
+        HttpHeaders headers=headers(principal); headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Forwarded-For",sourceIp);
+        return restTemplate.postForEntity(url(path),new HttpEntity<Map<String,Object>>(body,headers),String.class);
+    }
+
+    private ResponseEntity<String> getQuery(String principal,String resourceId,boolean sequential,String sessionId){
+        HttpHeaders headers=headers(principal); if(sessionId!=null)headers.set("X-Audit-Session",sessionId);
+        return restTemplate.exchange(url("/audit/queries/"+resourceId+"?sequential="+sequential),
+            org.springframework.http.HttpMethod.GET,new HttpEntity<Void>(headers),String.class);
+    }
+
+    private static Map<String, Object> login(String userId, boolean accepted) {
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("userId", userId); body.put("accepted", Boolean.valueOf(accepted)); return body;
     }
 
     private SecurityEvent latestEvent(String action) {
@@ -245,7 +362,7 @@ class Spring3AuditWebAcceptanceTest {
 
     private HttpHeaders headers(String principal) {
         HttpHeaders headers = new HttpHeaders();
-        headers.set(AUDIT_PRINCIPAL_HEADER, principal);
+        if (principal != null) headers.set(AUDIT_PRINCIPAL_HEADER, principal);
         return headers;
     }
 }

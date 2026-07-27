@@ -21,13 +21,15 @@ public final class AuditReportAuthorizationInterceptor implements HandlerInterce
     private final ResourceAccessGuard guard;
     private final MonitoringContextAccessor contexts;
     private final AuditReportCatalog reports;
+    private final AuditRbacRealm realm;
 
     public AuditReportAuthorizationInterceptor(ResourceAccessGuard guard,
                                                MonitoringContextAccessor contexts,
-                                               AuditReportCatalog reports) {
+                                               AuditReportCatalog reports, AuditRbacRealm realm) {
         this.guard = guard;
         this.contexts = contexts;
         this.reports = reports;
+        this.realm = realm;
     }
 
     @Override
@@ -50,7 +52,7 @@ public final class AuditReportAuthorizationInterceptor implements HandlerInterce
     }
 
     private String organizationOfCurrentActor() {
-        return AuditRbacRealm.organization(contexts.identityContext().getUserId());
+        return realm.organization(contexts.identityContext().getUserId());
     }
 
     @SuppressWarnings("unchecked")

@@ -8,15 +8,19 @@ import org.apache.shiro.authc.AuthenticationException;
 import org.apache.shiro.authc.UsernamePasswordToken;
 import org.apache.shiro.subject.Subject;
 import org.apache.shiro.web.filter.AccessControlFilter;
+import io.github.jasper.monitoring.audit.spring2.persistence.AuditFixtureRepository;
 
 /** Converts a fixed fixture header into an authenticated Shiro subject. */
 public final class AuditPrincipalFilter extends AccessControlFilter {
     static final String HEADER_NAME = "X-Audit-Principal";
+    private final AuditRbacRealm realm;
+
+    public AuditPrincipalFilter(AuditRbacRealm realm) { this.realm = realm; }
 
     @Override
     protected boolean isAccessAllowed(ServletRequest request, ServletResponse response, Object mappedValue) {
         String principal = ((HttpServletRequest) request).getHeader(HEADER_NAME);
-        if (!AuditRbacRealm.supportsPrincipal(principal)) {
+        if (!realm.supportsPrincipal(principal)) {
             return false;
         }
         Subject subject = getSubject(request, response);

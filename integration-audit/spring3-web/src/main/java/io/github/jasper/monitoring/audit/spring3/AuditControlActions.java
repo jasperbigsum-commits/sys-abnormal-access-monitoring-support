@@ -4,6 +4,8 @@ import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ControlTrigger;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
+import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureRepository;
+import java.time.Clock;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,6 +16,12 @@ import org.springframework.stereotype.Component;
  */
 @Component("auditControlActions")
 public final class AuditControlActions {
+    private final AuditFixtureRepository fixtures;
+    private final Clock clock = Clock.systemUTC();
+
+    public AuditControlActions(AuditFixtureRepository fixtures) {
+        this.fixtures = fixtures;
+    }
     /**
      * 启用验证码挑战。
      *
@@ -22,7 +30,7 @@ public final class AuditControlActions {
      */
     @ControlTrigger(ControlActionType.REQUIRE_CAPTCHA)
     public ControlExecution requireCaptcha(ControlCommand command) {
-        return ControlExecution.succeeded(command.getIdempotencyKey());
+        return activate(command);
     }
 
     /**
@@ -33,26 +41,37 @@ public final class AuditControlActions {
      */
     @ControlTrigger(ControlActionType.RATE_LIMIT)
     public ControlExecution rateLimit(ControlCommand command) {
-        return ControlExecution.succeeded(command.getIdempotencyKey());
+        return activate(command);
     }
 
     @ControlTrigger(ControlActionType.REVOKE_SESSION)
     public ControlExecution revokeSession(ControlCommand command) {
+        boolean first = fixtures.activateControl(command.getIdempotencyKey(), command.getSubject(),
+            command.getAction().name(), command.getExpiresAt());
+        if (first) {
+            fixtures.revokeSessions(command.getSubject(), clock.instant());
+        }
         return ControlExecution.succeeded(command.getIdempotencyKey());
     }
 
     @ControlTrigger(ControlActionType.REQUIRE_MFA)
     public ControlExecution requireMfa(ControlCommand command) {
-        return ControlExecution.succeeded(command.getIdempotencyKey());
+        return activate(command);
     }
 
     @ControlTrigger(ControlActionType.DENY)
     public ControlExecution deny(ControlCommand command) {
-        return ControlExecution.succeeded(command.getIdempotencyKey());
+        return activate(command);
     }
 
     @ControlTrigger(ControlActionType.REQUIRE_APPROVAL)
     public ControlExecution requireApproval(ControlCommand command) {
+        return activate(command);
+    }
+
+    private ControlExecution activate(ControlCommand command) {
+        fixtures.activateControl(command.getIdempotencyKey(), command.getSubject(), command.getAction().name(),
+            command.getExpiresAt());
         return ControlExecution.succeeded(command.getIdempotencyKey());
     }
 }
