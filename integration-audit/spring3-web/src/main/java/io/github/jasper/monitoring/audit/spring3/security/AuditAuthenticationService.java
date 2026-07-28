@@ -15,9 +15,15 @@ import java.util.Collections;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
-/** Stateful host authentication boundary used by TC-01 and TC-03. */
+/**
+ * 用于 TC-01 与 TC-03 的有状态认证宿主边界。
+ *
+ * <p>这是集成夹具实现：生产系统应复用“认证决策后提交服务端事件”的边界模式，
+ * 但必须替换夹具账号、会话和认证结果来源。</p>
+ */
 @Service
 public final class AuditAuthenticationService {
+    // 集成夹具实现：使用 audit_* 宿主测试表模拟账号、控制状态和会话。
     private final AuditFixtureRepository fixtures;
     private final MonitoringService monitoring;
     private final Clock clock = Clock.systemUTC();
@@ -28,10 +34,12 @@ public final class AuditAuthenticationService {
     }
 
     public AuthenticationResult authenticate(String userId, boolean accepted, String clientIp) {
+        // 集成夹具实现：从固定测试账号表读取认证状态。
         Map<String, Object> account = fixtures.findAccount(userId);
         if (account.isEmpty()) {
             return AuthenticationResult.denied("UNKNOWN_ACCOUNT");
         }
+        // 集成夹具实现：验证码、限流和拒绝状态由 audit_control_state 模拟。
         if (fixtures.hasActiveControl("ip:" + clientIp, "RATE_LIMIT", clock.instant())) {
             return AuthenticationResult.rateLimited();
         }
@@ -50,12 +58,14 @@ public final class AuditAuthenticationService {
             recordFailure(userId, clientIp, "INVALID_CREDENTIAL");
             return AuthenticationResult.denied("INVALID_CREDENTIAL");
         }
+        // 集成夹具实现：成功认证后写入测试会话表；生产系统应委托真实会话服务。
         String sessionId = UUID.randomUUID().toString();
         fixtures.createSession(sessionId, userId, clock.instant());
         return AuthenticationResult.authenticated(sessionId);
     }
 
     private void recordFailure(String userId, String clientIp, String reason) {
+        // 集成夹具实现：构造最小请求上下文以验证登录失败事件；生产中应复用当前请求可信上下文。
         MonitoringRequestContext request = MonitoringRequestContext.builder().method("POST")
             .path("/audit/authentication/login").sourceIp(clientIp)
             .requestId(UUID.randomUUID().toString()).build();

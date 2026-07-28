@@ -97,5 +97,6 @@ public final class SecurityAlert {
     public Instant getLastSeen() { return lastSeen; }
     /** @return 已关联事件数量 */
     public int getEventCount() { return eventCount; }
+    /** @return 告警摘要版本号，用于并发更新控制 */
     public long getVersion() { return version; }
 }

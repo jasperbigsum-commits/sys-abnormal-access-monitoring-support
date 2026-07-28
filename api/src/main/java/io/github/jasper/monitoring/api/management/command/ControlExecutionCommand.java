@@ -4,7 +4,7 @@ import io.github.jasper.monitoring.api.ControlActionType;
 import java.time.Instant;
 import java.util.Objects;
 
-/** Trusted request to create and execute a new durable control. */
+/** 创建并执行新控制动作的可信请求命令。 */
 public final class ControlExecutionCommand {
     private final String idempotencyKey;
     private final String subject;
@@ -22,14 +22,19 @@ public final class ControlExecutionCommand {
         }
     }
 
+    /** @return 控制执行命令对象 */
     public static ControlExecutionCommand of(String idempotencyKey, String subject, ControlActionType action,
                                               Instant expiresAt) {
         return new ControlExecutionCommand(idempotencyKey, subject, action, expiresAt);
     }
 
+    /** @return 幂等键 */
     public String getIdempotencyKey() { return idempotencyKey; }
+    /** @return 控制作用主体 */
     public String getSubject() { return subject; }
+    /** @return 控制动作类型 */
     public ControlActionType getAction() { return action; }
+    /** @return 控制过期时间 */
     public Instant getExpiresAt() { return expiresAt; }
     private static String text(String value, String name) {
         if (value == null || value.trim().isEmpty()) throw new IllegalArgumentException(name + " is required");

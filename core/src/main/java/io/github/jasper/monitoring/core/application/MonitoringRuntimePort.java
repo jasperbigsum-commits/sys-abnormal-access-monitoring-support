@@ -12,17 +12,38 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-/** Runtime-owned action resolution and fact collection boundary. */
+/** 运行时持有的动作解析与事实采集边界。 */
 public interface MonitoringRuntimePort {
+    /**
+     * 解析动作类型对应的静态动作定义。
+     *
+     * @param actionType 动作类型标识
+     * @return 动作定义
+     */
     ActionDefinition resolve(Class<? extends ActionType> actionType);
+
+    /**
+     * 执行动作事实采集并返回可持久化快照。
+     *
+     * @param execution 动作执行上下文
+     * @param action 动作定义
+     * @return 事实集合（含来源与持久化快照）
+     */
     FactCollection collect(ActionExecution execution, ActionDefinition action);
 
-    /** Immutable facts together with the trust source of each individual fact. */
+    /** 不可变事实集合及每条事实的可信来源。 */
     final class FactCollection {
         private final ActionFacts facts;
         private final Map<Class<? extends FactType<?>>, FactSource> sources;
         private final java.util.List<EventFact> persistedFacts;
 
+        /**
+         * 创建事实采集结果。
+         *
+         * @param facts 运行时事实集合
+         * @param sources 事实类型到来源的映射
+         * @param persistedFacts 与事实一一对应的持久化快照
+         */
         public FactCollection(ActionFacts facts,
                 Map<Class<? extends FactType<?>>, FactSource> sources,
                 java.util.List<EventFact> persistedFacts) {
@@ -41,10 +62,14 @@ public interface MonitoringRuntimePort {
             }
         }
 
+        /** @return 运行时事实集合 */
         public ActionFacts getFacts() { return facts; }
+        /** @return 事实类型到来源的只读映射 */
         public Map<Class<? extends FactType<?>>, FactSource> getSources() { return sources; }
+        /** @return 与事实集合一一对应的持久化快照列表 */
         public java.util.List<EventFact> getPersistedFacts() { return persistedFacts; }
 
+        /** @return 空事实集合 */
         public static FactCollection empty() {
             return new FactCollection(ActionFacts.builder().build(),
                 Collections.<Class<? extends FactType<?>>, FactSource>emptyMap(),

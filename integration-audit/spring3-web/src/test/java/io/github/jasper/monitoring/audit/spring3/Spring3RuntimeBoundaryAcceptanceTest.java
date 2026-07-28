@@ -39,6 +39,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+/**
+ * Boot 3 的运行时边界与启动期契约验收测试。
+ *
+ * <p>验证 Action/Fact/规则目录冻结、Fact 绑定所有权、控制触发器声明、ENFORCE 能力覆盖，
+ * 以及 Boot 2/3 验收编号集合的完全对称。</p>
+ */
 @SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:audit-spring3-boundary;MODE=MySQL;DB_CLOSE_DELAY=0")
 class Spring3RuntimeBoundaryAcceptanceTest {
     private static final Pattern ACCEPTANCE_ID = Pattern.compile("@(DisplayName)\\(\\\"(TC|IA)-([0-9]{2})");

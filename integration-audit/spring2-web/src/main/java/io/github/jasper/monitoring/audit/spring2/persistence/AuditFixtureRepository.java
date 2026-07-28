@@ -10,7 +10,13 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.exceptions.PersistenceException;
 import org.springframework.stereotype.Repository;
 
-/** Transaction-owning fixture repository; no production in-memory fallback exists. */
+/**
+ * 宿主业务夹具表的事务仓储。
+ *
+ * <p>本类只访问 {@code audit_*} 宿主表，用于模拟账号、会话、报告、导出与控制副作用；
+ * 不读写组件内部的事件、规则、告警、控制、通知或管理审计表。组件内部表由
+ * {@code MyBatisMonitoringStore} 及其关联仓储负责。</p>
+ */
 @Repository
 public class AuditFixtureRepository {
     private final SqlSessionFactory sessions;

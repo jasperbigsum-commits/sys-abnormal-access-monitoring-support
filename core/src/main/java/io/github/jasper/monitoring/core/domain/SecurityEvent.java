@@ -181,7 +181,7 @@ public final class SecurityEvent {
     public List<EventInputIssue> getInputIssues() { return inputIssues; }
     /** @return 已校验的补充属性；返回只读映射 */
     public Map<String, String> getAttributes() { return attributes; }
-    /** @return immutable, codec-produced fact snapshots associated with this event */
+    /** @return 与该事件关联的不可变事实快照列表 */
     public List<EventFact> getFacts() { return facts; }
     /**
      * @param key 已标准化的属性键
@@ -281,7 +281,7 @@ public final class SecurityEvent {
         }
         /** @param value 已校验补充属性 @return 当前构建器 */
         public Builder attributes(Map<String, String> value) { attributes = value == null ? new LinkedHashMap<String, String>() : value; return this; }
-        /** @param value validated fact snapshots @return current builder */
+        /** @param value 已校验的事实快照集合 @return 当前构建器 */
         public Builder facts(Collection<EventFact> value) {
             facts = value == null ? new ArrayList<EventFact>() : new ArrayList<EventFact>(value);
             return this;

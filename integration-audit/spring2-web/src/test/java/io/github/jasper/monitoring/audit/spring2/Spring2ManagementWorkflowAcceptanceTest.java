@@ -20,6 +20,12 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+/**
+ * Boot 2 的安全管理工作流验收测试。
+ *
+ * <p>覆盖白名单有效期、规则双人审批与版本追加、告警分派和处置时间线，重点验证乐观锁、
+ * 系统范围授权和仅追加审计记录。</p>
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = "spring.datasource.url=jdbc:h2:mem:audit-spring2-management;MODE=MySQL;DB_CLOSE_DELAY=-1")
 class Spring2ManagementWorkflowAcceptanceTest {

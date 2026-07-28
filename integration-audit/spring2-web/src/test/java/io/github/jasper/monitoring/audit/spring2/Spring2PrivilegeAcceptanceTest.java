@@ -21,6 +21,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
+/**
+ * Boot 2 的权限提升防护验收测试。
+ *
+ * <p>验证管理员为本人增加高权限角色时，拒绝与告警控制均发生在角色关系事务提交之前。</p>
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class Spring2PrivilegeAcceptanceTest {
     private static final String ACTOR = "audit-admin";

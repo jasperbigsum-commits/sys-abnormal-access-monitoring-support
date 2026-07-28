@@ -12,20 +12,25 @@ import java.util.Optional;
  * 规则实现只返回命中证据；告警持久化、通知和宿主控制动作均由规则之外的组件负责。</p>
  */
 public interface DetectionRule<R extends RuleType> {
-    /** @return the complete static definition for this rule */
+    /** @return 该规则的完整静态定义 */
     RuleDefinition<R> definition();
 
-    /** @return the statically registered rule token */
+    /** @return 规则类型令牌 */
     default Class<R> type() {
         return definition().getType();
     }
 
-    /** Returns the stable identifier owned by the typed definition. */
+    /** @return 类型化定义持有的稳定规则标识 */
     default String getRuleId() {
         return definition().getId();
     }
 
-    /** Evaluates through the typed context without consulting an external policy. */
+    /**
+     * 基于类型化上下文执行无副作用评估。
+     *
+     * @param context 含当前事件与历史窗口的评估上下文
+     * @return 命中时返回规则证据，否则返回空
+     */
     Optional<RuleMatch> evaluate(RuleEvaluationContext context);
 
 }

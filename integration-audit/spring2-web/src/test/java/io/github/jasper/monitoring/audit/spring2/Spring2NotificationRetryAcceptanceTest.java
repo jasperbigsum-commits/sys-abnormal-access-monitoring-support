@@ -17,6 +17,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+/**
+ * Boot 2 的告警通知持久重试验收测试。
+ *
+ * <p>模拟通知渠道前两次失败，验证告警先持久化、重试不创建重复告警，以及有限重试最终送达。</p>
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "spring.datasource.url=jdbc:h2:mem:audit-spring2-notification;MODE=MySQL;DB_CLOSE_DELAY=-1",
     "abnormal.access.monitor.notification.channel=tc14",

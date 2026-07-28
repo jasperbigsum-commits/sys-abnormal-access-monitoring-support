@@ -2,7 +2,7 @@ package io.github.jasper.monitoring.api.management.command;
 
 import java.util.Objects;
 
-/** Assigns an alert to a host-system operator using optimistic locking. */
+/** 告警分配命令，使用乐观锁控制并发更新。 */
 public final class AlertAssignmentCommand extends VersionedReasonCommand {
     private final String assigneeId;
 
@@ -16,11 +16,14 @@ public final class AlertAssignmentCommand extends VersionedReasonCommand {
         this.assigneeId = assigneeId;
     }
 
+    /** @return 告警分配命令对象 */
     public static AlertAssignmentCommand of(String alertId, long expectedVersion, String assigneeId,
                                             String reason, String idempotencyKey) {
         return new AlertAssignmentCommand(alertId, expectedVersion, assigneeId, reason, idempotencyKey);
     }
 
+    /** @return 告警标识 */
     public String getAlertId() { return getResourceId(); }
+    /** @return 被分配处理人的标识 */
     public String getAssigneeId() { return assigneeId; }
 }

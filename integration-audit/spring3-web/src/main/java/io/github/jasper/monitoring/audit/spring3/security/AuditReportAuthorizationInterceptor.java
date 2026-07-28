@@ -12,8 +12,13 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.HandlerMapping;
 import java.util.Map;
 
-/** The single fail-closed authorization boundary for report HTTP resources. */
+/**
+ * 报告 HTTP 资源的唯一 fail-closed 授权边界。
+ *
+ * <p>拦截器的先授权后访问模式可供生产参考；报告目录、夹具 Realm 和固定响应策略属于集成夹具实现。</p>
+ */
 public final class AuditReportAuthorizationInterceptor implements HandlerInterceptor {
+    // 集成实现：在验收请求内传递已授权的夹具报告，避免 Controller 再次按客户端标识查询。
     public static final String AUTHORIZED_REPORT =
         AuditReportAuthorizationInterceptor.class.getName() + ".authorizedReport";
 
@@ -33,12 +38,14 @@ public final class AuditReportAuthorizationInterceptor implements HandlerInterce
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        // 集成夹具实现：从固定报告目录解析资源，而非从生产业务仓储读取。
         String reportId = pathVariable(request, "reportId");
         AuditReportCatalog.AuditReport report = reports.find(reportId);
         if (report == null) {
             response.setStatus(HttpStatus.NOT_FOUND.value());
             return false;
         }
+        // 集成实现：跨组织统一返回 404，以验证资源存在性不泄露。
         boolean hiddenByScope = !report.getOrganization().equals(organizationOfCurrentActor());
         AuthorizationDecision decision = guard.authorize(contexts.identityContext(), new ResourceScopeRequest(
             contexts.requestContext(), "report", report.getId(), report.getOrganization()));

@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 final class ManagementModelValidation {
+    /** 管理模型字段校验工具。 */
     private ManagementModelValidation() {
     }
 

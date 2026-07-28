@@ -3,17 +3,19 @@ package io.github.jasper.monitoring.api.management;
 import java.util.Objects;
 
 /**
- * Shared guard for host implementations of management services.
+ * 管理服务实现的通用授权守卫。
  *
- * <p>Management service implementations use this guard with their trusted,
- * constructor-injected authorizer. Controller adapters must never select or
- * supply an authorizer.</p>
+ * <p>管理服务应配合构造器注入的可信授权器使用该守卫。Controller 适配器不应自行选择或传入授权器实现。</p>
  */
 public final class ManagementServiceSupport {
     private ManagementServiceSupport() {
     }
 
-    /** Authorizes one resource in the actor's scope and returns the actor. */
+    /**
+     * 在操作者作用域内对单个资源执行授权校验。
+     *
+     * @return 校验通过后的原操作者对象
+     */
     public static ManagementActor authorize(ManagementAuthorizer authorizer,
                                             ManagementActor actor,
                                             ManagementOperation operation,

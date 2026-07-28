@@ -17,22 +17,30 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** Shiro configuration isolated to the Boot 2 acceptance fixture. */
+/**
+ * 隔离在 Boot 2 验收宿主中的 Shiro 配置。
+ *
+ * <p>本配置包含多个集成夹具 Bean；生产应保留可信身份派生与资源范围授权边界，
+ * 但必须替换固定 Realm、测试过滤器、URL 链和夹具系统范围。</p>
+ */
 @Configuration
 public class AuditShiroRbacConfiguration {
     @Bean
     public Realm auditRbacRealm(AuditFixtureRepository fixtures) {
+        // 集成夹具实现：使用 audit_* 测试表提供 Shiro 账号和角色。
         return new AuditRbacRealm(fixtures);
     }
 
     @Bean
     public AuditPrincipalFilter auditPrincipalFilter(Realm realm) {
+        // 集成夹具实现：将 X-Audit-Principal 转换为测试 Subject。
         return new AuditPrincipalFilter((AuditRbacRealm) realm);
     }
 
     @Bean
     public FilterRegistrationBean<AuditPrincipalFilter> auditPrincipalFilterRegistration(
         AuditPrincipalFilter filter) {
+        // 集成夹具实现：禁止 Spring 直接注册，确保过滤器只通过 Shiro 链执行一次。
         FilterRegistrationBean<AuditPrincipalFilter> registration =
             new FilterRegistrationBean<AuditPrincipalFilter>(filter);
         registration.setEnabled(false);
@@ -41,6 +49,7 @@ public class AuditShiroRbacConfiguration {
 
     @Bean
     public ShiroFilterChainDefinition shiroFilterChainDefinition() {
+        // 集成夹具实现：匿名认证端点与固定 /audit/** 保护路径仅服务验收路由。
         DefaultShiroFilterChainDefinition chain = new DefaultShiroFilterChainDefinition();
         chain.addPathDefinition("/audit/authentication/**", "anon");
         chain.addPathDefinition("/audit/**", "auditPrincipalFilter");
@@ -49,12 +58,14 @@ public class AuditShiroRbacConfiguration {
 
     @Bean
     public IdentityContextProvider auditIdentityContextProvider() {
+        // 集成实现：从已认证 Subject 派生监测身份；生产可替换为 SSO/JWT/会话适配器。
         return request -> authenticatedIdentity();
     }
 
     @Bean
     public ResourceScopeAuthorizer auditResourceScopeAuthorizer(AuditReportCatalog catalog, Realm realm) {
         return (identity, request) -> {
+            // 集成夹具实现：用固定报告目录、组织范围和 Shiro 权限验证资源访问。
             Subject subject = SecurityUtils.getSubject();
             String principal = subject.getPrincipal() == null ? null : String.valueOf(subject.getPrincipal());
             AuditReportCatalog.AuditReport report = catalog.find(request.getResourceId());

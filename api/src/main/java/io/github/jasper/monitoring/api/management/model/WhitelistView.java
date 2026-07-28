@@ -1,6 +1,6 @@
 package io.github.jasper.monitoring.api.management.model;
 
-/** Current versioned whitelist state returned to host management adapters. */
+/** 返回给宿主管理适配器的白名单版本化状态视图。 */
 public final class WhitelistView {
     private final String id;
     private final String systemScope;
@@ -18,27 +18,32 @@ public final class WhitelistView {
         this.version = version;
     }
 
+    /** @return 白名单视图对象 */
     public static WhitelistView of(String id, String systemScope, String status, long version) {
         return new WhitelistView(id, systemScope, status, version);
     }
 
-    /** Compatibility factory for repositories that expose only an active first version. */
+    /** @return 兼容旧仓储的默认激活状态白名单视图 */
     public static WhitelistView of(String id, String systemScope) {
         return new WhitelistView(id, systemScope, "ACTIVE", 1L);
     }
 
+    /** @return 白名单标识 */
     public String getId() {
         return id;
     }
 
+    /** @return 系统作用域 */
     public String getSystemScope() {
         return systemScope;
     }
 
+    /** @return 白名单状态 */
     public String getStatus() {
         return status;
     }
 
+    /** @return 版本号 */
     public long getVersion() {
         return version;
     }

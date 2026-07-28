@@ -19,6 +19,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import io.github.jasper.monitoring.spring3.autoconfigure.AbnormalAccessMonitorProperties;
 
+/**
+ * Boot 3 的 OBSERVE 与 ENFORCE 运行模式验收测试。
+ *
+ * <p>验证 OBSERVE 继续保留认证、事件和告警但不执行控制副作用；ENFORCE 则调用已注册的宿主控制处理器。</p>
+ */
 class Spring3RuntimeModeAcceptanceTest {
     @Test
     @DisplayName("TC-17 observe records without blocking while enforce applies controls")

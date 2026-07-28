@@ -1,27 +1,36 @@
 package io.github.jasper.monitoring.api.management;
-import io.github.jasper.monitoring.api.management.command.*; import io.github.jasper.monitoring.api.management.model.AlertView; import io.github.jasper.monitoring.api.management.query.*;
+
+import io.github.jasper.monitoring.api.management.command.AlertAcknowledgeCommand;
+import io.github.jasper.monitoring.api.management.command.AlertAssignmentCommand;
+import io.github.jasper.monitoring.api.management.command.AlertCloseCommand;
+import io.github.jasper.monitoring.api.management.command.AlertFalsePositiveCommand;
+import io.github.jasper.monitoring.api.management.command.AlertStartInvestigationCommand;
+import io.github.jasper.monitoring.api.management.model.AlertAssignmentView;
+import io.github.jasper.monitoring.api.management.model.AlertView;
+import io.github.jasper.monitoring.api.management.query.AlertAssignmentQuery;
+import io.github.jasper.monitoring.api.management.query.AlertQuery;
+
 /**
- * Alert queries and versioned disposition commands for direct use by a host Controller adapter.
- * Every method authorizes the actor scope before persistence access. Mutations use optimistic locking,
- * append disposition history, and commit their success audit in the same transaction.
+ * 告警查询与版本化处置命令的管理边界，供宿主 Controller 适配器直接使用。
+ *
+ * <p>每个方法都应在访问持久化前校验操作者作用域。写操作采用乐观锁并追加处置历史，
+ * 同时在同一事务内提交成功审计记录。</p>
  */
 public interface AlertManagementService {
-    /** Lists alerts visible in the actor's system scope. */
+    /** @return 当前操作者系统作用域内可见的告警分页结果 */
     ManagementPage<AlertView> search(ManagementActor actor, AlertQuery query);
-    /** Reads one alert after scoped authorization. */
+    /** @return 授权通过后读取到的单条告警视图 */
     AlertView get(ManagementActor actor, String alertId);
-    /** Returns append-only assignment history with a caller-supplied bounded page. */
-    ManagementPage<io.github.jasper.monitoring.api.management.model.AlertAssignmentView> assignmentHistory(
-        ManagementActor actor, String alertId,
-        io.github.jasper.monitoring.api.management.query.AlertAssignmentQuery query);
-    /** Assigns an alert for triage, begins investigation, and appends the assignee to disposition history. */
+    /** @return 告警的仅追加分配历史分页结果 */
+    ManagementPage<AlertAssignmentView> assignmentHistory(ManagementActor actor, String alertId, AlertAssignmentQuery query);
+    /** @return 分配并进入排查后的告警视图 */
     AlertView assign(ManagementActor actor, AlertAssignmentCommand command);
-    /** Records acknowledgement without replacing earlier dispositions. */
+    /** @return 记录确认后的告警视图（不覆盖历史处置） */
     AlertView acknowledge(ManagementActor actor, AlertAcknowledgeCommand command);
-    /** Moves an unassigned alert into investigation without assigning an operator. */
+    /** @return 开始排查后的告警视图（可不指定处理人） */
     AlertView startInvestigation(ManagementActor actor, AlertStartInvestigationCommand command);
-    /** Closes an alert using its expected version. */
+    /** @return 按期望版本关闭后的告警视图 */
     AlertView close(ManagementActor actor, AlertCloseCommand command);
-    /** Closes an alert as a false positive while retaining all evidence and disposition history. */
+    /** @return 标记误报后的告警视图（保留证据与处置历史） */
     AlertView markFalsePositive(ManagementActor actor, AlertFalsePositiveCommand command);
 }

@@ -39,6 +39,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
+/**
+ * Boot 2 的端到端 HTTP 审计验收测试。
+ *
+ * <p>覆盖 MyBatis 持久化、请求上下文、资源授权、显式与注解采集、管理身份，以及登录、查询、
+ * 导出和会话控制等核心 TC/IA 场景；断言 HTTP 响应、领域持久化与宿主业务状态三类证据。</p>
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class Spring2AuditWebAcceptanceTest {
     private static final long SERVER_REPORTED_ROW_COUNT = 37L;

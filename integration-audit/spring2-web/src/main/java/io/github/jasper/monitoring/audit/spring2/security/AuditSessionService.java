@@ -4,9 +4,14 @@ import io.github.jasper.monitoring.audit.spring2.persistence.AuditFixtureReposit
 import java.time.Clock;
 import org.springframework.stereotype.Service;
 
-/** MyBatis-backed session operations owned by the host system. */
+/**
+ * 宿主系统拥有的会话操作夹具。
+ *
+ * <p>接口边界可供生产参考；本类通过 {@code audit_session} 测试表模拟会话，必须替换为真实会话服务。</p>
+ */
 @Service
 public final class AuditSessionService {
+    // 集成夹具实现：使用 audit_session 测试表模拟宿主会话状态。
     private final AuditFixtureRepository fixtures; private final Clock clock = Clock.systemUTC();
     public AuditSessionService(AuditFixtureRepository fixtures) { this.fixtures=fixtures; }
     public int revokeAll(String userId) { return fixtures.revokeSessions(userId, clock.instant()); }

@@ -1,6 +1,6 @@
 package io.github.jasper.monitoring.api.management;
 
-/** Independently authorizable management operations. */
+/** 可独立授权的管理操作枚举。 */
 public enum ManagementOperation {
     EVENT_READ,
     ALERT_READ,

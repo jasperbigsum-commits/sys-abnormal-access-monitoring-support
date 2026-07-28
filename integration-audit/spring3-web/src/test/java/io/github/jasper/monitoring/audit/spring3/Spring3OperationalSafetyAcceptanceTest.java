@@ -33,6 +33,11 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+/**
+ * Boot 3 的运行安全性验收测试。
+ *
+ * <p>验证并发重复控制只执行一次且不延长 TTL，以及 HTTP 响应、审计表和日志均不泄露敏感原文。</p>
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = "spring.datasource.url=jdbc:h2:mem:audit-spring3-safety;MODE=MySQL;DB_CLOSE_DELAY=-1")
 @ExtendWith(OutputCaptureExtension.class)

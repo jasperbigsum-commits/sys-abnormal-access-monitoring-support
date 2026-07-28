@@ -51,6 +51,13 @@ public class MonitoringFixtureController {
             facts, FactSource.HOST_PROVIDER)));
     }
 
+    /**
+     * 注解式查询动作采集示例。
+     *
+     * <p><strong>用例编号</strong>：IA-03。</p>
+     * <p><strong>验证核心点</strong>：`@MonitorAction` 在成功路径应产出与动作契约一致的事件类型与结果。</p>
+     * <p><strong>注意细节</strong>：仅声明动作不等于声明业务事实；事实仍由显式埋点或事实绑定提供。</p>
+     */
     @GetMapping("/annotated-query")
     @MonitorAction(BuiltInActions.Query.class)
     public Map<String, Object> annotatedQuery() {
@@ -66,6 +73,14 @@ public class MonitoringFixtureController {
         return body;
     }
 
+    /**
+     * 注解动作 + 嵌套参数事实绑定示例。
+     *
+     * <p><strong>用例编号</strong>：IA-04。</p>
+     * <p><strong>验证核心点</strong>：`@ActionFact(path = "report.rows")` 能将嵌套入参映射为强类型 Fact，
+     * 并在入库事实中保留 METHOD_PARAMETER 来源。</p>
+     * <p><strong>注意细节</strong>：路径解析失败或类型不匹配应在采集阶段显式失败，避免脏事实入库。</p>
+     */
     @PostMapping("/annotated-export")
     @MonitorAction(BuiltInActions.SensitiveView.class)
     public Map<String, Object> annotatedExport(
@@ -74,6 +89,13 @@ public class MonitoringFixtureController {
         return exportResponse();
     }
 
+    /**
+     * 注解式拒绝结果分类示例。
+     *
+     * <p><strong>用例编号</strong>：IA-03。</p>
+     * <p><strong>验证核心点</strong>：当控制器返回 403 时，注解动作应将结果分类为 DENIED，而非 SUCCESS。</p>
+     * <p><strong>注意细节</strong>：拒绝分类依赖响应语义，不应由客户端自报字段决定。</p>
+     */
     @PostMapping("/annotated-export-denied")
     @MonitorAction(BuiltInActions.Query.class)
     public ResponseEntity<Map<String, Object>> annotatedExportDenied(@RequestBody AuditExportRequest ignored) {

@@ -3,19 +3,19 @@ import java.util.Objects;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-/** Immutable versioned command with a bounded replay/idempotency key. */
+
+/** 带版本与幂等键的不可变管理命令基类。 */
 public class VersionedReasonCommand {
  private final String resourceId, reason, idempotencyKey; private final long expectedVersion;
  protected VersionedReasonCommand(String id,long version,String reason,String key){if(version<0)throw new IllegalArgumentException("expectedVersion must be non-negative");this.resourceId=require(id,"resourceId");this.reason=requireBounded(reason,"reason",512);this.idempotencyKey=requireBounded(key,"idempotencyKey",128);this.expectedVersion=version;}
  /**
-  * The generic command has no operation identity and therefore cannot safely
-  * derive a deterministic idempotency key. Callers must provide an explicit
-  * key, or use an operation-specific command type.
+  * 通用命令不包含具体操作身份，无法安全推导确定性幂等键。
+  * 调用方必须显式提供幂等键，或使用具体操作命令类型。
   */
  public static VersionedReasonCommand of(String id,long version,String reason){throw new IllegalArgumentException("idempotencyKey must be explicit for a generic command");}
  public static VersionedReasonCommand of(String id,long version,String reason,String key){return new VersionedReasonCommand(id,version,reason,key);}
  public String getResourceId(){return resourceId;} public long getExpectedVersion(){return expectedVersion;} public String getReason(){return reason;} public String getIdempotencyKey(){return idempotencyKey;}
- /** Creates a bounded, operation-scoped deterministic replay key. */
+ /** 生成有长度上限且绑定操作域的确定性重放键。 */
  protected static String operationKey(String operation,String id,long version){
   String namespace=requireBounded(operation,"operation",32);
   String resource=require(id,"resourceId");

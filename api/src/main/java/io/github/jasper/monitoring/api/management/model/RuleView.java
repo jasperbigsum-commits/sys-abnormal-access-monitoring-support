@@ -2,7 +2,7 @@ package io.github.jasper.monitoring.api.management.model;
 
 import io.github.jasper.monitoring.api.rule.RuleMode;
 
-/** Current persisted rule version exposed to management adapters. */
+/** 暴露给管理适配器的当前规则持久化版本视图。 */
 public final class RuleView {
     private final String id;
     private final String systemScope;
@@ -22,13 +22,19 @@ public final class RuleView {
         this.threshold = threshold;
     }
 
+    /** @return 规则视图对象 */
     public static RuleView of(String id, String scope, long version, RuleMode mode, long threshold) {
         return new RuleView(id, scope, version, mode, threshold);
     }
 
+    /** @return 规则标识 */
     public String getId() { return id; }
+    /** @return 系统作用域 */
     public String getSystemScope() { return systemScope; }
+    /** @return 版本号 */
     public long getVersion() { return version; }
+    /** @return 规则模式 */
     public RuleMode getMode() { return mode; }
+    /** @return 阈值 */
     public long getThreshold() { return threshold; }
 }

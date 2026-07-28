@@ -25,7 +25,7 @@ public interface NotificationChannel {
         return new NotificationChannel() {
             @Override
             public void notify(String deliveryId, SecurityAlert alert) {
-                // Notifications are intentionally best-effort and never control a business transaction.
+                // 通知投递是尽力而为行为，不应影响宿主业务事务提交。
             }
         };
     }

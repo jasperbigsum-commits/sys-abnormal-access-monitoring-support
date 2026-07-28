@@ -13,14 +13,20 @@ import org.apache.shiro.authz.SimpleAuthorizationInfo;
 import org.apache.shiro.realm.AuthorizingRealm;
 import org.apache.shiro.subject.PrincipalCollection;
 
-/** Shiro adapter over the reference host's MyBatis account and role state. */
+/**
+ * 基于参考宿主 MyBatis 账号与角色状态的 Shiro Realm。
+ *
+ * <p>这是集成夹具实现：固定凭据和角色到权限的映射只服务验收场景，生产应接入真实身份目录与授权策略。</p>
+ */
 public final class AuditRbacRealm extends AuthorizingRealm {
+    // 集成夹具实现：所有测试主体共用的固定凭据。
     static final String FIXTURE_CREDENTIAL = "audit-fixture";
     private final AuditFixtureRepository fixtures;
 
     public AuditRbacRealm(AuditFixtureRepository fixtures) { this.fixtures = fixtures; }
 
     public boolean supportsPrincipal(String principal) {
+        // 集成夹具实现：从 audit_account 读取固定测试账号状态。
         Map<String, Object> account = fixtures.findAccount(principal);
         return !account.isEmpty() && "ACTIVE".equals(String.valueOf(account.get("STATUS")));
     }
@@ -43,6 +49,7 @@ public final class AuditRbacRealm extends AuthorizingRealm {
         SimpleAuthorizationInfo info = new SimpleAuthorizationInfo();
         List<String> roles = fixtures.findRoles(principal);
         info.addRoles(roles);
+        // 集成夹具实现：将夹具角色映射为验收接口所需的最小权限集合。
         if (roles.contains("audit-exporter")) { info.addStringPermission("report:read"); info.addStringPermission("report:export"); }
         if (roles.contains("audit-viewer")) info.addStringPermission("report:read");
         if (roles.contains("audit-admin")) info.addStringPermission("monitoring:manage");
