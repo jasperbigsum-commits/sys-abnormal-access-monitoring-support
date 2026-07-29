@@ -1,4 +1,4 @@
-CREATE TABLE security_event (
+CREATE TABLE monitoring_security_event (
     event_id VARCHAR(128) NOT NULL COMMENT '事件唯一标识',
     system_id VARCHAR(128) NOT NULL COMMENT '来源系统标识',
     event_type VARCHAR(64) NOT NULL COMMENT '安全事件类型',
@@ -28,47 +28,47 @@ CREATE TABLE security_event (
 -- Existing deployments: explicitly include and renumber db/upgrade/monitoring-event-input-quality-v2.sql in the host migration plan.
 -- It uses defaults 0, 0, and 'UNKNOWN' so historical events remain unknown; fresh installations use this complete baseline.
 
-CREATE INDEX idx_security_event_occurred_at ON security_event (occurred_at);
-CREATE INDEX idx_security_event_subject_at ON security_event (user_id, source_ip, occurred_at);
-CREATE INDEX idx_security_event_system_at ON security_event (system_id, occurred_at, event_id);
+CREATE INDEX idx_security_event_occurred_at ON monitoring_security_event (occurred_at);
+CREATE INDEX idx_security_event_subject_at ON monitoring_security_event (user_id, source_ip, occurred_at);
+CREATE INDEX idx_security_event_system_at ON monitoring_security_event (system_id, occurred_at, event_id);
 
-CREATE TABLE rule_observation (
+CREATE TABLE monitoring_rule_observation (
     observation_id VARCHAR(64) NOT NULL COMMENT '观察证据唯一标识',
     rule_id VARCHAR(128) NOT NULL COMMENT '命中规则标识',
     event_id VARCHAR(128) NOT NULL COMMENT '关联安全事件标识',
     subject VARCHAR(256) NOT NULL COMMENT '规则评估主体',
     observed_at TIMESTAMP NOT NULL COMMENT '观察记录时间',
     PRIMARY KEY (observation_id),
-    CONSTRAINT fk_rule_observation_event FOREIGN KEY (event_id) REFERENCES security_event (event_id)
+    CONSTRAINT fk_rule_observation_event FOREIGN KEY (event_id) REFERENCES monitoring_security_event (event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='仅观察规则命中证据';
 
-CREATE INDEX idx_rule_observation_rule_at ON rule_observation (rule_id, observed_at, observation_id);
-CREATE INDEX idx_rule_observation_event ON rule_observation (event_id);
+CREATE INDEX idx_rule_observation_rule_at ON monitoring_rule_observation (rule_id, observed_at, observation_id);
+CREATE INDEX idx_rule_observation_event ON monitoring_rule_observation (event_id);
 
-CREATE TABLE security_event_fact (
+CREATE TABLE monitoring_security_event_fact (
     event_id VARCHAR(128) NOT NULL,
     fact_key VARCHAR(128) NOT NULL,
     value_type VARCHAR(256) NOT NULL,
     value_text VARCHAR(2048) NOT NULL,
     source_type VARCHAR(64) NOT NULL,
     PRIMARY KEY (event_id, fact_key),
-    CONSTRAINT fk_event_fact_event FOREIGN KEY (event_id) REFERENCES security_event (event_id)
+    CONSTRAINT fk_event_fact_event FOREIGN KEY (event_id) REFERENCES monitoring_security_event (event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件规范化事实值';
 
-CREATE TABLE security_event_role (
+CREATE TABLE monitoring_security_event_role (
     event_id VARCHAR(128) NOT NULL COMMENT '事件唯一标识',
     role_id VARCHAR(128) NOT NULL COMMENT '角色标识',
     PRIMARY KEY (event_id, role_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件角色关联表';
 
-CREATE TABLE security_event_attribute (
+CREATE TABLE monitoring_security_event_attribute (
     event_id VARCHAR(128) NOT NULL COMMENT '事件唯一标识',
     attribute_key VARCHAR(128) NOT NULL COMMENT '受控扩展属性键',
     attribute_value VARCHAR(512) NOT NULL COMMENT '受控扩展属性值',
     PRIMARY KEY (event_id, attribute_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件扩展属性表';
 
-CREATE TABLE security_event_input_issue (
+CREATE TABLE monitoring_security_event_input_issue (
     event_id VARCHAR(128) NOT NULL COMMENT '事件唯一标识',
     issue_index INTEGER NOT NULL COMMENT '事件内稳定问题序号',
     rule_id VARCHAR(128) NOT NULL COMMENT '受影响规则稳定标识',
@@ -78,7 +78,7 @@ CREATE TABLE security_event_input_issue (
     PRIMARY KEY (event_id, issue_index)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件输入质量问题表';
 
-CREATE TABLE security_rule (
+CREATE TABLE monitoring_security_rule (
     system_id VARCHAR(128) NOT NULL COMMENT '规则所属宿主系统标识',
     rule_id VARCHAR(128) NOT NULL COMMENT '规则稳定标识',
     rule_version INTEGER NOT NULL COMMENT '规则版本号',
@@ -96,9 +96,9 @@ CREATE TABLE security_rule (
     PRIMARY KEY (system_id, rule_id, rule_version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='持久化安全规则版本表';
 
-CREATE UNIQUE INDEX uk_security_rule_idempotency ON security_rule (system_id, idempotency_key);
+CREATE UNIQUE INDEX uk_security_rule_idempotency ON monitoring_security_rule (system_id, idempotency_key);
 
-CREATE TABLE security_alert (
+CREATE TABLE monitoring_security_alert (
     alert_id VARCHAR(128) NOT NULL COMMENT '告警唯一标识',
     rule_id VARCHAR(128) NOT NULL COMMENT '命中规则标识',
     risk_level VARCHAR(32) NOT NULL COMMENT '告警风险等级',
@@ -112,17 +112,17 @@ CREATE TABLE security_alert (
     PRIMARY KEY (alert_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全告警表';
 
-CREATE INDEX idx_security_alert_fingerprint_status ON security_alert (fingerprint, status);
-CREATE INDEX idx_security_alert_rule_status ON security_alert (rule_id, status, last_seen);
+CREATE INDEX idx_security_alert_fingerprint_status ON monitoring_security_alert (fingerprint, status);
+CREATE INDEX idx_security_alert_rule_status ON monitoring_security_alert (rule_id, status, last_seen);
 
-CREATE TABLE alert_event_link (
+CREATE TABLE monitoring_alert_event_link (
     alert_id VARCHAR(128) NOT NULL COMMENT '告警唯一标识',
     event_id VARCHAR(128) NOT NULL COMMENT '事件唯一标识',
     linked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '关联创建时间',
     PRIMARY KEY (alert_id, event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警与安全事件关联表';
 
-CREATE TABLE control_action (
+CREATE TABLE monitoring_control_action (
     control_id VARCHAR(128) NOT NULL COMMENT '控制执行唯一标识',
     idempotency_key VARCHAR(256) NOT NULL COMMENT '幂等键',
     alert_id VARCHAR(128) COMMENT '关联告警标识',
@@ -138,7 +138,7 @@ CREATE TABLE control_action (
     UNIQUE (idempotency_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='控制动作执行记录表';
 
-CREATE TABLE alert_disposition (
+CREATE TABLE monitoring_alert_disposition (
     disposition_id VARCHAR(128) NOT NULL COMMENT '处置记录唯一标识',
     alert_id VARCHAR(128) NOT NULL COMMENT '告警唯一标识',
     disposition_type VARCHAR(64) NOT NULL CHECK (disposition_type IN ('ACKNOWLEDGED', 'IN_PROGRESS', 'CLOSED', 'FALSE_POSITIVE')) COMMENT '处置类型',
@@ -151,9 +151,9 @@ CREATE TABLE alert_disposition (
     PRIMARY KEY (disposition_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警处置历史表';
 
-CREATE INDEX idx_alert_disposition_alert_at ON alert_disposition (alert_id, created_at);
+CREATE INDEX idx_alert_disposition_alert_at ON monitoring_alert_disposition (alert_id, created_at);
 
-CREATE TABLE security_whitelist (
+CREATE TABLE monitoring_security_whitelist (
     whitelist_id VARCHAR(128) COMMENT '管理侧白名单标识',
     system_id VARCHAR(128) COMMENT '管理授权所属系统范围',
     rule_id VARCHAR(128) NOT NULL COMMENT '适用规则标识',
@@ -167,20 +167,20 @@ CREATE TABLE security_whitelist (
     PRIMARY KEY (rule_id, subject, expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全规则白名单表';
 
-CREATE INDEX idx_security_whitelist_lookup ON security_whitelist (rule_id, subject, expires_at);
-CREATE UNIQUE INDEX uk_security_whitelist_id ON security_whitelist (whitelist_id);
+CREATE INDEX idx_security_whitelist_lookup ON monitoring_security_whitelist (rule_id, subject, expires_at);
+CREATE UNIQUE INDEX uk_security_whitelist_id ON monitoring_security_whitelist (whitelist_id);
 
-CREATE TABLE control_action_attempt (
+CREATE TABLE monitoring_control_action_attempt (
     control_id VARCHAR(128) NOT NULL,
     attempt_no INTEGER NOT NULL,
     status VARCHAR(32) NOT NULL,
     failure_reason VARCHAR(512),
     attempted_at TIMESTAMP NOT NULL,
     PRIMARY KEY (control_id, attempt_no),
-    CONSTRAINT fk_control_attempt_control FOREIGN KEY (control_id) REFERENCES control_action (control_id)
+    CONSTRAINT fk_control_attempt_control FOREIGN KEY (control_id) REFERENCES monitoring_control_action (control_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='控制执行尝试历史';
 
-CREATE TABLE notification_delivery (
+CREATE TABLE monitoring_notification_delivery (
     delivery_id VARCHAR(128) NOT NULL,
     channel VARCHAR(128) NOT NULL,
     aggregate_id VARCHAR(128) NOT NULL,
@@ -197,7 +197,7 @@ CREATE TABLE notification_delivery (
     INDEX idx_notification_pending (channel, status, updated_at, delivery_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知投递状态';
 
-CREATE TABLE management_audit (
+CREATE TABLE monitoring_management_audit (
     audit_id VARCHAR(128) NOT NULL,
     system_id VARCHAR(128) NOT NULL,
     actor_id VARCHAR(128) NOT NULL,
@@ -208,4 +208,4 @@ CREATE TABLE management_audit (
     occurred_at TIMESTAMP NOT NULL,
     PRIMARY KEY (audit_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理操作脱敏审计记录';
-CREATE INDEX idx_management_audit_system_at ON management_audit (system_id, occurred_at, audit_id);
+CREATE INDEX idx_management_audit_system_at ON monitoring_management_audit (system_id, occurred_at, audit_id);

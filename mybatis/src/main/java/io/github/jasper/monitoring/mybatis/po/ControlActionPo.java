@@ -6,7 +6,7 @@ import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 
-/** Persistent representation of one {@code control_action} row. */
+/** Persistent representation of one {@code monitoring_control_action} row. */
 @Getter
 @Setter
 public final class ControlActionPo {

@@ -22,7 +22,7 @@ public final class AuditNotificationChannel implements NotificationChannel {
     @Override
     public void notify(String deliveryId, SecurityAlert alert) {
         Integer alertRows = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM security_alert WHERE alert_id = ?", Integer.class, alert.getAlertId());
+            "SELECT COUNT(*) FROM monitoring_security_alert WHERE alert_id = ?", Integer.class, alert.getAlertId());
         if (alertRows == null || alertRows.intValue() != 1) {
             throw new AssertionError("notification must run after exactly one alert row commits");
         }

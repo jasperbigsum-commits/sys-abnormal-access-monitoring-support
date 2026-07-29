@@ -90,12 +90,12 @@ class ControlConcurrencyTest {
     }
 
     private static String status(DataSource source, String key) {
-        try (java.sql.Connection c = source.getConnection(); java.sql.PreparedStatement s = c.prepareStatement("SELECT status FROM control_action WHERE idempotency_key=?")) {
+        try (java.sql.Connection c = source.getConnection(); java.sql.PreparedStatement s = c.prepareStatement("SELECT status FROM monitoring_control_action WHERE idempotency_key=?")) {
             s.setString(1, key); try (java.sql.ResultSet r = s.executeQuery()) { assertTrue(r.next()); return r.getString(1); }
         } catch (java.sql.SQLException e) { throw new AssertionError(e); }
     }
     private static int attemptCount(DataSource source, String controlId) throws Exception {
-        try (java.sql.Connection c = source.getConnection(); java.sql.PreparedStatement s = c.prepareStatement("SELECT COUNT(*) FROM control_action_attempt WHERE control_id=?")) {
+        try (java.sql.Connection c = source.getConnection(); java.sql.PreparedStatement s = c.prepareStatement("SELECT COUNT(*) FROM monitoring_control_action_attempt WHERE control_id=?")) {
             s.setString(1, controlId); try (java.sql.ResultSet r = s.executeQuery()) { r.next(); return r.getInt(1); }
         }
     }

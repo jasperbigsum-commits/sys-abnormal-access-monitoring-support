@@ -40,18 +40,18 @@ class MyBatisManagementRepositoryTest {
         dataSource = new PooledDataSource("org.h2.Driver",
             "jdbc:h2:mem:management-" + System.nanoTime() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         try (Connection connection=dataSource.getConnection(); Statement statement=connection.createStatement()) {
-            statement.execute("CREATE TABLE security_event(event_id VARCHAR(128) PRIMARY KEY,system_id VARCHAR(128),occurred_at TIMESTAMP,action VARCHAR(128),result VARCHAR(32))");
-            statement.execute("CREATE TABLE management_audit(audit_id VARCHAR(128) PRIMARY KEY,system_id VARCHAR(128),actor_id VARCHAR(128),action VARCHAR(128),target_type VARCHAR(64),target_id VARCHAR(128),outcome VARCHAR(32),occurred_at TIMESTAMP)");
-            statement.execute("CREATE TABLE security_alert(alert_id VARCHAR(128) PRIMARY KEY,status VARCHAR(32),version BIGINT,last_seen TIMESTAMP)");
-            statement.execute("CREATE TABLE alert_event_link(alert_id VARCHAR(128),event_id VARCHAR(128))");
-            statement.execute("CREATE TABLE alert_disposition(disposition_id VARCHAR(128) PRIMARY KEY,alert_id VARCHAR(128),disposition_type VARCHAR(64),operator_id VARCHAR(128),assignee_id VARCHAR(128),expected_version BIGINT,comment_text VARCHAR(1024),evidence_summary VARCHAR(1024),created_at TIMESTAMP)");
-            statement.execute("CREATE TABLE security_rule(system_id VARCHAR(128),rule_id VARCHAR(128),rule_version BIGINT,rule_name VARCHAR(256),rule_definition CLOB,risk_level VARCHAR(32),rule_mode VARCHAR(32),rule_threshold BIGINT,enabled BOOLEAN,created_at TIMESTAMP,created_by VARCHAR(128),change_reason VARCHAR(512),approved_by VARCHAR(128),idempotency_key VARCHAR(128),UNIQUE(system_id,idempotency_key),PRIMARY KEY(system_id,rule_id,rule_version))");
-            statement.execute("INSERT INTO security_event VALUES('event-a','system-a',TIMESTAMP '2026-07-20 00:00:00','report:export','SUCCESS')");
-            statement.execute("INSERT INTO security_event VALUES('event-b','system-b',TIMESTAMP '2026-07-20 00:00:00','report:export','SUCCESS')");
-            statement.execute("INSERT INTO security_alert VALUES('alert-a','NEW',0,TIMESTAMP '2026-07-20 00:00:00')");
-            statement.execute("INSERT INTO alert_event_link VALUES('alert-a','event-a')");
-            statement.execute("INSERT INTO security_rule VALUES('system-a','rule-a',1,'Rule A','{}','HIGH','ALERT_ONLY',2,TRUE,CURRENT_TIMESTAMP,'system',NULL,NULL,NULL)");
-            statement.execute("INSERT INTO security_rule VALUES('system-b','rule-a',1,'Rule B','{}','LOW','OBSERVE',9,TRUE,CURRENT_TIMESTAMP,'system',NULL,NULL,NULL)");
+            statement.execute("CREATE TABLE monitoring_security_event(event_id VARCHAR(128) PRIMARY KEY,system_id VARCHAR(128),occurred_at TIMESTAMP,action VARCHAR(128),result VARCHAR(32))");
+            statement.execute("CREATE TABLE monitoring_management_audit(audit_id VARCHAR(128) PRIMARY KEY,system_id VARCHAR(128),actor_id VARCHAR(128),action VARCHAR(128),target_type VARCHAR(64),target_id VARCHAR(128),outcome VARCHAR(32),occurred_at TIMESTAMP)");
+            statement.execute("CREATE TABLE monitoring_security_alert(alert_id VARCHAR(128) PRIMARY KEY,status VARCHAR(32),version BIGINT,last_seen TIMESTAMP)");
+            statement.execute("CREATE TABLE monitoring_alert_event_link(alert_id VARCHAR(128),event_id VARCHAR(128))");
+            statement.execute("CREATE TABLE monitoring_alert_disposition(disposition_id VARCHAR(128) PRIMARY KEY,alert_id VARCHAR(128),disposition_type VARCHAR(64),operator_id VARCHAR(128),assignee_id VARCHAR(128),expected_version BIGINT,comment_text VARCHAR(1024),evidence_summary VARCHAR(1024),created_at TIMESTAMP)");
+            statement.execute("CREATE TABLE monitoring_security_rule(system_id VARCHAR(128),rule_id VARCHAR(128),rule_version BIGINT,rule_name VARCHAR(256),rule_definition CLOB,risk_level VARCHAR(32),rule_mode VARCHAR(32),rule_threshold BIGINT,enabled BOOLEAN,created_at TIMESTAMP,created_by VARCHAR(128),change_reason VARCHAR(512),approved_by VARCHAR(128),idempotency_key VARCHAR(128),UNIQUE(system_id,idempotency_key),PRIMARY KEY(system_id,rule_id,rule_version))");
+            statement.execute("INSERT INTO monitoring_security_event VALUES('event-a','system-a',TIMESTAMP '2026-07-20 00:00:00','report:export','SUCCESS')");
+            statement.execute("INSERT INTO monitoring_security_event VALUES('event-b','system-b',TIMESTAMP '2026-07-20 00:00:00','report:export','SUCCESS')");
+            statement.execute("INSERT INTO monitoring_security_alert VALUES('alert-a','NEW',0,TIMESTAMP '2026-07-20 00:00:00')");
+            statement.execute("INSERT INTO monitoring_alert_event_link VALUES('alert-a','event-a')");
+            statement.execute("INSERT INTO monitoring_security_rule VALUES('system-a','rule-a',1,'Rule A','{}','HIGH','ALERT_ONLY',2,TRUE,CURRENT_TIMESTAMP,'system',NULL,NULL,NULL)");
+            statement.execute("INSERT INTO monitoring_security_rule VALUES('system-b','rule-a',1,'Rule B','{}','LOW','OBSERVE',9,TRUE,CURRENT_TIMESTAMP,'system',NULL,NULL,NULL)");
         }
         Configuration configuration=new Configuration(new Environment("test",new JdbcTransactionFactory(),dataSource));
         MyBatisMonitoringStoreRegistrar.register(configuration);
@@ -73,7 +73,7 @@ class MyBatisManagementRepositoryTest {
             ManagementOperation.EVENT_READ,"security-event","event-a",ManagementAuditRecord.Outcome.SUCCEEDED,
             Instant.parse("2026-07-26T00:00:00Z")));
         try(Connection connection=dataSource.getConnection();Statement statement=connection.createStatement();
-            ResultSet rows=statement.executeQuery("SELECT actor_id,outcome FROM management_audit WHERE audit_id='audit-1'")) {
+            ResultSet rows=statement.executeQuery("SELECT actor_id,outcome FROM monitoring_management_audit WHERE audit_id='audit-1'")) {
             assertTrue(rows.next()); assertEquals("operator",rows.getString(1)); assertEquals("SUCCEEDED",rows.getString(2));
         }
     }
@@ -82,7 +82,7 @@ class MyBatisManagementRepositoryTest {
     void alertTransitionAndDispositionAreWrittenTogether() throws Exception {
         assertTrue(repository.transitionAlert("system-a","alert-a",0,"ACKNOWLEDGED","operator","triaged","ack-1"));
         try(Connection connection=dataSource.getConnection();Statement statement=connection.createStatement();
-            ResultSet rows=statement.executeQuery("SELECT disposition_type,operator_id FROM alert_disposition WHERE disposition_id='ack-1'")) {
+            ResultSet rows=statement.executeQuery("SELECT disposition_type,operator_id FROM monitoring_alert_disposition WHERE disposition_id='ack-1'")) {
             assertTrue(rows.next()); assertEquals("ACKNOWLEDGED",rows.getString(1)); assertEquals("operator",rows.getString(2));
         }
     }
@@ -104,11 +104,11 @@ class MyBatisManagementRepositoryTest {
         assertEquals(1,repository.searchAlertAssignments("system-a","alert-a",
             AlertAssignmentQuery.of(historyPage)).getItems().size());
         try(Connection connection=dataSource.getConnection();Statement statement=connection.createStatement();
-            ResultSet rows=statement.executeQuery("SELECT assignee_id,operator_id FROM alert_disposition WHERE disposition_id='assign-1'")) {
+            ResultSet rows=statement.executeQuery("SELECT assignee_id,operator_id FROM monitoring_alert_disposition WHERE disposition_id='assign-1'")) {
             assertTrue(rows.next()); assertEquals("analyst-1",rows.getString(1)); assertEquals("operator",rows.getString(2));
         }
         try(Connection connection=dataSource.getConnection();Statement statement=connection.createStatement()) {
-            statement.executeUpdate("UPDATE security_alert SET status='CLOSED',version=3 WHERE alert_id='alert-a'");
+            statement.executeUpdate("UPDATE monitoring_security_alert SET status='CLOSED',version=3 WHERE alert_id='alert-a'");
         }
         assertFalse(repository.assignAlert("system-a","alert-a",3,"operator","analyst-2","reopen","assign-3"));
     }
@@ -131,7 +131,7 @@ class MyBatisManagementRepositoryTest {
         assertFalse(repository.findRuleChange("system-a","rule-a",1,RuleMode.ENFORCE,7,"operator","approver",
             "APPROVED CHANGE","rule-change-1").isPresent());
         try(Connection connection=dataSource.getConnection();Statement statement=connection.createStatement();
-            ResultSet rows=statement.executeQuery("SELECT COUNT(*) FROM security_rule WHERE system_id='system-a' AND rule_id='rule-a'")) {
+            ResultSet rows=statement.executeQuery("SELECT COUNT(*) FROM monitoring_security_rule WHERE system_id='system-a' AND rule_id='rule-a'")) {
             assertTrue(rows.next()); assertEquals(2,rows.getInt(1));
         }
     }

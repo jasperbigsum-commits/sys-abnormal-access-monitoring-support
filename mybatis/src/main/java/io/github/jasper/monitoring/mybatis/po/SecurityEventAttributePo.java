@@ -3,7 +3,7 @@ package io.github.jasper.monitoring.mybatis.po;
 import lombok.Getter;
 import lombok.Setter;
 
-/** Persistent representation of one {@code security_event_attribute} row. */
+/** Persistent representation of one {@code monitoring_security_event_attribute} row. */
 @Getter
 @Setter
 public final class SecurityEventAttributePo {

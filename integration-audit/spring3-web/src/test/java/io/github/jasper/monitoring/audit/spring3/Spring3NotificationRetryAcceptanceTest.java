@@ -72,22 +72,22 @@ class Spring3NotificationRetryAcceptanceTest {
 
     private String onlyAlertId() {
         assertEquals(1, alertCount());
-        return jdbc.queryForObject("SELECT alert_id FROM security_alert WHERE rule_id = 'AUTH-01'", String.class);
+        return jdbc.queryForObject("SELECT alert_id FROM monitoring_security_alert WHERE rule_id = 'AUTH-01'", String.class);
     }
 
     private int alertCount() {
-        return jdbc.queryForObject("SELECT COUNT(*) FROM security_alert WHERE rule_id = 'AUTH-01'", Integer.class);
+        return jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert WHERE rule_id = 'AUTH-01'", Integer.class);
     }
 
     private void assertDelivery(String alertId, String status, int attempts) {
         assertEquals(1, jdbc.queryForObject(
-            "SELECT COUNT(*) FROM notification_delivery WHERE channel = 'tc14' AND aggregate_id = ?",
+            "SELECT COUNT(*) FROM monitoring_notification_delivery WHERE channel = 'tc14' AND aggregate_id = ?",
             Integer.class, alertId));
         assertEquals(status, jdbc.queryForObject(
-            "SELECT status FROM notification_delivery WHERE channel = 'tc14' AND aggregate_id = ?",
+            "SELECT status FROM monitoring_notification_delivery WHERE channel = 'tc14' AND aggregate_id = ?",
             String.class, alertId));
         assertEquals(attempts, jdbc.queryForObject(
-            "SELECT attempt_count FROM notification_delivery WHERE channel = 'tc14' AND aggregate_id = ?",
+            "SELECT attempt_count FROM monitoring_notification_delivery WHERE channel = 'tc14' AND aggregate_id = ?",
             Integer.class, alertId));
     }
 

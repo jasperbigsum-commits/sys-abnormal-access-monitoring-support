@@ -89,14 +89,14 @@ H2 数据源只为模拟一次真实集成；它们的**所有权、迁移责任
 | 宿主系统 | `audit_control_state` | 模拟控制处理器的幂等副作用与 TTL | 替换为验证码、限流、会话或审批设施自己的状态存储 |
 | 宿主系统 | `audit_export_ledger` | 模拟导出业务台账，计算当日累计行数 | 替换为宿主导出流水或可核验的业务统计来源 |
 | 宿主系统 | `audit_notification_attempt` | 模拟外部通知渠道的调用尝试 | 替换为宿主通知供应商日志或投递观测，不替代组件投递状态 |
-| 监测组件内部 | `security_event`、`rule_observation`、`security_event_fact`、`security_event_role`、`security_event_attribute`、`security_event_input_issue` | 事件、规则证据、规范化 Fact、角色、属性与输入质量 | 由组件 MyBatis Schema 和仓储管理，纳入组件数据库迁移 |
-| 监测组件内部 | `security_rule`、`security_alert`、`alert_event_link`、`alert_disposition`、`security_whitelist` | 规则版本、告警、证据关联、处置历史与白名单 | 由组件管理服务维护；宿主不得直接绕过服务修改 |
-| 监测组件内部 | `control_action`、`control_action_attempt`、`notification_delivery`、`management_audit` | 控制状态机与尝试记录、通知投递状态、管理审计 | 由组件持久状态机与管理服务维护 |
+| 监测组件内部 | `monitoring_security_event`、`monitoring_rule_observation`、`monitoring_security_event_fact`、`monitoring_security_event_role`、`monitoring_security_event_attribute`、`monitoring_security_event_input_issue` | 事件、规则证据、规范化 Fact、角色、属性与输入质量 | 由组件 MyBatis Schema 和仓储管理，纳入组件数据库迁移 |
+| 监测组件内部 | `monitoring_security_rule`、`monitoring_security_alert`、`monitoring_alert_event_link`、`monitoring_alert_disposition`、`monitoring_security_whitelist` | 规则版本、告警、证据关联、处置历史与白名单 | 由组件管理服务维护；宿主不得直接绕过服务修改 |
+| 监测组件内部 | `monitoring_control_action`、`monitoring_control_action_attempt`、`monitoring_notification_delivery`、`monitoring_management_audit` | 控制状态机与尝试记录、通知投递状态、管理审计 | 由组件持久状态机与管理服务维护 |
 
 注意事项：
 
-- `audit_control_state` 是宿主处理器的测试替身，**不是**组件内部的 `control_action` 或 `control_action_attempt`。
-- `audit_notification_attempt` 是模拟下游渠道的观测记录，**不是**组件内部的 `notification_delivery`。
+- `audit_control_state` 是宿主处理器的测试替身，**不是**组件内部的 `monitoring_control_action` 或 `monitoring_control_action_attempt`。
+- `audit_notification_attempt` 是模拟下游渠道的观测记录，**不是**组件内部的 `monitoring_notification_delivery`。
 - 生产环境可将宿主表和组件内部表置于同一数据库或不同数据库/Schema；无论物理部署如何，必须保持迁移责任、访问权限与数据所有权分离。
 - 宿主只在真实业务决策点读取自己的业务表并提交可信事实；不得直接插入或更新组件内部表来伪造事件、告警、控制或管理结果。
 

@@ -1,19 +1,19 @@
-ALTER TABLE notification_delivery
+ALTER TABLE monitoring_notification_delivery
     ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0;
 
-ALTER TABLE notification_delivery
+ALTER TABLE monitoring_notification_delivery
     ADD COLUMN next_attempt_at TIMESTAMP NULL;
 
-ALTER TABLE notification_delivery
+ALTER TABLE monitoring_notification_delivery
     ADD COLUMN failure_category VARCHAR(64) NULL;
 
-ALTER TABLE notification_delivery
+ALTER TABLE monitoring_notification_delivery
     ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
-ALTER TABLE notification_delivery
+ALTER TABLE monitoring_notification_delivery
     ADD COLUMN version BIGINT NOT NULL DEFAULT 0;
 
-UPDATE notification_delivery
+UPDATE monitoring_notification_delivery
 SET attempt_count = CASE WHEN status = 'PENDING' THEN 0 ELSE 1 END,
     next_attempt_at = CASE WHEN status = 'RETRY_PENDING' THEN CURRENT_TIMESTAMP ELSE NULL END,
     failure_category = CASE
@@ -22,7 +22,7 @@ SET attempt_count = CASE WHEN status = 'PENDING' THEN 0 ELSE 1 END,
         ELSE NULL
     END;
 
-UPDATE notification_delivery
+UPDATE monitoring_notification_delivery
 SET status = 'FAILED',
     attempt_count = 1,
     next_attempt_at = NULL,
@@ -30,7 +30,7 @@ SET status = 'FAILED',
 WHERE status NOT IN ('PENDING', 'RETRY_PENDING', 'DELIVERED', 'FAILED');
 
 CREATE INDEX idx_notification_retry
-    ON notification_delivery (channel, status, next_attempt_at, delivery_id);
+    ON monitoring_notification_delivery (channel, status, next_attempt_at, delivery_id);
 
 CREATE INDEX idx_notification_pending
-    ON notification_delivery (channel, status, updated_at, delivery_id);
+    ON monitoring_notification_delivery (channel, status, updated_at, delivery_id);

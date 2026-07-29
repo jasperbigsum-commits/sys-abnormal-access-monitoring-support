@@ -20,7 +20,7 @@ Use `MonitoringService.monitor(ActionExecution)` for services, jobs, and consume
 
 ## Management Controllers
 
-Provide one trusted `ManagementAuthorizer` bean. The starters then expose five management service beans. Controllers must create `ManagementActor` from authenticated server context, never from request-controlled actor or system fields. The services enforce scope, optimistic versions, transactions, and append success or denial to `management_audit`.
+Provide one trusted `ManagementAuthorizer` bean. The starters then expose five management service beans. Controllers must create `ManagementActor` from authenticated server context, never from request-controlled actor or system fields. The services enforce scope, optimistic versions, transactions, and append success or denial to `monitoring_management_audit`.
 
 ## Browser Signals
 

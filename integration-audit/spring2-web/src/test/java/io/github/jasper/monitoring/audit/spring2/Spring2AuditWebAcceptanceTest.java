@@ -90,10 +90,10 @@ class Spring2AuditWebAcceptanceTest {
         assertEquals("ACTIVE", String.valueOf(fixtures.findAccount("audit-exporter").get("STATUS")));
         assertEquals("report-a", String.valueOf(fixtures.findReport("report-a").get("REPORTID")));
         assertTrue(fixtures.findRoles("audit-admin").contains("audit-admin"));
-        long before = jdbc.queryForObject("SELECT COUNT(*) FROM security_event", Long.class).longValue();
+        long before = jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_event", Long.class).longValue();
         assertEquals(HttpStatus.OK, post("/audit/login-failure", "audit-viewer").getStatusCode());
         assertEquals(before + 1L,
-            jdbc.queryForObject("SELECT COUNT(*) FROM security_event", Long.class).longValue());
+            jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_event", Long.class).longValue());
     }
 
     @Test
@@ -134,7 +134,7 @@ class Spring2AuditWebAcceptanceTest {
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertEquals(0, exportService.getInvocationCount());
-        assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM management_audit WHERE actor_id = ? "
+        assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_management_audit WHERE actor_id = ? "
             + "AND action = ? AND outcome = ?", Long.class,
             "audit-viewer", "EVENT_READ", "DENIED").longValue() >= 1L);
     }
@@ -176,7 +176,7 @@ class Spring2AuditWebAcceptanceTest {
         assertEquals(SecurityEventType.VIEW_SENSITIVE, event.getEventType());
         assertEquals(SecurityEventResult.SUCCESS, event.getResult());
         assertEquals(5000L, event.getDataCount());
-        assertEquals("METHOD_PARAMETER", jdbc.queryForObject("SELECT source_type FROM security_event_fact "
+        assertEquals("METHOD_PARAMETER", jdbc.queryForObject("SELECT source_type FROM monitoring_security_event_fact "
             + "WHERE event_id=? AND fact_key='data_count'", String.class, event.getEventId()));
     }
 
@@ -188,7 +188,7 @@ class Spring2AuditWebAcceptanceTest {
         ResponseEntity<String> response = get("/audit/management/events", "audit-admin");
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertTrue(response.getBody().contains("\"count\":"));
-        assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM management_audit WHERE system_id = ? "
+        assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_management_audit WHERE system_id = ? "
             + "AND actor_id = ? AND action = ? AND outcome = ?", Long.class,
             "audit-spring2-web", "audit-admin", "EVENT_READ", "SUCCEEDED").longValue() >= 1L);
         SecurityEventQuery query = SecurityEventQuery.of(
@@ -196,7 +196,7 @@ class Spring2AuditWebAcceptanceTest {
             Instant.now().minusSeconds(60), Instant.now().plusSeconds(1));
         assertThrows(SecurityException.class, () -> eventQueries.search(
             ManagementActor.of("foreign-admin", "foreign-system"), query));
-        assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM management_audit WHERE system_id = ? "
+        assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_management_audit WHERE system_id = ? "
             + "AND actor_id = ? AND action = ? AND outcome = ?", Long.class,
             "foreign-system", "foreign-admin", "EVENT_READ", "DENIED").longValue() >= 1L);
     }
@@ -226,7 +226,7 @@ class Spring2AuditWebAcceptanceTest {
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertTrue(response.getBody().contains("ACCOUNT_DISABLED"));
         assertEquals(0L, fixtures.countActiveSessions("audit-disabled"));
-        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
             + "WHERE rule_id='AUTH-03' AND subject='audit-disabled'", Long.class).longValue());
     }
 
@@ -280,7 +280,7 @@ class Spring2AuditWebAcceptanceTest {
         assertEquals(0L,fixtures.countActiveSessions("audit-traversal"));
         assertEquals(HttpStatus.UNAUTHORIZED,
             getQuery("audit-traversal","resource-after-control",true,"tc06-session").getStatusCode());
-        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
             + "WHERE rule_id='AUTHZ-02' AND subject='audit-traversal'",Long.class).longValue());
     }
 
@@ -294,7 +294,7 @@ class Spring2AuditWebAcceptanceTest {
             getQuery("audit-query","query-resource",false,null).getStatusCode());
         assertEquals(HttpStatus.OK,
             getQuery("audit-query-other","query-resource",false,null).getStatusCode());
-        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
             + "WHERE rule_id='DATA-01' AND subject='audit-query'",Long.class).longValue());
     }
 
@@ -314,7 +314,7 @@ class Spring2AuditWebAcceptanceTest {
             java.util.Arrays.asList("rowId","displayValue","amount")));
         assertEquals(HttpStatus.ACCEPTED,blocked.getStatusCode());
         assertEquals(generated,policyExports.getWorkbookInvocationCount());
-        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
             + "WHERE rule_id='EXPT-01' AND subject='audit-exporter'",Long.class).longValue());
 
         jdbc.update("INSERT INTO audit_account(user_id,organization_id,status) VALUES(?,?,?)",
@@ -325,9 +325,9 @@ class Spring2AuditWebAcceptanceTest {
         assertEquals(HttpStatus.ACCEPTED, export("audit-export-sensitive", exportBody(1L, 1L,
             java.util.Arrays.asList("rowId", "sensitiveValue"))).getStatusCode());
         assertEquals(beforeSensitive, policyExports.getWorkbookInvocationCount());
-        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
             + "WHERE rule_id='EXPT-01' AND subject='audit-export-sensitive'", Long.class).longValue());
-        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM control_action c JOIN security_alert a "
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_control_action c JOIN monitoring_security_alert a "
             + "ON a.alert_id=c.alert_id WHERE a.subject='audit-export-sensitive' "
             + "AND c.action_type='REQUIRE_APPROVAL'", Long.class).longValue());
     }
@@ -344,7 +344,7 @@ class Spring2AuditWebAcceptanceTest {
         assertEquals(generated,policyExports.getWorkbookInvocationCount());
         assertEquals(8000L,jdbc.queryForObject("SELECT SUM(row_count) FROM audit_export_ledger "
             + "WHERE user_id='audit-export-daily' AND outcome='SUCCEEDED'",Long.class).longValue());
-        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM security_alert "
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
             + "WHERE rule_id='EXPT-02' AND subject='audit-export-daily'",Long.class).longValue());
     }
 

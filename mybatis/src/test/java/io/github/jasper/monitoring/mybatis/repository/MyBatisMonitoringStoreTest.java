@@ -175,16 +175,16 @@ class MyBatisMonitoringStoreTest {
         DataSource dataSource = dataSource("store-notification-upgrade");
         try (java.sql.Connection connection = dataSource.getConnection();
              java.sql.Statement statement = connection.createStatement()) {
-            statement.execute("CREATE TABLE notification_delivery (delivery_id VARCHAR(128) NOT NULL PRIMARY KEY, "
+            statement.execute("CREATE TABLE monitoring_notification_delivery (delivery_id VARCHAR(128) NOT NULL PRIMARY KEY, "
                 + "channel VARCHAR(128) NOT NULL, aggregate_id VARCHAR(128) NOT NULL, status VARCHAR(32) NOT NULL, "
                 + "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(channel, aggregate_id))");
-            statement.execute("INSERT INTO notification_delivery (delivery_id, channel, aggregate_id, status) "
+            statement.execute("INSERT INTO monitoring_notification_delivery (delivery_id, channel, aggregate_id, status) "
                 + "VALUES ('legacy-delivery', 'email', 'legacy-alert', 'PENDING')");
-            statement.execute("INSERT INTO notification_delivery (delivery_id, channel, aggregate_id, status) "
+            statement.execute("INSERT INTO monitoring_notification_delivery (delivery_id, channel, aggregate_id, status) "
                 + "VALUES ('legacy-delivered', 'email', 'legacy-delivered-alert', 'DELIVERED')");
-            statement.execute("INSERT INTO notification_delivery (delivery_id, channel, aggregate_id, status) "
+            statement.execute("INSERT INTO monitoring_notification_delivery (delivery_id, channel, aggregate_id, status) "
                 + "VALUES ('legacy-failed', 'email', 'legacy-failed-alert', 'FAILED')");
-            statement.execute("INSERT INTO notification_delivery (delivery_id, channel, aggregate_id, status) "
+            statement.execute("INSERT INTO monitoring_notification_delivery (delivery_id, channel, aggregate_id, status) "
                 + "VALUES ('legacy-retry', 'email', 'legacy-retry-alert', 'RETRY_PENDING')");
         }
         executeScript(dataSource, "/db/upgrade/monitoring-notification-retry-v7.sql");

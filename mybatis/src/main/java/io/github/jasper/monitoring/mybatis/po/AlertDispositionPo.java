@@ -5,7 +5,7 @@ import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 
-/** Persistent representation of one {@code alert_disposition} row. */
+/** Persistent representation of one {@code monitoring_alert_disposition} row. */
 @Getter
 @Setter
 public final class AlertDispositionPo {

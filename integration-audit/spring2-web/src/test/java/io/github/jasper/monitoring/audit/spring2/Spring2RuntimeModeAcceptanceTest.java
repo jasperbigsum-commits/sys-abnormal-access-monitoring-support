@@ -39,7 +39,7 @@ class Spring2RuntimeModeAcceptanceTest {
                 assertEquals(HttpStatus.FORBIDDEN, login(http, base, "tc01-user").getStatusCode());
             }
             JdbcTemplate jdbc = observe.getBean(JdbcTemplate.class);
-            assertEquals(1L, count(jdbc, "SELECT COUNT(*) FROM security_alert WHERE rule_id='AUTH-01'"));
+            assertEquals(1L, count(jdbc, "SELECT COUNT(*) FROM monitoring_security_alert WHERE rule_id='AUTH-01'"));
             assertEquals(0L, count(jdbc, "SELECT COUNT(*) FROM audit_control_state"));
         }
 

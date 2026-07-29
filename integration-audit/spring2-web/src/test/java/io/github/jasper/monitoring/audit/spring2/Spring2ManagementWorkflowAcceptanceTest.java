@@ -41,7 +41,7 @@ class Spring2ManagementWorkflowAcceptanceTest {
     void tc12_whitelistSuppressesRuleOnlyWhileActiveAndUnexpired() {
         jdbc.update("INSERT INTO audit_account(user_id,organization_id,status) VALUES(?,?,?)",
             "tc12-whitelist", "org-a", "ACTIVE");
-        jdbc.update("INSERT INTO security_whitelist(whitelist_id,system_id,rule_id,subject,reason,"
+        jdbc.update("INSERT INTO monitoring_security_whitelist(whitelist_id,system_id,rule_id,subject,reason,"
                 + "approved_by,expires_at,created_at,status,version) VALUES(?,?,?,?,?,?,?,?,?,?)",
             "tc12", "audit-spring2-web", "AUTH-01", "tc12-whitelist", "predeclared", "fixture",
             java.sql.Timestamp.from(Instant.now().plusSeconds(3600)), java.sql.Timestamp.from(Instant.now()),
@@ -54,15 +54,15 @@ class Spring2ManagementWorkflowAcceptanceTest {
         for (int attempt = 0; attempt < 5; attempt++) {
             assertEquals(HttpStatus.OK, post("/audit/login-failure", "tc12-whitelist").getStatusCode());
         }
-        assertEquals(0L, count("SELECT COUNT(*) FROM security_alert WHERE rule_id='AUTH-01' "
+        assertEquals(0L, count("SELECT COUNT(*) FROM monitoring_security_alert WHERE rule_id='AUTH-01' "
             + "AND subject='tc12-whitelist'"));
 
-        jdbc.update("UPDATE security_whitelist SET expires_at=? WHERE whitelist_id='tc12'",
+        jdbc.update("UPDATE monitoring_security_whitelist SET expires_at=? WHERE whitelist_id='tc12'",
             java.sql.Timestamp.from(Instant.now().minusSeconds(1)));
         assertEquals(HttpStatus.OK, post("/audit/login-failure", "tc12-whitelist").getStatusCode());
-        assertEquals(1L, count("SELECT COUNT(*) FROM security_alert WHERE rule_id='AUTH-01' "
+        assertEquals(1L, count("SELECT COUNT(*) FROM monitoring_security_alert WHERE rule_id='AUTH-01' "
             + "AND subject='tc12-whitelist'"));
-        assertTrue(count("SELECT COUNT(*) FROM management_audit WHERE target_id='tc12' "
+        assertTrue(count("SELECT COUNT(*) FROM monitoring_management_audit WHERE target_id='tc12' "
             + "AND action='WHITELIST_GRANT' AND outcome='SUCCEEDED'") >= 1L);
     }
 
@@ -73,27 +73,27 @@ class Spring2ManagementWorkflowAcceptanceTest {
         Map<String, Object> change = ruleChange(1L, "OBSERVE", 7L, "lower false positives", "tc16-change");
         assertEquals(HttpStatus.FORBIDDEN,
             postJson("/audit/management/rules/AUTH-01/versions", "audit-admin", change).getStatusCode());
-        assertEquals(1L, count("SELECT COUNT(*) FROM security_rule WHERE rule_id='AUTH-01'"));
+        assertEquals(1L, count("SELECT COUNT(*) FROM monitoring_security_rule WHERE rule_id='AUTH-01'"));
         ResponseEntity<String> changed = postApprovedJson("/audit/management/rules/AUTH-01/versions",
             "audit-admin", "audit-approver", change);
         assertEquals(HttpStatus.OK, changed.getStatusCode());
         assertTrue(changed.getBody().contains("\"version\":2"));
-        assertEquals(2L, count("SELECT COUNT(*) FROM security_rule WHERE rule_id='AUTH-01'"));
-        assertEquals("audit-admin", jdbc.queryForObject("SELECT created_by FROM security_rule "
+        assertEquals(2L, count("SELECT COUNT(*) FROM monitoring_security_rule WHERE rule_id='AUTH-01'"));
+        assertEquals("audit-admin", jdbc.queryForObject("SELECT created_by FROM monitoring_security_rule "
             + "WHERE rule_id='AUTH-01' AND rule_version=2", String.class));
-        assertEquals("audit-approver", jdbc.queryForObject("SELECT approved_by FROM security_rule "
+        assertEquals("audit-approver", jdbc.queryForObject("SELECT approved_by FROM monitoring_security_rule "
             + "WHERE rule_id='AUTH-01' AND rule_version=2", String.class));
-        assertEquals("OBSERVE", jdbc.queryForObject("SELECT rule_mode FROM security_rule "
+        assertEquals("OBSERVE", jdbc.queryForObject("SELECT rule_mode FROM monitoring_security_rule "
             + "WHERE rule_id='AUTH-01' AND rule_version=2", String.class));
-        assertEquals(7L, jdbc.queryForObject("SELECT rule_threshold FROM security_rule "
+        assertEquals(7L, jdbc.queryForObject("SELECT rule_threshold FROM monitoring_security_rule "
             + "WHERE rule_id='AUTH-01' AND rule_version=2", Long.class).longValue());
-        assertTrue(jdbc.queryForObject("SELECT created_at FROM security_rule "
+        assertTrue(jdbc.queryForObject("SELECT created_at FROM monitoring_security_rule "
             + "WHERE rule_id='AUTH-01' AND rule_version=2", java.sql.Timestamp.class) != null);
 
         ResponseEntity<String> stale = postApprovedJson("/audit/management/rules/AUTH-01/versions", "audit-admin",
             "audit-approver", ruleChange(1L, "ALERT_ONLY", 9L, "stale", "tc16-stale"));
         assertEquals(HttpStatus.CONFLICT, stale.getStatusCode());
-        assertEquals(2L, count("SELECT COUNT(*) FROM security_rule WHERE rule_id='AUTH-01'"));
+        assertEquals(2L, count("SELECT COUNT(*) FROM monitoring_security_rule WHERE rule_id='AUTH-01'"));
     }
 
     @Test
@@ -104,9 +104,9 @@ class Spring2ManagementWorkflowAcceptanceTest {
         for (int attempt = 0; attempt < 5; attempt++) {
             post("/audit/login-failure", "tc18-alert");
         }
-        String alertId = jdbc.queryForObject("SELECT alert_id FROM security_alert WHERE rule_id='AUTH-01' "
+        String alertId = jdbc.queryForObject("SELECT alert_id FROM monitoring_security_alert WHERE rule_id='AUTH-01' "
             + "AND subject='tc18-alert'", String.class);
-        long version = jdbc.queryForObject("SELECT version FROM security_alert WHERE alert_id=?", Long.class,
+        long version = jdbc.queryForObject("SELECT version FROM monitoring_security_alert WHERE alert_id=?", Long.class,
             alertId).longValue();
         ResponseEntity<String> acknowledged = postJson("/audit/management/alerts/" + alertId + "/acknowledge",
             "audit-admin", alert(version, "acknowledged", "tc18-ack", null));
@@ -121,23 +121,23 @@ class Spring2ManagementWorkflowAcceptanceTest {
         version++;
         assertEquals(HttpStatus.CONFLICT, postJson("/audit/management/alerts/" + alertId + "/close",
             "audit-admin", alert(version - 1L, "stale close", "tc18-stale", null)).getStatusCode());
-        assertEquals(3L, count("SELECT COUNT(*) FROM alert_disposition WHERE alert_id='" + alertId + "'"));
+        assertEquals(3L, count("SELECT COUNT(*) FROM monitoring_alert_disposition WHERE alert_id='" + alertId + "'"));
         ResponseEntity<String> closed = postJson("/audit/management/alerts/" + alertId + "/close",
             "audit-admin", alert(version, "resolved", "tc18-close", null));
         assertEquals(HttpStatus.OK, closed.getStatusCode());
         assertTrue(closed.getBody().contains("\"status\":\"CLOSED\""));
-        assertEquals(4L, count("SELECT COUNT(*) FROM alert_disposition WHERE alert_id='" + alertId + "'"));
-        assertEquals(1L, count("SELECT COUNT(*) FROM alert_disposition WHERE alert_id='" + alertId
+        assertEquals(4L, count("SELECT COUNT(*) FROM monitoring_alert_disposition WHERE alert_id='" + alertId + "'"));
+        assertEquals(1L, count("SELECT COUNT(*) FROM monitoring_alert_disposition WHERE alert_id='" + alertId
             + "' AND disposition_type='ACKNOWLEDGED' AND comment_text='acknowledged'"));
 
         ResponseEntity<String> denied = postJson("/audit/management/alerts/" + alertId + "/close",
             "audit-viewer", alert(version + 1L, "unauthorized", "tc18-denied", null));
         assertEquals(HttpStatus.FORBIDDEN, denied.getStatusCode());
-        assertEquals(4L, count("SELECT COUNT(*) FROM alert_disposition WHERE alert_id='" + alertId + "'"));
+        assertEquals(4L, count("SELECT COUNT(*) FROM monitoring_alert_disposition WHERE alert_id='" + alertId + "'"));
     }
 
     private void seedRule(String systemId) {
-        jdbc.update("INSERT INTO security_rule(system_id,rule_id,rule_version,rule_name,rule_definition,"
+        jdbc.update("INSERT INTO monitoring_security_rule(system_id,rule_id,rule_version,rule_name,rule_definition,"
                 + "risk_level,rule_mode,rule_threshold,enabled,created_at,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
             systemId, "AUTH-01", Integer.valueOf(1), "login failures", "{}", "HIGH", "ENFORCE",
             Long.valueOf(5L), Boolean.TRUE, java.sql.Timestamp.from(Instant.now()), "fixture");

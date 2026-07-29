@@ -4,7 +4,7 @@ The dependency direction is `starter -> spring-support/core/mybatis -> api`, whi
 
 `MonitoringService` resolves a frozen action, validates fact values and sources, assembles the immutable event, persists it, and invokes typed rule evaluation. The evaluator replaces a database round-tripped copy of the current event with the original event ID instance so timestamp precision cannot exclude it from the active window.
 
-`MonitoringTransaction.required(...)` commits history-dependent alert changes and event links in one MyBatis session. Notifications and host control effects occur after that commit. Durable control reservation, approval, execution, retry, version changes, and attempts are persisted separately. Management mutations combine state transitions and append-only `management_audit` records.
+`MonitoringTransaction.required(...)` commits history-dependent alert changes and event links in one MyBatis session. Notifications and host control effects occur after that commit. Durable control reservation, approval, execution, retry, version changes, and attempts are persisted separately. Management mutations combine state transitions and append-only `monitoring_management_audit` records.
 
 Startup fails when MyBatis is unavailable, the action catalog is invalid or unfrozen, fact bindings are invalid, or ENFORCE lacks any built-in rule control handler. Default skip handlers never count as executable enforcement.
 

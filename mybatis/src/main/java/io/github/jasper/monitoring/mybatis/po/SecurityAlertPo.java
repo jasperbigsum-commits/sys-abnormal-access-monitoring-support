@@ -6,7 +6,7 @@ import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 
-/** Persistent representation of one {@code security_alert} row. */
+/** Persistent representation of one {@code monitoring_security_alert} row. */
 @Getter
 @Setter
 public final class SecurityAlertPo {

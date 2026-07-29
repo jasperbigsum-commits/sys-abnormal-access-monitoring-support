@@ -127,7 +127,7 @@ public List<Report> list() {
 - `WhitelistManagementService`
 - `ControlManagementService`
 
-组件不发布 URL，也不规定前端。宿主负责 HTTP 认证、DTO 映射和前端实现；服务内部负责系统范围授权、乐观锁、事务和 `management_audit` 成功/拒绝记录。
+组件不发布 URL，也不规定前端。宿主负责 HTTP 认证、DTO 映射和前端实现；服务内部负责系统范围授权、乐观锁、事务和 `monitoring_management_audit` 成功/拒绝记录。
 
 ## 验证
 

@@ -59,7 +59,7 @@ monitoringService.monitor(ActionExecution.of(
     FactSource.HOST_PROVIDER));
 ```
 
-When a host supplies `ManagementAuthorizer`, the starters expose `SecurityEventQueryService`, `AlertManagementService`, `RuleCatalogService`, `WhitelistManagementService`, and `ControlManagementService`. The host maps these services to its own controllers and frontend; authorization, optimistic locking, transactions, and `management_audit` remain inside the services.
+When a host supplies `ManagementAuthorizer`, the starters expose `SecurityEventQueryService`, `AlertManagementService`, `RuleCatalogService`, `WhitelistManagementService`, and `ControlManagementService`. The host maps these services to its own controllers and frontend; authorization, optimistic locking, transactions, and `monitoring_management_audit` remain inside the services.
 
 ```bash
 mvn clean verify -DskipTests=false
