@@ -56,7 +56,9 @@ class TypedMonitorActionAspectTest {
         Fixture fixture = new Fixture();
         MonitoredApi proxy = fixture.proxy();
 
-        assertThrows(IllegalStateException.class, () -> proxy.duplicateFact(Long.valueOf(7L)));
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> proxy.duplicateFact(Long.valueOf(7L)));
+        assertEquals(0, failure.getSuppressed().length);
     }
 
     @Test

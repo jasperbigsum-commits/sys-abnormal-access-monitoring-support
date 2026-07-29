@@ -51,10 +51,9 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
         long startedAt = System.nanoTime();
         MonitoringFactScope scope = MonitoringFactScope.open();
         try {
+            Object result;
             try {
-                Object result = invocation.proceed();
-                monitor(binding, suppliedFacts, scope.snapshot(), outcome(result, elapsed(startedAt)));
-                return result;
+                result = invocation.proceed();
             } catch (Throwable failure) {
                 try {
                     monitor(binding, suppliedFacts, scope.snapshot(),
@@ -65,6 +64,8 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
                 }
                 throw failure;
             }
+            monitor(binding, suppliedFacts, scope.snapshot(), outcome(result, elapsed(startedAt)));
+            return result;
         } finally {
             scope.close();
         }
