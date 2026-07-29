@@ -13,9 +13,8 @@ import org.springframework.stereotype.Repository;
 /**
  * 宿主业务夹具表的事务仓储。
  *
- * <p>本类只访问 {@code audit_*} 宿主表，用于模拟账号、会话、报告、导出与控制副作用；
- * 不读写组件内部的事件、规则、告警、控制、通知或管理审计表。组件内部表由
- * {@code MyBatisMonitoringStore} 及其关联仓储负责。</p>
+ * <p>本类只访问 {@code audit_*} 宿主测试表，为安全、报告和控制示例提供可重复输入及副作用查询；
+ * 不读写组件内部的 {@code monitoring_*} 状态机表。</p>
  */
 @Repository
 public class AuditFixtureRepository {

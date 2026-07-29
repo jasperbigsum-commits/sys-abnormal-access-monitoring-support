@@ -10,7 +10,13 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
-/** Owns the explicit relationship between one provider, a target, and declared facts. */
+/**
+ * Fact 绑定定义：显式声明“谁提供、给谁用、产出哪些 Fact、按什么来源记账”。
+ * <p>
+ * 真实场景：
+ * - 把某 Provider 绑定到 ReportExport，仅对导出动作计算 baselineRatio；<br>
+ * - 把某 Provider 绑定到 ExportContract，所有导出类动作共享 dataCount 采集规则。
+ */
 public final class FactBinding {
     private final Class<? extends ActionType> actionType;
     private final Class<? extends ActionContract> contractType;
@@ -36,7 +42,7 @@ public final class FactBinding {
         this.declaredFacts = Collections.unmodifiableSet(facts);
     }
 
-    /** Creates an exact action binding that is never inherited by sibling actions. */
+    /** 创建“按动作精确绑定”：仅对指定 final Action 生效，不会被兄弟动作继承。 */
     @SafeVarargs
     public static FactBinding forAction(Class<? extends ActionType> actionType,
             FactSource source, ActionFactProvider provider,
@@ -49,7 +55,7 @@ public final class FactBinding {
         return new FactBinding(actionType, null, source, provider, declaredFacts);
     }
 
-    /** Creates an explicit contract binding shared by every action implementing that contract. */
+    /** 创建“按契约绑定”：所有实现该契约的动作共享同一提供逻辑。 */
     @SafeVarargs
     public static FactBinding forContract(Class<? extends ActionContract> contractType,
             FactSource source, ActionFactProvider provider,
@@ -61,7 +67,7 @@ public final class FactBinding {
         return new FactBinding(null, contractType, source, provider, declaredFacts);
     }
 
-    /** @return whether this binding explicitly covers the supplied concrete action */
+    /** @return 该绑定是否覆盖给定具体 Action。 */
     public boolean appliesTo(Class<? extends ActionType> candidate) {
         Objects.requireNonNull(candidate, "candidate");
         return actionType != null ? actionType.equals(candidate) : contractType.isAssignableFrom(candidate);

@@ -16,7 +16,13 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
-/** Synchronous policy-aware XLSX export service for the reference host. */
+/**
+ * Synchronous export flow used by the Spring3 acceptance host.
+ *
+ * <p>The service recalculates row count from the fixture repository, applies the
+ * export policy, records the monitoring result, and only then generates XLSX.
+ * Request fields are selectors; they are not trusted evidence.</p>
+ */
 @Service
 public final class ReportExportService {
     private static final Set<String> ALLOWED_FIELDS = new LinkedHashSet<String>(

@@ -8,20 +8,30 @@ import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 
-/** Sole runtime metadata owner for a typed monitoring fact. */
+/**
+ * Fact 的唯一运行时规范定义。
+ * <p>
+ * 该对象把一个 Fact 的“全套治理元数据”固定下来：key、值类型、允许来源、敏感级别、
+ * 长度限制、存储策略、归一化/编解码与合法性校验。
+ */
 public final class FactDefinition<T> {
     private static final Pattern KEY_PATTERN = Pattern.compile("[a-z][a-z0-9_.-]{0,127}");
 
-    /** Classification used by redaction and disclosure policy. */
+    /** 敏感级别分类（用于脱敏和可见性控制）。 */
     public enum Sensitivity {
+        /** 可公开展示：如非敏感统计标签。 */
         PUBLIC,
+        /** 仅内部可见：默认业务与运维诊断字段。 */
         INTERNAL,
+        /** 高敏数据：需要更严格脱敏与授权控制。 */
         SENSITIVE
     }
 
-    /** Physical persistence strategy for a fact. */
+    /** 持久化策略分类（决定落库位置）。 */
     public enum Storage {
+        /** 标准列：高频、结构稳定、需要快速检索/筛选的事实。 */
         STANDARD_COLUMN,
+        /** 扩展区：低频或可扩展事实，通常以扩展字段形式存储。 */
         EXTENSION
     }
 

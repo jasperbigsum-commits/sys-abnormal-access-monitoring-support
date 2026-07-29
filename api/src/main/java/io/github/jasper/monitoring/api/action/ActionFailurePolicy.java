@@ -1,13 +1,23 @@
 package io.github.jasper.monitoring.api.action;
 
-/** Defines how monitoring infrastructure failures affect the monitored action. */
+/**
+ * 监测链路失败时对业务调用的处置策略。
+ * <p>
+ * 该策略不是“规则命中后的控制动作”，而是“监测系统自身不可用/数据不完整时”的降级或阻断策略。
+ */
 public enum ActionFailurePolicy {
-    /** Record the observation issue without changing the business invocation. */
+    /**
+     * 仅观测，不影响业务执行。
+     * 场景：低风险查询、历史审计优先场景；即使监测失败也先保证业务可用。
+     */
     OBSERVE_ONLY,
-    /** Reject the business invocation when required monitoring cannot complete. */
+    /**
+     * 失败即阻断（Fail Closed）。
+     * 场景：高风险导出、权限提升；关键监测前置条件不满足时直接拒绝业务调用。
+     */
     FAIL_CLOSED;
 
-    /** @return whether this policy is at least as strict as the supplied policy */
+    /** @return 当前策略是否不弱于给定策略（FAIL_CLOSED 比 OBSERVE_ONLY 更严格）。 */
     public boolean isAtLeast(ActionFailurePolicy other) {
         return ordinal() >= other.ordinal();
     }
