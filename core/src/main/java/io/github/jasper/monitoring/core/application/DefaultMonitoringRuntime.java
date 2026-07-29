@@ -55,7 +55,7 @@ public final class DefaultMonitoringRuntime implements MonitoringRuntimePort {
             new LinkedHashMap<Class<? extends FactType<?>>, Object>();
         Map<Class<? extends FactType<?>>, FactSource> sources =
             new LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
-        add(values, sources, execution.getSuppliedFacts(), action, execution.getSuppliedFactSource(), null);
+        addSupplied(values, sources, execution, action);
         for (FactBinding binding : bindings) {
             if (!binding.appliesTo(execution.getActionType())) {
                 continue;
@@ -67,25 +67,46 @@ public final class DefaultMonitoringRuntime implements MonitoringRuntimePort {
         return new FactCollection(facts(values), sources, snapshots(values, sources));
     }
 
+    private static void addSupplied(Map<Class<? extends FactType<?>>, Object> values,
+            Map<Class<? extends FactType<?>>, FactSource> sources, ActionExecution execution,
+            ActionDefinition action) {
+        ActionFacts suppliedFacts = execution.getSuppliedFacts();
+        Map<Class<? extends FactType<?>>, FactSource> suppliedSources = execution.getSuppliedFactSources();
+        if (!suppliedFacts.asMap().keySet().equals(suppliedSources.keySet())
+                || suppliedSources.containsValue(null)) {
+            throw new IllegalStateException("Every supplied fact must have exactly one source");
+        }
+        for (Map.Entry<Class<? extends FactType<?>>, Object> entry : suppliedFacts.asMap().entrySet()) {
+            addEntry(values, sources, entry, action, suppliedSources.get(entry.getKey()), null);
+        }
+    }
+
     private static void add(Map<Class<? extends FactType<?>>, Object> values,
             Map<Class<? extends FactType<?>>, FactSource> sources, ActionFacts contribution,
             ActionDefinition action, FactSource source, FactBinding binding) {
         for (Map.Entry<Class<? extends FactType<?>>, Object> entry : contribution.asMap().entrySet()) {
-            Class<? extends FactType<?>> factType = entry.getKey();
-            if (binding != null && !binding.getDeclaredFacts().contains(factType)) {
-                throw new IllegalStateException("Fact provider returned an undeclared fact: " + factType.getName());
-            }
-            if (!action.getRequiredFacts().contains(factType) && !action.getOptionalFacts().contains(factType)) {
-                throw new IllegalStateException("Fact is not declared by action: " + factType.getName());
-            }
-            if (!action.getAllowedSources(factType).contains(source)) {
-                throw new IllegalStateException("Fact source is not approved by action: " + factType.getName());
-            }
-            if (values.put(factType, entry.getValue()) != null) {
-                throw new IllegalStateException("Multiple sources returned the same fact: " + factType.getName());
-            }
-            sources.put(factType, source);
+            addEntry(values, sources, entry, action, source, binding);
         }
+    }
+
+    private static void addEntry(Map<Class<? extends FactType<?>>, Object> values,
+            Map<Class<? extends FactType<?>>, FactSource> sources,
+            Map.Entry<Class<? extends FactType<?>>, Object> entry, ActionDefinition action,
+            FactSource source, FactBinding binding) {
+        Class<? extends FactType<?>> factType = entry.getKey();
+        if (binding != null && !binding.getDeclaredFacts().contains(factType)) {
+            throw new IllegalStateException("Fact provider returned an undeclared fact: " + factType.getName());
+        }
+        if (!action.getRequiredFacts().contains(factType) && !action.getOptionalFacts().contains(factType)) {
+            throw new IllegalStateException("Fact is not declared by action: " + factType.getName());
+        }
+        if (!action.getAllowedSources(factType).contains(source)) {
+            throw new IllegalStateException("Fact source is not approved by action: " + factType.getName());
+        }
+        if (values.put(factType, entry.getValue()) != null) {
+            throw new IllegalStateException("Multiple sources returned the same fact: " + factType.getName());
+        }
+        sources.put(factType, source);
     }
 
     private static void validateBindings(ActionCatalog catalog, FactCatalog factCatalog,

@@ -20,13 +20,56 @@ import io.github.jasper.monitoring.api.action.ActionContractDefinition;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import java.util.Arrays;
 import io.github.jasper.monitoring.core.application.DefaultMonitoringRuntime;
+import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
+import io.github.jasper.monitoring.core.domain.EventFact;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DefaultMonitoringRuntimeTest {
+    @Test
+    void preservesTheSourceOfEachSuppliedFactAndPersistenceSnapshot() {
+        ActionCatalog actions = new ActionCatalog();
+        actions.register(QueryAction.class, ActionDefinition.builder("data:mixed-query")
+            .eventType(SecurityEventType.QUERY).resourceType("report")
+            .optional(ResourceFact.class, FactSource.METHOD_PARAMETER)
+            .optional(DataCountFact.class, FactSource.HOST_PROVIDER)
+            .failurePolicy(ActionFailurePolicy.FAIL_CLOSED).build());
+        actions.freeze();
+        FactCatalog facts = new FactCatalog();
+        facts.register(FactDefinition.builder(ResourceFact.class, "resource", String.class)
+            .allowedSources(FactSource.METHOD_PARAMETER)
+            .sensitivity(FactDefinition.Sensitivity.INTERNAL).maxLength(256)
+            .storage(FactDefinition.Storage.EXTENSION)
+            .codec(FactDefinition.stringCodec(value -> value.trim())).build());
+        facts.register(FactDefinition.builder(DataCountFact.class, "data_count", Long.class)
+            .allowedSources(FactSource.HOST_PROVIDER)
+            .sensitivity(FactDefinition.Sensitivity.INTERNAL).maxLength(20)
+            .storage(FactDefinition.Storage.EXTENSION)
+            .codec(FactDefinition.longCodec(value -> value)).build());
+        facts.freeze();
+        ActionFacts suppliedFacts = ActionFacts.builder()
+            .put(ResourceFact.class, "report-7").put(DataCountFact.class, Long.valueOf(37L)).build();
+        Map<Class<? extends FactType<?>>, FactSource> suppliedSources =
+            new LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
+        suppliedSources.put(ResourceFact.class, FactSource.METHOD_PARAMETER);
+        suppliedSources.put(DataCountFact.class, FactSource.HOST_PROVIDER);
+        ActionExecution supplied = ActionExecution.of(QueryAction.class, execution().getRequestContext(),
+            IdentityContext.anonymous(), ActionOutcome.success(1L), suppliedFacts, suppliedSources);
+
+        MonitoringRuntimePort.FactCollection collected = new DefaultMonitoringRuntime(actions, facts,
+            Collections.<FactBinding>emptyList()).collect(supplied, actions.require(QueryAction.class));
+
+        assertEquals(FactSource.METHOD_PARAMETER, collected.getSources().get(ResourceFact.class));
+        assertEquals(FactSource.HOST_PROVIDER, collected.getSources().get(DataCountFact.class));
+        assertEquals(FactSource.METHOD_PARAMETER, persisted(collected, "resource").getSource());
+        assertEquals(FactSource.HOST_PROVIDER, persisted(collected, "data_count").getSource());
+    }
+
     @Test
     void collectsOnlyFactsDeclaredByAnApplicableBinding() {
         ActionCatalog catalog = catalog();
@@ -160,10 +203,18 @@ class DefaultMonitoringRuntimeTest {
         return new DefaultMonitoringRuntime(actions, facts, bindings);
     }
 
+    private static EventFact persisted(MonitoringRuntimePort.FactCollection collected, String key) {
+        for (EventFact fact : collected.getPersistedFacts()) {
+            if (key.equals(fact.getKey())) return fact;
+        }
+        throw new AssertionError("Missing persisted fact " + key);
+    }
+
     static final class QueryAction implements ActionType { }
     static final class OtherAction implements ActionType { }
     interface QueryContract extends ActionContract { }
     static final class ContractQueryAction implements ActionType, QueryContract { }
     static final class ResourceFact implements FactType<String> { }
+    static final class DataCountFact implements FactType<Long> { }
     static final class UnexpectedFact implements FactType<String> { }
 }
