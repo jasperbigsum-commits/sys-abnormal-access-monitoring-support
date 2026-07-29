@@ -6,6 +6,11 @@ import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.api.fact.FactType;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * Read-only context for one monitored action execution.
@@ -21,17 +26,58 @@ public interface ActionExecution {
     ActionOutcome getOutcome();
     default ActionFacts getSuppliedFacts() { return ActionFacts.builder().build(); }
     default FactSource getSuppliedFactSource() { return FactSource.HOST_PROVIDER; }
+    default Map<Class<? extends FactType<?>>, FactSource> getSuppliedFactSources() {
+        Map<Class<? extends FactType<?>>, FactSource> result =
+            new LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
+        for (Class<? extends FactType<?>> factType : getSuppliedFacts().asMap().keySet()) {
+            result.put(factType, getSuppliedFactSource());
+        }
+        return Collections.unmodifiableMap(result);
+    }
 
     static ActionExecution of(Class<? extends ActionType> actionType, MonitoringRequestContext request, IdentityContext identity,
                               ActionOutcome outcome) {
-        return new ImmutableActionExecution(actionType, request, identity, outcome,
+        return of(actionType, request, identity, outcome,
             ActionFacts.builder().build(), FactSource.HOST_PROVIDER);
     }
 
     static ActionExecution of(Class<? extends ActionType> actionType, MonitoringRequestContext request,
                               IdentityContext identity, ActionOutcome outcome, ActionFacts facts,
                               FactSource factSource) {
-        return new ImmutableActionExecution(actionType, request, identity, outcome, facts, factSource);
+        Objects.requireNonNull(factSource, "factSource");
+        Map<Class<? extends FactType<?>>, FactSource> sources =
+            new LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
+        for (Class<? extends FactType<?>> factType : Objects.requireNonNull(facts, "facts").asMap().keySet()) {
+            sources.put(factType, factSource);
+        }
+        return new ImmutableActionExecution(actionType, request, identity, outcome, facts, sources, factSource);
+    }
+
+    static ActionExecution of(Class<? extends ActionType> actionType, MonitoringRequestContext request,
+                              IdentityContext identity, ActionOutcome outcome, ActionFacts facts,
+                              Map<Class<? extends FactType<?>>, FactSource> factSources) {
+        Objects.requireNonNull(facts, "facts");
+        Objects.requireNonNull(factSources, "factSources");
+        if (!facts.asMap().keySet().equals(factSources.keySet())) {
+            throw new IllegalArgumentException("Fact sources must exactly match supplied facts");
+        }
+        Map<Class<? extends FactType<?>>, FactSource> sources =
+            new LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
+        for (Map.Entry<Class<? extends FactType<?>>, FactSource> entry : factSources.entrySet()) {
+            sources.put(Objects.requireNonNull(entry.getKey(), "factSources contains null key"),
+                Objects.requireNonNull(entry.getValue(), "factSources contains null source"));
+        }
+        return new ImmutableActionExecution(actionType, request, identity, outcome, facts, sources,
+            uniformSource(sources));
+    }
+
+    static FactSource uniformSource(Map<Class<? extends FactType<?>>, FactSource> sources) {
+        FactSource uniform = null;
+        for (FactSource source : sources.values()) {
+            if (uniform == null) uniform = source;
+            else if (uniform != source) return null;
+        }
+        return uniform == null ? FactSource.HOST_PROVIDER : uniform;
     }
 
     final class ImmutableActionExecution implements ActionExecution {
@@ -41,16 +87,20 @@ public interface ActionExecution {
         private final Class<? extends ActionType> actionType;
         private final ActionFacts suppliedFacts;
         private final FactSource suppliedFactSource;
+        private final Map<Class<? extends FactType<?>>, FactSource> suppliedFactSources;
 
         private ImmutableActionExecution(Class<? extends ActionType> actionType, MonitoringRequestContext request, IdentityContext identity,
                                          ActionOutcome outcome, ActionFacts suppliedFacts,
+                                         Map<Class<? extends FactType<?>>, FactSource> suppliedFactSources,
                                          FactSource suppliedFactSource) {
-            this.actionType = java.util.Objects.requireNonNull(actionType, "actionType");
-            this.request = java.util.Objects.requireNonNull(request, "request");
-            this.identity = java.util.Objects.requireNonNull(identity, "identity");
-            this.outcome = java.util.Objects.requireNonNull(outcome, "outcome");
-            this.suppliedFacts = java.util.Objects.requireNonNull(suppliedFacts, "suppliedFacts");
-            this.suppliedFactSource = java.util.Objects.requireNonNull(suppliedFactSource, "suppliedFactSource");
+            this.actionType = Objects.requireNonNull(actionType, "actionType");
+            this.request = Objects.requireNonNull(request, "request");
+            this.identity = Objects.requireNonNull(identity, "identity");
+            this.outcome = Objects.requireNonNull(outcome, "outcome");
+            this.suppliedFacts = Objects.requireNonNull(suppliedFacts, "suppliedFacts");
+            this.suppliedFactSources = Collections.unmodifiableMap(
+                new LinkedHashMap<Class<? extends FactType<?>>, FactSource>(suppliedFactSources));
+            this.suppliedFactSource = suppliedFactSource;
         }
 
         @Override public Class<? extends ActionType> getActionType() { return actionType; }
@@ -58,6 +108,14 @@ public interface ActionExecution {
         @Override public IdentityContext getIdentityContext() { return identity; }
         @Override public ActionOutcome getOutcome() { return outcome; }
         @Override public ActionFacts getSuppliedFacts() { return suppliedFacts; }
-        @Override public FactSource getSuppliedFactSource() { return suppliedFactSource; }
+        @Override public FactSource getSuppliedFactSource() {
+            if (suppliedFactSource == null) {
+                throw new IllegalStateException("Supplied facts use multiple sources");
+            }
+            return suppliedFactSource;
+        }
+        @Override public Map<Class<? extends FactType<?>>, FactSource> getSuppliedFactSources() {
+            return suppliedFactSources;
+        }
     }
 }
