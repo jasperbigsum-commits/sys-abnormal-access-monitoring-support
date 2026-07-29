@@ -11,6 +11,29 @@
 
     <name>System Abnormal Access Monitoring Support</name>
     <description>Pluggable abnormal access monitoring and control support for Spring Boot applications.</description>
+    <url>https://github.com/jasperbigsum-commits/sys-abnormal-access-monitoring-support</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>jasperbigsum-commits</id>
+            <name>jasperbigsum-commits</name>
+            <url>https://github.com/jasperbigsum-commits</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/jasperbigsum-commits/sys-abnormal-access-monitoring-support.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/jasperbigsum-commits/sys-abnormal-access-monitoring-support.git</developerConnection>
+        <url>https://github.com/jasperbigsum-commits/sys-abnormal-access-monitoring-support</url>
+    </scm>
 
     <modules>
         <module>api</module>
@@ -19,9 +42,9 @@
         <module>mybatis</module>
         <module>integration-audit</module>
         <module>spring-support</module>
+        <module>spring2-legacy-starter</module>
         <module>spring2-starter</module>
         <module>spring3-starter</module>
-        <module>maven-plugin</module>
         <module>bom</module>
     </modules>
 
@@ -34,6 +57,11 @@
         <maven.plugin.api.version>3.8.6</maven.plugin.api.version>
         <maven.plugin.annotations.version>3.13.1</maven.plugin.annotations.version>
         <maven.javadoc.plugin.version>3.11.2</maven.javadoc.plugin.version>
+        <central.publishing.plugin.version>0.11.0</central.publishing.plugin.version>
+        <maven.gpg.plugin.version>3.2.7</maven.gpg.plugin.version>
+        <central.autoPublish>false</central.autoPublish>
+        <central.waitUntil>validated</central.waitUntil>
+        <central.skipPublishing>false</central.skipPublishing>
         <lombok.version>1.18.34</lombok.version>
     </properties>
 
@@ -68,6 +96,7 @@
                 <groupId>org.mybatis</groupId>
                 <artifactId>mybatis</artifactId>
                 <version>${mybatis.version}</version>
+                <scope>provided</scope>
             </dependency>
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
@@ -168,6 +197,61 @@
                                 </goals>
                             </execution>
                         </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Central Portal 发布专用配置；普通 package/verify 不会签名或上传。 -->
+        <profile>
+            <id>central-publishing</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-central-sources</id>
+                                <goals><goal>jar-no-fork</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-central-javadocs</id>
+                                <goals><goal>jar</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven.gpg.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-central-artifacts</id>
+                                <phase>verify</phase>
+                                <goals><goal>sign</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central.publishing.plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>${central.autoPublish}</autoPublish>
+                            <waitUntil>${central.waitUntil}</waitUntil>
+                            <skipPublishing>${central.skipPublishing}</skipPublishing>
+                            <checksums>all</checksums>
+                        </configuration>
                     </plugin>
                 </plugins>
             </build>

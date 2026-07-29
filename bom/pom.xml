@@ -13,12 +13,41 @@
     <name>Abnormal Access Monitoring BOM</name>
     <dependencyManagement>
         <dependencies>
-            <dependency><groupId>${project.groupId}</groupId><artifactId>sys-abnormal-access-monitoring-api</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>${project.groupId}</groupId><artifactId>sys-abnormal-access-monitoring-core</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>${project.groupId}</groupId><artifactId>sys-abnormal-access-monitoring-web-contract</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>${project.groupId}</groupId><artifactId>sys-abnormal-access-monitoring-mybatis</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>${project.groupId}</groupId><artifactId>sys-abnormal-access-monitoring-spring2-starter</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>${project.groupId}</groupId><artifactId>sys-abnormal-access-monitoring-spring3-starter</artifactId><version>${project.version}</version></dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>sys-abnormal-access-monitoring-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>sys-abnormal-access-monitoring-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>sys-abnormal-access-monitoring-web-contract</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>sys-abnormal-access-monitoring-mybatis</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>sys-abnormal-access-monitoring-spring2-legacy-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>sys-abnormal-access-monitoring-spring2-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>sys-abnormal-access-monitoring-spring3-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 </project>

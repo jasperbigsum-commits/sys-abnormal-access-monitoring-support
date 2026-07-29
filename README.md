@@ -1,6 +1,6 @@
 # 自建系统异常访问监测与控制组件
 
-面向 Spring Boot 2.7 和 Spring Boot 3 宿主的强类型异常访问监测组件。宿主保留认证、资源授权、会话和实际控制权；组件负责把可信服务端事实转换为事件，执行 14 条内置规则，持久化告警与控制，并提供可直接注入 Controller 的管理服务。
+面向 Spring Boot 2.2/2.7 和 Spring Boot 3 宿主的强类型异常访问监测组件。宿主保留认证、资源授权、会话和实际控制权；组件负责把可信服务端事实转换为事件，执行 14 条内置规则，持久化告警与控制，并提供可直接注入 Controller 的管理服务。
 
 生产运行只有 MyBatis 实现，不提供内存仓储或自动建表。初次接入必须使用 `OBSERVE`；`ENFORCE` 会在启动期验证内置规则可能产生的全部控制类型均有可执行处理器，默认跳过处理器不计入能力。
 
@@ -13,7 +13,7 @@
 | `web-contract` | 前端补充信号及 JSON Schema |
 | `mybatis` | 唯一生产持久化适配器、Mapper 和 Schema |
 | `spring-support` | Boot 2/3 共用的 Spring 适配 |
-| `spring2-starter` / `spring3-starter` | 对称自动配置 |
+| `spring2-legacy-starter` / `spring2-starter` / `spring3-starter` | Boot 2.2 / 2.7 / 3 自动配置 |
 | `integration-audit` | Boot 2/3 的真实 HTTP、H2/MyBatis 和管理审计验收 |
 | `maven-plugin` | 宿主接入模板 |
 | `bom` | 依赖版本管理 |
@@ -31,7 +31,7 @@
 
 ## 快速接入
 
-通过 BOM 管理版本，并只引入一个与宿主 Boot 主版本匹配的 Starter：
+通过 BOM 管理版本，并只引入一个与宿主 Boot 主版本匹配的 Starter（Boot 2.2 用 `spring2-legacy-starter`，Boot 2.7 用 `spring2-starter`）：
 
 ```xml
 <dependencyManagement>

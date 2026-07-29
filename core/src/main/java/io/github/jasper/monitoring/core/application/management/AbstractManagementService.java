@@ -10,6 +10,7 @@ import io.github.jasper.monitoring.core.port.MonitoringTransaction;
 import java.util.Objects;
 import java.util.Optional;
 
+/** 管理服务共享的授权、查询、事务和审计辅助逻辑。 */
 abstract class AbstractManagementService {
     protected final ManagementAccessGuard access;
     protected final ManagementQueryRepository queries;
