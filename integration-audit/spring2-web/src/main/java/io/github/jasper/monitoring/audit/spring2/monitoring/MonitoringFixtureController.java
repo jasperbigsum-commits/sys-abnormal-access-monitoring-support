@@ -21,7 +21,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Monitoring-only endpoints used to verify explicit and annotated instrumentation. */
+/**
+ * 用于验证显式埋点、注解监听和上下文边界的 Spring2 验收 Controller。
+ *
+ * <p>本类是 Spring3 监测示例的 Boot 2/ {@code javax.servlet} 对照实现；请求上下文不会自动产生
+ * 业务事件，真实业务仍应在 Service 决策点提交可信 Action 和 Fact。</p>
+ */
 @RestController
 @RequestMapping("/audit")
 public class MonitoringFixtureController {

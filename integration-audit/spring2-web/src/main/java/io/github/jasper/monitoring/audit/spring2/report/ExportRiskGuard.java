@@ -8,7 +8,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
-/** Server-side preflight for single, sensitive, and UTC-daily export risk. */
+/**
+ * 导出前的服务端风险预检。
+ *
+ * <p>使用服务端行数、敏感列和 UTC 日累计进行当前请求中断判断，只返回策略决定，不生成告警、
+ * 执行控制或生成文件。</p>
+ */
 @Component
 public final class ExportRiskGuard {
     private static final long SINGLE_EXPORT_LIMIT = 5000L;

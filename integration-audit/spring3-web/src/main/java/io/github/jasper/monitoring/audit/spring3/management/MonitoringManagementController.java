@@ -22,11 +22,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import io.github.jasper.monitoring.api.ControlActionType;
 
 /**
- * HTTP adapter over the public management service contracts.
+ * 公开管理服务契约的 HTTP 适配器。
  *
  * <p>The actor is derived from the current monitoring identity and the system scope is fixed
- * by this host. Request bodies carry only operation data such as an idempotency key; they do
- * not choose the operator or authorization scope.</p>
+ * 操作者由本宿主当前已认证身份派生，系统范围由本宿主固定。请求体只承载幂等键等操作数据，
+ * 不能选择操作者或授权范围。</p>
  */
 @RestController
 @RequestMapping("/audit/management")

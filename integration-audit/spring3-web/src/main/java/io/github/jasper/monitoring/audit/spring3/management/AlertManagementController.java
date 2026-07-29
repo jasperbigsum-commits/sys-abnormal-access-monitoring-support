@@ -14,7 +14,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** HTTP adapter for the versioned alert disposition workflow. */
+/**
+ * 告警处置工作流的 HTTP 适配器。
+ *
+ * <p>告警 ID、期望版本、原因、指派人和幂等键只是操作参数，操作者由服务端当前身份构造；
+ * 授权、版本校验、处置历史和管理审计由 {@link AlertManagementService} 完成。</p>
+ */
 @RestController
 @RequestMapping("/audit/management/alerts")
 public class AlertManagementController {

@@ -8,7 +8,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-/** Maps management authorization rejection without duplicating authorization policy. */
+/**
+ * 将管理服务的授权拒绝和版本冲突映射为验收 HTTP 响应。
+ *
+ * <p>本类不重新实现授权策略，也不把拒绝转换为成功；生产宿主可以接入统一错误协议。</p>
+ */
 @RestControllerAdvice(assignableTypes = {MonitoringManagementController.class,
     WhitelistManagementController.class, RuleManagementController.class, AlertManagementController.class})
 public class ManagementExceptionHandler {

@@ -8,7 +8,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/** Deterministic host channel used to exercise durable notification retries. */
+/**
+ * 用于验证持久通知重试的确定性宿主渠道。
+ *
+ * <p>该实现按投递 ID 记录调用次数，并在预定次数内故意失败，验证告警已经提交后通知失败不会
+ * 回滚告警，后续重试也不会制造重复告警。它是夹具故障注入实现，不是生产通知渠道。</p>
+ */
 @Component
 public final class AuditNotificationChannel implements NotificationChannel {
     private final JdbcTemplate jdbc;

@@ -12,7 +12,12 @@ import io.github.jasper.monitoring.core.application.MonitoringService;
 import java.time.Instant;
 import org.springframework.stereotype.Service;
 
-/** Rejects self privilege escalation before the role transaction can commit. */
+/**
+ * 角色授予业务服务和权限变更监测适配器。
+ *
+ * <p>角色关系仓储先阻止操作者给自己授予权限，再以 {@code HOST_PROVIDER} 提交目标用户、权限增量
+ * 和高权限事实。允许或拒绝都记录 PrivilegeChange 事件。</p>
+ */
 @Service
 public final class PrivilegeGrantService {
     private static final String SELF_ESCALATION = "SELF_PRIVILEGE_ESCALATION";

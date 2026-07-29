@@ -58,6 +58,24 @@
 4. 以 `OBSERVE` 启动并验证事件、告警、管理授权和审计。
 5. 为所有内置规则控制类型注册真实、幂等的 `ControlHandler`，验收后再切换 `ENFORCE`。
 
+Boot 3 的完整接入顺序、内置 Action/Fact 责任表、控制触发器清单、Starter Bean 清单和自定义规则限制见[集成指南](docs/集成指南.md)。可直接运行的 Spring3 验收示例位于 [`integration-audit/spring3-web`](integration-audit/spring3-web)：
+
+1. 先由宿主认证和可信代理建立 `IdentityContext`、请求上下文和可信来源 IP。
+2. 在真实业务 Service 的决策点调用 `MonitoringService.monitor(ActionExecution)`；登录失败、导出行数、资源 ID、权限变化等服务端事实必须由宿主显式提交。
+3. 没有额外事实的固定 MVC 动作才使用 `@MonitorAction`；方法参数事实只能使用受限的 `@ActionFact` 路径，不能代替服务端授权或最终结果。
+4. 由宿主实现 `ResourceScopeAuthorizer`、通知渠道和六类可执行控制处理器；默认 anonymous、deny、noop、fallback 只用于安全占位或验收，不代表真实能力已接入。
+5. 先运行 `OBSERVE` 验证事件、规则、告警、控制状态和管理审计，再打开 `ENFORCE`。
+
+Spring3 路由对照见 [`MonitoringFixtureController.java`](integration-audit/spring3-web/src/main/java/io/github/jasper/monitoring/audit/spring3/monitoring/MonitoringFixtureController.java)，请求示例 DTO 见 [`AuditExportRequest.java`](integration-audit/spring3-web/src/main/java/io/github/jasper/monitoring/audit/spring3/monitoring/AuditExportRequest.java)。其中 `/audit/context-only` 明确不会产生业务事件；`/audit/annotated-query` 展示纯注解动作；`/audit/annotated-export` 展示参数 Fact；`/audit/export` 展示服务端显式 Fact；`/audit/annotated-export-denied` 展示 403 结果分类；`/audit/login-failure` 展示认证 Service 显式提交失败结果。
+
+示例启动和验收命令：
+
+```bash
+mvn -pl integration-audit/spring3-web -am test
+```
+
+示例中的 Shiro Header 身份、固定报表和控制状态表仅用于验收，不应复制为生产认证、授权、资源计数或控制实现。
+
 ```yaml
 abnormal:
   access:

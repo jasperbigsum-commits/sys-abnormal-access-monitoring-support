@@ -21,14 +21,15 @@
 
 ## 从哪里开始看
 
-按一次报告导出请求阅读代码：
+按一次报告导出请求阅读代码。这个包不是普通的报表 CRUD 示例，而是把“宿主业务授权/预检/副作用”
+与“监测组件 Action/Fact/Rule/Control”串起来的接入边界：
 
-1. security/AuditPrincipalFilter：测试身份如何进入 Shiro Subject。
-2. security/AuditReportAuthorizationInterceptor：资源加载和组织范围授权发生在哪里。
-3. report/ReportExportController：HTTP DTO 如何进入业务 Service。
-4. report/ReportExportService：服务端重新计算行数、字段和风险，不信任客户端同名字段。
-5. report/ReportExportAuditService：何时向监测组件提交 Action、Fact 和结果。
-6. Spring3AuditWebAcceptanceTest：HTTP 响应、组件表、宿主表和副作用计数如何共同验收。
+1. [AuditPrincipalFilter.java](src/main/java/io/github/jasper/monitoring/audit/spring3/security/AuditPrincipalFilter.java)：测试身份如何进入 Shiro Subject。
+2. [AuditReportAuthorizationInterceptor.java](src/main/java/io/github/jasper/monitoring/audit/spring3/security/AuditReportAuthorizationInterceptor.java)：资源加载和组织范围授权发生在哪里。
+3. [ReportExportController.java](src/main/java/io/github/jasper/monitoring/audit/spring3/report/ReportExportController.java)：HTTP DTO 如何进入业务 Service。
+4. [ReportExportService.java](src/main/java/io/github/jasper/monitoring/audit/spring3/report/ReportExportService.java)：服务端重新计算行数和字段，执行当前请求的风险中断；风险阻断时不生成 XLSX。
+5. [ReportExportAuditService.java](src/main/java/io/github/jasper/monitoring/audit/spring3/report/ReportExportAuditService.java)：在阻断或成功的明确业务结果点调用 `MonitoringService.monitor(...)`，提交 `ReportExport`、`ResourceId`、`DataCount`、敏感级别和结果。
+6. [Spring3AuditWebAcceptanceTest.java](src/test/java/io/github/jasper/monitoring/audit/spring3/Spring3AuditWebAcceptanceTest.java)：HTTP 响应、组件表、宿主表和副作用计数如何共同验收。
 
 其他场景按同样方式定位：登录和会话在 security，控制处理器在 control，通知在 notification，组件管理服务的 HTTP 适配在 management，注解采集示例在 monitoring，测试夹具仓储只在 persistence。
 
@@ -37,7 +38,7 @@
 | 包 | 责任 | 不负责 |
 | --- | --- | --- |
 | security | 从测试 Subject 派生身份；在报告访问前授权 | 不替业务 Service 生成资源事实 |
-| report | 查询、导出预检、生成文件和导出审计 | 不接受客户端身份、组织或最终行数作为事实 |
+| report | 受保护查询、导出预检、业务副作用和导出监测埋点 | 不接受客户端身份、组织或最终行数作为事实；不直接执行控制处理器 |
 | privilege | 演示权限变更前的控制边界 | 不绕过组件管理服务写监测表 |
 | control | 实现 ControlTrigger 对应的宿主副作用 | 不扩大 ControlCommand.subject 的作用范围 |
 | notification | 实现可控失败的 NotificationChannel | 不回滚已提交告警 |
@@ -78,11 +79,24 @@ Spring3AuditApplication 启动时执行组件 Schema 和 db/audit-fixture-schema
       -> ReportExportService
       -> AuditFixtureRepository.countReportRows
       -> ExportRiskGuard
-      -> ReportExportAuditService
       -> XLSX generation
+      -> ReportExportAuditService (SUCCESS Action/Fact)
       -> audit_export_ledger
 
-阻断路径在 ExportRiskGuard 后结束：写入拒绝事件、告警和宿主台账，但不调用 XLSX 生成。跨组织访问则在拦截器阶段返回 404，导出 Service 不会被调用。
+阻断路径在 `ExportRiskGuard` 后结束：先调用 `ReportExportAuditService` 写入 `ReportExport` 的 DENIED 事件，
+再写入宿主导出台账，但不调用 XLSX 生成。跨组织访问则在拦截器阶段提交 `AccessDenied` 事件并返回 404，
+导出 Service 不会被调用。监测组件新产生的 `DENY`、`REQUIRE_APPROVAL` 等控制由宿主 `ControlHandler`
+落地，通常保护后续请求；如果业务要求当前请求立即停止，必须在文件生成前检查已生效控制或执行本包的风险预检。
+
+### 监测接入对照
+
+| 业务阶段 | report 包做什么 | 监测组件做什么 | 集成者必须替换/补充 |
+| --- | --- | --- | --- |
+| 认证和资源授权 | 读取已授权报告对象，拒绝时停止 Controller 链 | 记录 `AccessDenied` 或授权结果 | 接入真实身份、租户/组织资源查询和授权 Service |
+| 查询执行前 | 检查已有会话、拒绝和限流状态 | 不自动把普通 HTTP 请求转成 Query | 在真实查询 Service 计算 `ResourceId`、`SequentialAccess` |
+| 查询执行后 | 调用 `monitor(Query)` | 持久化事件，评估 AUTHZ/DATA 规则并编排告警/控制 | 保证事件调用位于真实查询决策点，并处理控制的后续请求效果 |
+| 导出预检 | 重新统计行数、识别敏感列、检查 UTC 日累计；风险命中则不生成文件 | 接收 DENIED `ReportExport`，评估 EXPT 规则并形成告警/控制 | 将固定仓储替换为真实数据权限、行数和导出台账 |
+| 文件生成成功 | 生成文件后调用 `monitor(ReportExport)` | 保存 SUCCESS 事件和事实 | 保证事实使用实际生成结果，不使用请求体自报行数 |
 
 ## 表归属
 

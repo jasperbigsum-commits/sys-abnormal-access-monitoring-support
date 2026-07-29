@@ -13,7 +13,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Controller-ready XLSX adapter; host frontend remains outside the library. */
+/**
+ * 可直接挂接 Controller 的 XLSX 导出适配器。
+ *
+ * <p>授权拦截器必须先放入服务端报告对象；风险阻断返回审批状态且不生成文件，参数错误返回客户端
+ * 错误。前端 URL、响应协议和真实导出实现仍由宿主负责。</p>
+ */
 @RestController
 @RequestMapping("/audit/reports/{reportId}/exports")
 public class ReportExportController {

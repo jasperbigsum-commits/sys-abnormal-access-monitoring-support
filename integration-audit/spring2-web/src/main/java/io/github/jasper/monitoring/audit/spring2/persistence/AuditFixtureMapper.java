@@ -9,7 +9,12 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
-/** MyBatis boundary for all state owned by the Boot 2 reference host. */
+/**
+ * Boot 2 参考宿主全部夹具状态的 MyBatis 接口。
+ *
+ * <p>方法只访问 {@code audit_*} 宿主测试表，供认证、会话、报告、权限、控制副作用和通知重试
+ * 验收使用；不访问组件的 {@code monitoring_*} 表，也不承担组件监测状态机。</p>
+ */
 public interface AuditFixtureMapper {
     @Insert("INSERT INTO audit_account(user_id,organization_id,status) VALUES(#{userId},#{organizationId},#{status})")
     int insertAccount(@Param("userId") String userId, @Param("organizationId") String organizationId,

@@ -14,11 +14,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * HTTP adapter for the fixture XLSX export flow.
+ * 验收夹具 XLSX 导出流程的 HTTP 适配器。
  *
  * <p>The authorization interceptor must have placed the server-loaded report in the request
- * before this method runs. A blocked export returns an approval status and never returns a
- * workbook; malformed selection input is mapped to a client error.</p>
+ * 执行前完成授权。导出被阻断时返回审批状态且不返回工作簿；选择参数格式错误时映射为客户端错误。</p>
  */
 @RestController
 @RequestMapping("/audit/reports/{reportId}/exports")
@@ -29,6 +28,16 @@ public class ReportExportController {
         this.exports = exports;
     }
 
+    /**
+     * 接收导出选择并返回审批状态或 XLSX 文件。
+     *
+     * <p>授权拦截器必须先把服务端报告对象写入请求属性；本方法不从请求体读取组织、身份或最终
+     * 行数，也不在 Controller 内直接调用监测组件。</p>
+     *
+     * @param selection 客户端导出选择
+     * @param request 用于读取已授权报告对象
+     * @return 202 表示风险预检阻断并等待审批，200 表示已生成文件
+     */
     @PostMapping
     public ResponseEntity<?> export(@RequestBody ReportExportRequest selection, HttpServletRequest request) {
         AuditReportCatalog.AuditReport report = authorizedReport(request);
@@ -43,6 +52,11 @@ public class ReportExportController {
         headers.setContentDispositionFormData("attachment", "report.xlsx");
         return new ResponseEntity<byte[]>(result.getContent(), headers, HttpStatus.OK);
     }
+    /**
+     * 将导出选择参数校验错误映射为 400。
+     *
+     * @return 不泄漏内部异常文本的稳定客户端错误
+     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<?> invalid(IllegalArgumentException ignored) {
         return ResponseEntity.badRequest()

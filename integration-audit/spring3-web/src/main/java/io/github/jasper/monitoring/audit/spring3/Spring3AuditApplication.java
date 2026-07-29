@@ -16,7 +16,13 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 
-/** Spring Boot 3 的最小可运行审计宿主项目。 */
+/**
+ * Spring Boot 3 的可运行集成审计宿主。
+ *
+ * <p>本启动类只负责组装测试数据源、夹具 MyBatis Mapper、管理授权器和 Spring3 Starter。
+ * 为了让验收自包含，启动时执行组件 Schema 和 {@code audit_*} 夹具 Schema；生产应用不得复制
+ * 该启动期 DDL 逻辑，应通过既有迁移流程执行一次并提供持久化 {@code SqlSessionFactory}。</p>
+ */
 @SpringBootApplication
 public class Spring3AuditApplication {
     /** @param args Spring Boot 启动参数 */

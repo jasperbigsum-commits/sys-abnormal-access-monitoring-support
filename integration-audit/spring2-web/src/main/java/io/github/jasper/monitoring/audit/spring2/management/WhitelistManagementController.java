@@ -12,7 +12,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** HTTP adapter for predeclared, versioned whitelist lifecycle operations. */
+/**
+ * 预声明白名单生命周期操作的 HTTP 适配器。
+ *
+ * <p>授予和撤销必须携带期望版本，操作者从服务端身份派生；白名单范围、授权、版本冲突和审计
+ * 由公开管理服务负责。</p>
+ */
 @RestController
 @RequestMapping("/audit/management/whitelists")
 public class WhitelistManagementController {

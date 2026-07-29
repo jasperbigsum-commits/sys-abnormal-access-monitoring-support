@@ -36,6 +36,7 @@ public final class ReportExportAuditService {
      * @param allowed 是否允许继续生成文件
      */
     public void record(String reportId, long rows, boolean sensitive, boolean allowed) {
+        // 该调用是 report 业务到组件的唯一监测适配点；规则命中后的控制由宿主处理器落地。
         ActionFacts.Builder facts = ActionFacts.builder()
             .put(BuiltInFacts.ResourceId.class, reportId)
             .put(BuiltInFacts.DataCount.class, Long.valueOf(rows));

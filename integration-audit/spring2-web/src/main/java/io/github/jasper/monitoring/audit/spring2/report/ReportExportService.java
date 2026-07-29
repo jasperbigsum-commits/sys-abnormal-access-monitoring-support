@@ -16,7 +16,12 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
-/** Synchronous policy-aware XLSX export service for the reference host. */
+/**
+ * 参考宿主的同步导出业务和监测事实提交边界。
+ *
+ * <p>服务端重新统计行数并执行风险预检；阻断时先提交拒绝导出事件且不生成文件，成功时在文件
+ * 生成完成后提交成功事件。请求体只表达选择意图，不能作为组织、授权或最终行数事实。</p>
+ */
 @Service
 public final class ReportExportService {
     private static final Set<String> ALLOWED_FIELDS = new LinkedHashSet<String>(

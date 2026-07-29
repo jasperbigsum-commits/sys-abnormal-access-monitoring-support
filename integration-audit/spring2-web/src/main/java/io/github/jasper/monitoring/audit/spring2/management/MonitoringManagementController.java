@@ -21,7 +21,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import io.github.jasper.monitoring.api.ControlActionType;
 
-/** Thin HTTP adapter over the public management service contract. */
+/**
+ * 公开管理服务契约的 HTTP 适配器。
+ *
+ * <p>只把服务端身份转换为 {@code ManagementActor} 并调用管理服务；系统范围授权、版本、事务和
+ * 管理审计由组件管理服务负责，请求体不能选择操作者或授权范围。</p>
+ */
 @RestController
 @RequestMapping("/audit/management")
 public class MonitoringManagementController {

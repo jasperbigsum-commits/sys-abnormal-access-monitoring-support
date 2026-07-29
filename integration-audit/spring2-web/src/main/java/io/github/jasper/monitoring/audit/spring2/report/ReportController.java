@@ -11,7 +11,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Report business endpoints; authorization is completed by the host interceptor. */
+/**
+ * 报告业务查询和导出入口。
+ *
+ * <p>资源授权在 Controller 前由宿主拦截器完成，本类只消费已授权报告对象，不信任路径中的组织
+ * 或客户端资源字段；固定 URL 和响应仅用于集成验收。</p>
+ */
 @RestController
 @RequestMapping("/audit/reports")
 public class ReportController {

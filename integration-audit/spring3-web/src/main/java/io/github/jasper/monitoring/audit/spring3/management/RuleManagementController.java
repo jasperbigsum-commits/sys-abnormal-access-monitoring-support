@@ -13,7 +13,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** HTTP adapter for approved, append-only rule versions. */
+/**
+ * 经过双人审批的追加式规则版本 HTTP 适配器。
+ *
+ * <p>请求只携带规则变更内容和期望版本；当前操作者由服务端身份派生，第二位审批人由独立适配器
+ * 验证。规则服务负责模式、阈值、版本、授权、持久化和管理审计，本类不直接改变运行时冻结目录。</p>
+ */
 @RestController
 @RequestMapping("/audit/management/rules")
 public class RuleManagementController {

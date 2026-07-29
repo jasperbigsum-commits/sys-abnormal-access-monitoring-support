@@ -13,7 +13,12 @@ import java.time.Clock;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-/** Query business boundary whose decisions are observable through subsequent HTTP calls. */
+/**
+ * 报告查询业务边界和 Query Action 埋点适配器。
+ *
+ * <p>服务先检查会话和已生效控制，再以服务端资源 ID 和顺序访问事实调用监测服务。监测组件负责
+ * 事件、规则、告警和控制编排；本次调用新命中的控制通常保护后续请求，不会回滚已经执行的查询。</p>
+ */
 @Service
 public final class ReportQueryService {
     private final MonitoringService monitoring; private final MonitoringContextAccessor contexts;

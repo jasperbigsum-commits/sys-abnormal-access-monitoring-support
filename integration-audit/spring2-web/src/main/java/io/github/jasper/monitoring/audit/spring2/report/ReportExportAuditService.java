@@ -10,7 +10,12 @@ import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import org.springframework.stereotype.Service;
 
-/** Emits the authoritative export event before a blocked export or after a completed workbook. */
+/**
+ * 在导出阻断前或工作簿完成后提交权威导出事件的窄适配器。
+ *
+ * <p>只接受服务端确认的报告 ID、行数、敏感标记和允许结果，并以 {@code HOST_PROVIDER} 提交给
+ * {@code MonitoringService}；不会自行执行控制，也不会把监测失败转换为导出放行。</p>
+ */
 @Service
 public final class ReportExportAuditService {
     private final MonitoringService monitoring;

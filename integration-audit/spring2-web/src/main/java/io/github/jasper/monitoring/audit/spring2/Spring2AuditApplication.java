@@ -16,7 +16,13 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 
-/** Spring Boot 2 的最小可运行审计宿主项目。 */
+/**
+ * Spring Boot 2 的可运行集成审计宿主。
+ *
+ * <p>本启动类只负责组装测试数据源、夹具 MyBatis Mapper、管理授权器和 Spring2 Starter。
+ * 启动期执行 Schema 仅为验收自包含；生产应用应通过既有迁移流程执行监测表结构，不能把夹具
+ * 初始化逻辑当成生产建表方案。</p>
+ */
 @SpringBootApplication
 public class Spring2AuditApplication {
     /** @param args Spring Boot 启动参数 */

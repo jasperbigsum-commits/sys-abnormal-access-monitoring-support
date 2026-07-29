@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 用于对比显式埋点和注解埋点的 Spring3 验收 Controller。
  *
- * <p>本类故意提供五种不同的处理方式，方便集成者把示例和自己的业务代码逐一对照：</p>
+ * <p>本类故意提供六个路由：其中五个展示不同的业务采集或结果处理方式，另一个是“只有上下文、没有业务事件”的反例，方便集成者把示例和自己的业务代码逐一对照：</p>
  * <ol>
  *     <li>{@link #loginFailure()}：显式构造认证失败结果，不依赖 HTTP 响应状态推断业务含义；</li>
  *     <li>{@link #export(AuditExportRequest)}：显式提交服务端选择的资源标识和数据量，

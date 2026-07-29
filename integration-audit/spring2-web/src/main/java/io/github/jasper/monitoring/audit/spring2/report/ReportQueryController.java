@@ -11,7 +11,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** HTTP adapter for stateful traversal and frequency scenarios. */
+/**
+ * 报告查询 HTTP 适配器。
+ *
+ * <p>Controller 只接收验收参数并委托查询 Service，不负责身份认证、资源授权、规则评估或直接
+ * 访问监测表；生产 URL 和会话来源必须由宿主替换。</p>
+ */
 @RestController
 @RequestMapping("/audit/queries")
 public class ReportQueryController {
