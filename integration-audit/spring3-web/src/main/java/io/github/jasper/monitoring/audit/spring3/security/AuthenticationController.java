@@ -15,7 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 参考宿主的匿名登录与会话探针 Controller。
  *
- * <p>这是集成夹具实现：路由、请求 DTO 和响应状态只服务验收，不是生产认证 API 规范。</p>
+ * <p>登录接口把 accepted 作为测试分支输入，调用认证 Service 后再返回状态；会话探针只用于
+ * 验证控制动作的撤销结果。路由、DTO 和响应状态均属于验收夹具。</p>
  */
 @RestController
 @RequestMapping("/audit/authentication")

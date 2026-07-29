@@ -13,7 +13,7 @@ import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureReposit
 /**
  * 将固定夹具请求头转换为已认证 Shiro Subject 的过滤器。
  *
- * <p>这是集成夹具实现，不能作为生产认证机制使用。</p>
+ * <p>它只读取验收请求的固定 Header，并使用 Realm 的固定凭据建立 Subject。</p>
  */
 public final class AuditPrincipalFilter extends AccessControlFilter {
     // 集成夹具实现：仅供验收请求指定固定测试身份。
@@ -24,7 +24,7 @@ public final class AuditPrincipalFilter extends AccessControlFilter {
 
     @Override
     protected boolean isAccessAllowed(ServletRequest request, ServletResponse response, Object mappedValue) {
-        // 集成夹具实现：从测试 Header 读取主体；生产应由可信认证过滤器建立 Subject。
+        // 从验收 Header 读取主体；Subject 的账号状态仍由 Realm 查询夹具表确认。
         String principal = ((HttpServletRequest) request).getHeader(HEADER_NAME);
         if (!realm.supportsPrincipal(principal)) {
             return false;

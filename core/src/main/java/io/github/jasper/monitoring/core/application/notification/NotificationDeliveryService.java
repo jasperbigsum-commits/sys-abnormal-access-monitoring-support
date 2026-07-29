@@ -63,7 +63,7 @@ public final class NotificationDeliveryService {
     public void deliver(SecurityAlert alert) {
         Objects.requireNonNull(alert, "alert");
         Optional<NotificationDelivery> delivery = deliveries.find(channelName, alert.getAlertId());
-        if (delivery.isPresent()) attempt(delivery.get(), alert, clock.instant());
+        delivery.ifPresent(notificationDelivery -> attempt(notificationDelivery, alert, clock.instant()));
     }
 
     public void retryDue(int limit) {

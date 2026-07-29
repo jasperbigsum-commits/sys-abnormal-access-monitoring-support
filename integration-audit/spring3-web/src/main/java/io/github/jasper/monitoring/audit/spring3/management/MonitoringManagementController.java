@@ -21,7 +21,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import io.github.jasper.monitoring.api.ControlActionType;
 
-/** Thin HTTP adapter over the public management service contract. */
+/**
+ * HTTP adapter over the public management service contracts.
+ *
+ * <p>The actor is derived from the current monitoring identity and the system scope is fixed
+ * by this host. Request bodies carry only operation data such as an idempotency key; they do
+ * not choose the operator or authorization scope.</p>
+ */
 @RestController
 @RequestMapping("/audit/management")
 public class MonitoringManagementController {

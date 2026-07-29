@@ -11,8 +11,8 @@ import org.springframework.stereotype.Component;
 /**
  * 演示宿主仅通过注解声明可执行控制动作。
  *
- * <p>业务系统只需把真正的验证码、限流或锁定逻辑写在对应方法中；Starter 会自动将这些方法注册为
- * {@code ControlHandler}，无需另写适配器实现。</p>
+ * <p>本类是验收用的宿主控制处理器集合。每个方法先用夹具仓储记录幂等状态，再改变测试会话或控制状态，
+ * 使测试可以同时断言组件控制记录、宿主副作用和重复调用行为。</p>
  *
  * <p><strong>验收对照（注解声明层）</strong>：
  * IA-08（触发器声明合法且唯一）、IA-09（ENFORCE 必须有真实宿主处理器）、
@@ -34,7 +34,7 @@ public final class AuditControlActions {
      * <p><strong>注意细节</strong>：控制执行依赖幂等键，重复投递不能扩大副作用。</p>
      *
      * @param command 本次控制的主体、有效期和幂等键
-     * @return 成功结果；真实宿主应在此调用验证码服务
+     * @return 记录幂等状态后的成功结果
      */
     @ControlTrigger(ControlActionType.REQUIRE_CAPTCHA)
     public ControlExecution requireCaptcha(ControlCommand command) {
@@ -49,7 +49,7 @@ public final class AuditControlActions {
      * <p><strong>注意细节</strong>：主体必须来自服务端可信上下文，不得直接信任客户端伪造字段。</p>
      *
      * @param command 本次控制的主体、有效期和幂等键
-     * @return 成功结果；真实宿主应在此调用限流服务并按幂等键去重
+     * @return 记录幂等状态后的成功结果
      */
     @ControlTrigger(ControlActionType.RATE_LIMIT)
     public ControlExecution rateLimit(ControlCommand command) {

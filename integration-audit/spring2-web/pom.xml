@@ -12,6 +12,7 @@
     <artifactId>sys-abnormal-access-monitoring-integration-audit-spring2-web</artifactId>
     <name>Integration Audit Spring Boot 2 Web Project</name>
     <properties>
+        <maven.compiler.release>8</maven.compiler.release>
         <spring.boot.version>2.7.18</spring.boot.version>
         <mybatis-plus.version>3.5.11</mybatis-plus.version>
     </properties>

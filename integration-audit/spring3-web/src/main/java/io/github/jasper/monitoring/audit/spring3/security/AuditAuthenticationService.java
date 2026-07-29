@@ -1,25 +1,25 @@
 package io.github.jasper.monitoring.audit.spring3.security;
 
-import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.AccountType;
 import io.github.jasper.monitoring.api.IdentityContext;
+import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureRepository;
 import io.github.jasper.monitoring.core.application.MonitoringService;
-import java.time.Clock;
-import java.time.Instant;
-import java.util.Map;
-import java.util.Collections;
-import java.util.UUID;
 import org.springframework.stereotype.Service;
+
+import java.time.Clock;
+import java.util.Collections;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * 用于 TC-01 与 TC-03 的有状态认证宿主边界。
  *
- * <p>这是集成夹具实现：生产系统应复用“认证决策后提交服务端事件”的边界模式，
- * 但必须替换夹具账号、会话和认证结果来源。</p>
+ * <p>该类使用 {@code audit_account}、{@code audit_session} 和 {@code audit_control_state}
+ * 驱动验收分支，并在认证失败后提交登录失败事件。</p>
  */
 @Service
 public final class AuditAuthenticationService {
@@ -58,14 +58,14 @@ public final class AuditAuthenticationService {
             recordFailure(userId, clientIp, "INVALID_CREDENTIAL");
             return AuthenticationResult.denied("INVALID_CREDENTIAL");
         }
-        // 集成夹具实现：成功认证后写入测试会话表；生产系统应委托真实会话服务。
+        // 成功认证后写入测试会话表，供会话撤销验收读取。
         String sessionId = UUID.randomUUID().toString();
         fixtures.createSession(sessionId, userId, clock.instant());
         return AuthenticationResult.authenticated(sessionId);
     }
 
     private void recordFailure(String userId, String clientIp, String reason) {
-        // 集成夹具实现：构造最小请求上下文以验证登录失败事件；生产中应复用当前请求可信上下文。
+        // 用当前失败请求构造最小上下文，验证认证结果先于监测事件提交。
         MonitoringRequestContext request = MonitoringRequestContext.builder().method("POST")
             .path("/audit/authentication/login").sourceIp(clientIp)
             .requestId(UUID.randomUUID().toString()).build();

@@ -13,7 +13,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Controller-ready XLSX adapter; host frontend remains outside the library. */
+/**
+ * HTTP adapter for the fixture XLSX export flow.
+ *
+ * <p>The authorization interceptor must have placed the server-loaded report in the request
+ * before this method runs. A blocked export returns an approval status and never returns a
+ * workbook; malformed selection input is mapped to a client error.</p>
+ */
 @RestController
 @RequestMapping("/audit/reports/{reportId}/exports")
 public class ReportExportController {

@@ -16,7 +16,7 @@ import org.apache.shiro.subject.PrincipalCollection;
 /**
  * 基于参考宿主 MyBatis 账号与角色状态的 Shiro Realm。
  *
- * <p>这是集成夹具实现：固定凭据和角色到权限的映射只服务验收场景，生产应接入真实身份目录与授权策略。</p>
+ * <p>固定凭据和角色到权限的映射只服务验收场景；权限集合仅覆盖本模块报告和管理路由。</p>
  */
 public final class AuditRbacRealm extends AuthorizingRealm {
     // 集成夹具实现：所有测试主体共用的固定凭据。

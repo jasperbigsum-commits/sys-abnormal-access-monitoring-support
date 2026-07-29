@@ -15,7 +15,8 @@ import java.util.Map;
 /**
  * 报告 HTTP 资源的唯一 fail-closed 授权边界。
  *
- * <p>拦截器的先授权后访问模式可供生产参考；报告目录、夹具 Realm 和固定响应策略属于集成夹具实现。</p>
+ * <p>报告请求在进入 Controller 前完成资源加载和组织范围授权。拒绝时不把报告对象放入请求属性，
+ * 因此后续导出 Service 不会被调用；报告目录、夹具 Realm 和固定响应策略仅属于本验收夹具。</p>
  */
 public final class AuditReportAuthorizationInterceptor implements HandlerInterceptor {
     // 集成实现：在验收请求内传递已授权的夹具报告，避免 Controller 再次按客户端标识查询。

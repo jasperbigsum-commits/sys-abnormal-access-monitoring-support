@@ -13,7 +13,13 @@ import java.time.Clock;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-/** Query business boundary whose decisions are observable through subsequent HTTP calls. */
+/**
+ * 查询业务边界示例。
+ *
+ * <p>方法先检查会话和已生效控制，再提交 Query Action。sequential 和 resourceId 是宿主根据
+ * 实际查询路径确定的 Fact，组件只负责校验、持久化和规则评估。TC-06、TC-07 通过后续 HTTP
+ * 请求观察撤销会话和限流副作用。</p>
+ **/
 @Service
 public final class ReportQueryService {
     private final MonitoringService monitoring; private final MonitoringContextAccessor contexts;
@@ -23,6 +29,14 @@ public final class ReportQueryService {
         this.monitoring=monitoring; this.contexts=contexts; this.fixtures=fixtures;
     }
 
+    /**
+     * 执行一次受会话、控制和监测保护的查询。
+     *
+     * @param resourceId 服务端解析出的资源标识
+     * @param sequential 是否由业务路径判定为顺序遍历
+     * @param sessionId 验收用会话标识，可为空
+     * @return 查询结果对应的 HTTP 状态
+     */
     public HttpStatus query(String resourceId, boolean sequential, String sessionId) {
         String userId=contexts.identityContext().getUserId();
         if (sessionId!=null && !fixtures.isActiveSession(sessionId)) return HttpStatus.UNAUTHORIZED;

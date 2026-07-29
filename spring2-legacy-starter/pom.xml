@@ -11,7 +11,7 @@
     <artifactId>sys-abnormal-access-monitoring-spring2-legacy-starter</artifactId>
     <name>Abnormal Access Monitoring Spring Boot 2.1 Legacy Starter</name>
     <properties>
-        <maven.compiler.release>1.8</maven.compiler.release>
+        <maven.compiler.release>8</maven.compiler.release>
         <spring.boot.version>2.1.18.RELEASE</spring.boot.version>
     </properties>
     <dependencyManagement>
