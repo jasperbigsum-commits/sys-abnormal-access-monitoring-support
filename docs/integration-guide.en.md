@@ -4,7 +4,7 @@ This guide is for host and management API developers.
 
 ## Installation
 
-Use exactly one starter (`spring2-legacy-starter` for Boot 2.2, `spring2-starter` for Boot 2.7, `spring3-starter` for Boot 3), apply the monitoring schema through controlled migrations, provide a `SqlSessionFactory`, and start in `OBSERVE`. Missing MyBatis persistence is a startup error; H2 and memory fixtures are test-only.
+Use exactly one starter (`spring2-legacy-starter` for Boot 2.1, `spring2-starter` for Boot 2.7, `spring3-starter` for Boot 3), apply the monitoring schema through controlled migrations, provide a `SqlSessionFactory`, and start in `OBSERVE`. Missing MyBatis persistence is a startup error; H2 and memory fixtures are test-only.
 
 ## Typed Actions and Facts
 
