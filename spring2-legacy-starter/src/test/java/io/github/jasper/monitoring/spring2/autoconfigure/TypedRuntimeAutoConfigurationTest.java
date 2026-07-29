@@ -92,7 +92,7 @@ class TypedRuntimeAutoConfigurationTest {
             .run(context -> assertThat(context).hasFailed());
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     static class PersistenceConfiguration {
         @Bean SqlSessionFactory sqlSessionFactory() {
             SqlSessionFactory factory = Mockito.mock(SqlSessionFactory.class);
@@ -101,7 +101,7 @@ class TypedRuntimeAutoConfigurationTest {
         }
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     static class EmptyRuleCatalogConfiguration {
         @Bean RuleCatalog ruleCatalog() {
             RuleCatalog catalog = new RuleCatalog();
@@ -110,13 +110,13 @@ class TypedRuntimeAutoConfigurationTest {
         }
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     static class DuplicateControlConfiguration {
         @Bean ControlHandler firstDenyHandler() { return denyHandler(); }
         @Bean ControlHandler secondDenyHandler() { return denyHandler(); }
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     static class InvalidActionFactConfiguration {
         @Bean InvalidActionFactService invalidActionFactService() {
             return new InvalidActionFactService();

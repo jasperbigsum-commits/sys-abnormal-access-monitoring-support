@@ -48,7 +48,7 @@ class IpControlFilterTest {
         assertThat(response.getStatus()).isEqualTo(403);
         assertThat(response.getContentAsByteArray()).isEmpty();
         assertThat(response.getHeaderNames()).isEmpty();
-        Mockito.verifyNoInteractions(chain);
+        Mockito.verifyZeroInteractions(chain);
         assertThat(state.checkedIp).isEqualTo("203.0.113.10");
     }
 
@@ -64,7 +64,7 @@ class IpControlFilterTest {
         assertThat(response.getStatus()).isEqualTo(429);
         assertThat(response.getHeader("Retry-After")).isEqualTo("2");
         assertThat(response.getContentAsByteArray()).isEmpty();
-        Mockito.verifyNoInteractions(chain);
+        Mockito.verifyZeroInteractions(chain);
     }
 
     @Test

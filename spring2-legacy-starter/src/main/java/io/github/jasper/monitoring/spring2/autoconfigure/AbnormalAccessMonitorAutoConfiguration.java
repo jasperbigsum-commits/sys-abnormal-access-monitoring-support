@@ -80,7 +80,7 @@ import org.springframework.scheduling.annotation.Scheduled;
  * precedence over defaults. Resource authorization defaults to deny and {@code ENFORCE} requires
  * at least one host {@link ControlHandler}.</p>
  */
-@Configuration(proxyBeanMethods = false)
+@Configuration
 @AutoConfigureAfter(name = "org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration")
 @EnableConfigurationProperties(AbnormalAccessMonitorProperties.class)
 public class AbnormalAccessMonitorAutoConfiguration {
@@ -205,7 +205,7 @@ public class AbnormalAccessMonitorAutoConfiguration {
             config.getMaxAttempts(), config.getRetryDelay(), config.getLeaseDuration());
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     @EnableScheduling
     @ConditionalOnBean(SqlSessionFactory.class)
     @ConditionalOnProperty(prefix = "abnormal.access.monitor.notification", name = "retry-enabled",
@@ -349,7 +349,7 @@ public class AbnormalAccessMonitorAutoConfiguration {
         return MdcTraceBridge.create(properties.getMdc().isEnabled(), properties.getMdc().getTraceIdKey());
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnClass(name = "org.springframework.web.filter.OncePerRequestFilter")
     @ConditionalOnProperty(prefix = "abnormal.access.monitor.ip-control", name = "enabled", havingValue = "true")
@@ -420,7 +420,7 @@ public class AbnormalAccessMonitorAutoConfiguration {
         }
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnClass(name = "org.springframework.web.filter.OncePerRequestFilter")
     @ConditionalOnProperty(prefix = "abnormal.access.monitor.ip-control", name = "enabled", havingValue = "true")
@@ -436,7 +436,7 @@ public class AbnormalAccessMonitorAutoConfiguration {
         }
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnClass(name = {"org.springframework.web.servlet.HandlerInterceptor", "org.aspectj.lang.annotation.Aspect"})
     @ConditionalOnProperty(prefix = "abnormal.access.monitor.instrumentation", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -451,7 +451,7 @@ public class AbnormalAccessMonitorAutoConfiguration {
         }
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnClass(name = "org.springframework.web.servlet.HandlerInterceptor")
     static class MvcMonitoringConfiguration {

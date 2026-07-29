@@ -130,7 +130,7 @@ class AbnormalAccessMonitorAutoConfigurationTest {
         return null;
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     static class PersistenceConfiguration {
         @Bean
         SqlSessionFactory sqlSessionFactory() {
@@ -140,7 +140,7 @@ class AbnormalAccessMonitorAutoConfigurationTest {
         }
     }
 
-    @Configuration(proxyBeanMethods = false)
+    @Configuration
     static class RequiredControlConfiguration {
         @Bean
         io.github.jasper.monitoring.core.port.ControlHandler remainingBuiltInControls() {

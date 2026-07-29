@@ -11,7 +11,7 @@
     <artifactId>sys-abnormal-access-monitoring-spring2-legacy-starter</artifactId>
     <name>Abnormal Access Monitoring Spring Boot 2.2 Legacy Starter</name>
     <properties>
-        <spring.boot.version>2.2.13.RELEASE</spring.boot.version>
+        <spring.boot.version>2.1.18.RELEASE</spring.boot.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -58,6 +58,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

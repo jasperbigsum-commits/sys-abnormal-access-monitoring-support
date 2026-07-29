@@ -29,6 +29,6 @@ class ManagementAutoConfigurationTest {
         assertThat(context).hasSingleBean(RuleCatalogService.class);assertThat(context).hasSingleBean(WhitelistManagementService.class);
         assertThat(context).hasSingleBean(ControlManagementService.class);
     });}
-    @Configuration(proxyBeanMethods=false) static class Persistence { @Bean SqlSessionFactory sqlSessionFactory(){SqlSessionFactory f=Mockito.mock(SqlSessionFactory.class);Mockito.when(f.getConfiguration()).thenReturn(new org.apache.ibatis.session.Configuration());return f;} }
-    @Configuration(proxyBeanMethods=false) static class Authorization { @Bean ManagementAuthorizer managementAuthorizer(){return (actor,operation,resource)->{};} }
+    @Configuration static class Persistence { @Bean SqlSessionFactory sqlSessionFactory(){SqlSessionFactory f=Mockito.mock(SqlSessionFactory.class);Mockito.when(f.getConfiguration()).thenReturn(new org.apache.ibatis.session.Configuration());return f;} }
+    @Configuration static class Authorization { @Bean ManagementAuthorizer managementAuthorizer(){return (actor,operation,resource)->{};} }
 }
