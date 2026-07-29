@@ -3,13 +3,11 @@ package io.github.jasper.monitoring.audit.spring3.monitoring;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.action.MonitorAction;
-import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
-import io.github.jasper.monitoring.api.fact.FactSource;
-import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
+import io.github.jasper.monitoring.spring.support.MonitoringRecorder;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -36,20 +34,20 @@ import org.springframework.web.bind.annotation.RestController;
  * </ol>
  *
  * <p>{@link #contextOnly()} 是反例：它只读取请求上下文，不声明 Action，也不调用
- * {@code MonitoringService}，因此不应产生业务事件。内置 Action 的定义、Fact 的校验和编码、
+ * {@code MonitoringRecorder}，因此不应产生业务事件。内置 Action 的定义、Fact 的校验和编码、
  * 规则评估、告警持久化以及控制编排由组件完成；集成者仍需在真实业务决策点选择入口并提供可信 Fact。</p>
  */
 @RestController
 @RequestMapping("/audit")
 public class MonitoringFixtureController {
     private static final long SERVER_REPORTED_ROW_COUNT = 37L;
-    private final MonitoringService monitoring;
+    private final MonitoringRecorder monitoringRecorder;
     private final MonitoringContextAccessor contexts;
     private final AnnotatedMonitoringService annotatedMonitoring;
 
-    public MonitoringFixtureController(MonitoringService monitoring, MonitoringContextAccessor contexts,
+    public MonitoringFixtureController(MonitoringRecorder monitoringRecorder, MonitoringContextAccessor contexts,
             AnnotatedMonitoringService annotatedMonitoring) {
-        this.monitoring = monitoring;
+        this.monitoringRecorder = monitoringRecorder;
         this.contexts = contexts;
         this.annotatedMonitoring = annotatedMonitoring;
     }
@@ -58,8 +56,8 @@ public class MonitoringFixtureController {
      * 显式提交一次登录失败事件。
      *
      * <p>这个方法用于说明认证失败不能只依赖请求上下文自动产生。认证 Service 已经知道失败原因后，
-     * 应通过 {@code ActionExecution} 明确传入 Action、身份、请求上下文和失败结果。登录失败内置
-     * Action 当前没有强制 Fact，因此这里只需要可信身份、请求上下文和失败原因。</p>
+     * 可通过 {@code MonitoringRecorder} 明确传入 Action 和失败结果；Recorder 自动使用当前可信
+     * 请求与身份上下文。登录失败内置 Action 当前没有强制 Fact。</p>
      *
      * <p>验收观察点：响应返回事件 ID；后续 AUTH-01、AUTH-02、AUTH-03 规则可以使用该事件；
      * 事件中的失败原因来自服务端认证分支，而不是请求体字段。</p>
@@ -68,17 +66,17 @@ public class MonitoringFixtureController {
      */
     @PostMapping("/login-failure")
     public Map<String, Object> loginFailure() {
-        return response(monitoring.monitor(ActionExecution.of(BuiltInActions.LoginFailure.class,
-            contexts.requestContext(), contexts.identityContext(), ActionOutcome.failure(
-                "INVALID_PASSWORD", ActionOutcome.ExceptionClassification.AUTHORIZATION, 0L))));
+        return response(monitoringRecorder.record(BuiltInActions.LoginFailure.class, ActionOutcome.failure(
+            "INVALID_PASSWORD", ActionOutcome.ExceptionClassification.AUTHORIZATION, 0L),
+            ActionFacts.builder().build()));
     }
 
     /**
      * 显式提交一次导出事件。
      *
      * <p>请求体参数被故意命名为 {@code ignored}，表示本路由只演示埋点入口，不演示真实导出。
-     * 资源 ID 和数据量由本类中的服务端常量选择，来源分别记录为默认可信请求/宿主事实和
-     * {@link FactSource#HOST_PROVIDER}。真实系统应在导出 Service 完成授权、查询和计数后，
+     * 资源 ID 和数据量由本类中的服务端常量选择，Recorder 将事实来源记录为
+     * {@code HOST_PROVIDER}。真实系统应在导出 Service 完成授权、查询和计数后，
      * 用实际业务结果替换这些值，再调用同一个程序化入口。</p>
      *
      * <p>与 {@link #annotatedExport(AuditExportRequest)} 的区别是：这里直接构造完整执行对象；后者由
@@ -92,9 +90,8 @@ public class MonitoringFixtureController {
         ActionFacts facts = ActionFacts.builder()
             .put(BuiltInFacts.ResourceId.class, "audit-export-2026")
             .put(BuiltInFacts.DataCount.class, Long.valueOf(SERVER_REPORTED_ROW_COUNT)).build();
-        return response(monitoring.monitor(ActionExecution.of(BuiltInActions.ReportExport.class,
-            contexts.requestContext(), contexts.identityContext(), ActionOutcome.success(0L),
-            facts, FactSource.HOST_PROVIDER)));
+        return response(monitoringRecorder.record(BuiltInActions.ReportExport.class,
+            ActionOutcome.success(0L), facts));
     }
 
     /**
@@ -122,7 +119,7 @@ public class MonitoringFixtureController {
      * 只读取请求上下文的对照接口。
      *
      * <p>Starter 会为每个请求准备请求 ID、路径、方法、来源 IP 等上下文，但上下文本身不是
-     * 业务 Action。该方法不调用 {@code MonitoringService}，用于 IA-02 验收“没有业务动作就没有
+     * 业务 Action。该方法不调用 {@code MonitoringRecorder}，用于 IA-02 验收“没有业务动作就没有
      * 业务事件”的边界。</p>
      *
      * @return 当前请求 ID，仅用于确认上下文已建立

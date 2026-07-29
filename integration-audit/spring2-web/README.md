@@ -173,20 +173,17 @@ abnormal:
 
 ### 5. 在业务事实产生处提交强类型事件
 
-夹具的 `ReportExportAuditService` 在文件生成前预检或生成后完成时调用 `MonitoringService`，并以 `HOST_PROVIDER` 声明资源 ID、行数和敏感级别：
+夹具的 `ReportExportAuditService` 在文件生成前预检或生成后完成时调用 `MonitoringRecorder`。Recorder 自动补全当前请求与身份上下文，并以 `HOST_PROVIDER` 声明资源 ID、行数和敏感级别：
 
 ```java
-monitoring.monitor(ActionExecution.of(
+monitoringRecorder.record(
     BuiltInActions.ReportExport.class,
-    contexts.requestContext(),
-    contexts.identityContext(),
     ActionOutcome.denied("EXPORT_PREFLIGHT_DENIED", 0L),
     ActionFacts.builder()
         .put(BuiltInFacts.ResourceId.class, reportId)
         .put(BuiltInFacts.DataCount.class, Long.valueOf(rows))
         .put(BuiltInFacts.Sensitivity.class, "high")
-        .build(),
-    FactSource.HOST_PROVIDER));
+        .build());
 ```
 
 关键要求：

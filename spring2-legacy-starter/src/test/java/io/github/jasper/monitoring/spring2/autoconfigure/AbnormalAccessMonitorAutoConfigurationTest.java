@@ -52,6 +52,16 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     }
 
     @Test
+    void keepsRecorderWhenAnnotationInstrumentationIsDisabled() {
+        webContextRunner.withPropertyValues(
+                "abnormal.access.monitor.instrumentation.enabled=false")
+            .run(context -> {
+                assertThat(context).hasSingleBean(MonitoringRecorder.class);
+                assertThat(context).doesNotHaveBean(TypedMonitorActionAspect.class);
+            });
+    }
+
+    @Test
     void deniesResourceAccessWhenHostAuthorizerIsNotConfigured() {
         contextRunner.run(context -> {
             MonitoringRequestContext request = MonitoringRequestContext.builder()

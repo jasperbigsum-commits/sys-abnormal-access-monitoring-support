@@ -28,7 +28,7 @@
 2. [AuditReportAuthorizationInterceptor.java](src/main/java/io/github/jasper/monitoring/audit/spring3/security/AuditReportAuthorizationInterceptor.java)：资源加载和组织范围授权发生在哪里。
 3. [ReportExportController.java](src/main/java/io/github/jasper/monitoring/audit/spring3/report/ReportExportController.java)：HTTP DTO 如何进入业务 Service。
 4. [ReportExportService.java](src/main/java/io/github/jasper/monitoring/audit/spring3/report/ReportExportService.java)：服务端重新计算行数和字段，执行当前请求的风险中断；风险阻断时不生成 XLSX。
-5. [ReportExportAuditService.java](src/main/java/io/github/jasper/monitoring/audit/spring3/report/ReportExportAuditService.java)：在阻断或成功的明确业务结果点调用 `MonitoringService.monitor(...)`，提交 `ReportExport`、`ResourceId`、`DataCount`、敏感级别和结果。
+5. [ReportExportAuditService.java](src/main/java/io/github/jasper/monitoring/audit/spring3/report/ReportExportAuditService.java)：在阻断或成功的明确业务结果点调用 `MonitoringRecorder.record(...)`，提交 `ReportExport`、`ResourceId`、`DataCount`、敏感级别和结果。
 6. [Spring3AuditWebAcceptanceTest.java](src/test/java/io/github/jasper/monitoring/audit/spring3/Spring3AuditWebAcceptanceTest.java)：HTTP 响应、组件表、宿主表和副作用计数如何共同验收。
 
 其他场景按同样方式定位：登录和会话在 security，控制处理器在 control，通知在 notification，组件管理服务的 HTTP 适配在 management，注解采集示例在 monitoring，测试夹具仓储只在 persistence。
@@ -60,7 +60,7 @@ Spring3AuditApplication 启动时执行组件 Schema 和 db/audit-fixture-schema
 | --- | --- | --- |
 | 登录过滤器或 LoginUser 上下文 | IdentityContextProvider | 只从已经认证的服务端上下文取用户、账号类型、角色和会话信息 |
 | SysUser、角色、部门或租户授权 Service | ResourceScopeAuthorizer、ManagementAuthorizer | 资源范围由服务端查询，不能使用请求体中的组织字段 |
-| 业务 Controller/Service 的查询、导出和登录结果 | MonitoringService.monitor(...) 或 MonitorAction | 在业务结果已确定的位置提交 Action 和可信 Fact |
+| 同步业务 Controller/Service 的查询、导出和登录结果 | MonitoringRecorder.record(...) 或 MonitorAction | 在业务结果已确定的位置提交 Action 和可信 Fact |
 | 验证码、限流、踢人、MFA、审批服务 | ControlTrigger 对应的 ControlHandler | 按 idempotencyKey 去重，严格限制在 subject 范围内 |
 | 通知队列或消息服务 | NotificationChannel | 支持有限重试和幂等，失败不回滚已提交告警 |
 | Jeecg 导出前的业务校验 | ReportExportService 类似的 Service 边界 | 先授权和预检，再生成文件；拒绝时不得生成文件 |

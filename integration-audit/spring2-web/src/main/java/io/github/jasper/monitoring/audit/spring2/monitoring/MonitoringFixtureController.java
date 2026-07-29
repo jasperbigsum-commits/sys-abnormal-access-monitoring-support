@@ -3,13 +3,11 @@ package io.github.jasper.monitoring.audit.spring2.monitoring;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.action.MonitorAction;
-import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
-import io.github.jasper.monitoring.api.fact.FactSource;
-import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
+import io.github.jasper.monitoring.spring.support.MonitoringRecorder;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -30,22 +28,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/audit")
 public class MonitoringFixtureController {
     private static final long SERVER_REPORTED_ROW_COUNT = 37L;
-    private final MonitoringService monitoring;
+    private final MonitoringRecorder monitoringRecorder;
     private final MonitoringContextAccessor contexts;
     private final AnnotatedMonitoringService annotatedMonitoring;
 
-    public MonitoringFixtureController(MonitoringService monitoring, MonitoringContextAccessor contexts,
+    public MonitoringFixtureController(MonitoringRecorder monitoringRecorder, MonitoringContextAccessor contexts,
             AnnotatedMonitoringService annotatedMonitoring) {
-        this.monitoring = monitoring;
+        this.monitoringRecorder = monitoringRecorder;
         this.contexts = contexts;
         this.annotatedMonitoring = annotatedMonitoring;
     }
 
     @PostMapping("/login-failure")
     public Map<String, Object> loginFailure() {
-        return response(monitoring.monitor(ActionExecution.of(BuiltInActions.LoginFailure.class,
-            contexts.requestContext(), contexts.identityContext(), ActionOutcome.failure(
-                "INVALID_PASSWORD", ActionOutcome.ExceptionClassification.AUTHORIZATION, 0L))));
+        return response(monitoringRecorder.record(BuiltInActions.LoginFailure.class, ActionOutcome.failure(
+            "INVALID_PASSWORD", ActionOutcome.ExceptionClassification.AUTHORIZATION, 0L),
+            ActionFacts.builder().build()));
     }
 
     @PostMapping("/export")
@@ -53,9 +51,8 @@ public class MonitoringFixtureController {
         ActionFacts facts = ActionFacts.builder()
             .put(BuiltInFacts.ResourceId.class, "audit-export-2026")
             .put(BuiltInFacts.DataCount.class, Long.valueOf(SERVER_REPORTED_ROW_COUNT)).build();
-        return response(monitoring.monitor(ActionExecution.of(BuiltInActions.ReportExport.class,
-            contexts.requestContext(), contexts.identityContext(), ActionOutcome.success(0L),
-            facts, FactSource.HOST_PROVIDER)));
+        return response(monitoringRecorder.record(BuiltInActions.ReportExport.class,
+            ActionOutcome.success(0L), facts));
     }
 
     /**
