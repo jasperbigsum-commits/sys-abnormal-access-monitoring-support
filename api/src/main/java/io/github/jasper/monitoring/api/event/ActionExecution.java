@@ -67,17 +67,7 @@ public interface ActionExecution {
             sources.put(Objects.requireNonNull(entry.getKey(), "factSources contains null key"),
                 Objects.requireNonNull(entry.getValue(), "factSources contains null source"));
         }
-        return new ImmutableActionExecution(actionType, request, identity, outcome, facts, sources,
-            uniformSource(sources));
-    }
-
-    static FactSource uniformSource(Map<Class<? extends FactType<?>>, FactSource> sources) {
-        FactSource uniform = null;
-        for (FactSource source : sources.values()) {
-            if (uniform == null) uniform = source;
-            else if (uniform != source) return null;
-        }
-        return uniform == null ? FactSource.HOST_PROVIDER : uniform;
+        return new ImmutableActionExecution(actionType, request, identity, outcome, facts, sources, null);
     }
 
     final class ImmutableActionExecution implements ActionExecution {
@@ -100,7 +90,8 @@ public interface ActionExecution {
             this.suppliedFacts = Objects.requireNonNull(suppliedFacts, "suppliedFacts");
             this.suppliedFactSources = Collections.unmodifiableMap(
                 new LinkedHashMap<Class<? extends FactType<?>>, FactSource>(suppliedFactSources));
-            this.suppliedFactSource = suppliedFactSource;
+            this.suppliedFactSource = suppliedFactSource == null
+                ? uniformSourceOf(suppliedFactSources) : suppliedFactSource;
         }
 
         @Override public Class<? extends ActionType> getActionType() { return actionType; }
@@ -116,6 +107,16 @@ public interface ActionExecution {
         }
         @Override public Map<Class<? extends FactType<?>>, FactSource> getSuppliedFactSources() {
             return suppliedFactSources;
+        }
+
+        private static FactSource uniformSourceOf(
+                Map<Class<? extends FactType<?>>, FactSource> sources) {
+            FactSource uniform = null;
+            for (FactSource source : sources.values()) {
+                if (uniform == null) uniform = source;
+                else if (uniform != source) return null;
+            }
+            return uniform == null ? FactSource.HOST_PROVIDER : uniform;
         }
     }
 }
