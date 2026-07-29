@@ -46,6 +46,7 @@ import io.github.jasper.monitoring.spring.support.FrontendSignalRecorder;
 import io.github.jasper.monitoring.spring.support.ActionFactExtractor;
 import io.github.jasper.monitoring.spring.support.MonitorActionContractValidator;
 import io.github.jasper.monitoring.spring.support.MdcTraceBridge;
+import io.github.jasper.monitoring.spring.support.MonitoringRecorder;
 import io.github.jasper.monitoring.spring.support.control.GenericIpControlHandler;
 import io.github.jasper.monitoring.spring.support.control.IpControlState;
 import io.github.jasper.monitoring.spring.support.control.LocalIpControlState;
@@ -452,6 +453,13 @@ public class AbnormalAccessMonitorAutoConfiguration {
         @ConditionalOnMissingBean(MonitoringContextAccessor.class)
         ServletMonitoringContextAccessor abnormalAccessMonitoringContextAccessor() {
             return new ServletMonitoringContextAccessor();
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(MonitoringRecorder.class)
+        MonitoringRecorder abnormalAccessMonitoringRecorder(MonitoringService monitoring,
+                MonitoringContextAccessor context) {
+            return new MonitoringRecorder(monitoring, context);
         }
 
         @Bean("abnormalAccessRequestMetadataInterceptor")

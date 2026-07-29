@@ -10,6 +10,7 @@ import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import io.github.jasper.monitoring.spring.support.control.GenericIpControlHandler;
 import io.github.jasper.monitoring.spring.support.control.LocalIpControlState;
+import io.github.jasper.monitoring.spring.support.MonitoringRecorder;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -41,7 +42,13 @@ class AbnormalAccessMonitorAutoConfigurationTest {
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(MonitoringService.class);
             assertThat(context).doesNotHaveBean(TypedMonitorActionAspect.class);
+            assertThat(context).doesNotHaveBean(MonitoringRecorder.class);
         });
+    }
+
+    @Test
+    void providesAConciseRecorderInServletApplications() {
+        webContextRunner.run(context -> assertThat(context).hasSingleBean(MonitoringRecorder.class));
     }
 
     @Test
