@@ -196,7 +196,9 @@ monitoring.monitor(ActionExecution.of(
 - 高风险导出必须先预检、先记录拒绝，再阻断 XLSX 生成（TC-08、TC-09）。
 - 密码、Token、Cookie、密钥和原始请求/响应载荷不得写入事实、属性、异常原因或日志（TC-15）。
 
-### 6. 使用注解处理固定 MVC 动作
+### 6. 使用注解处理 MVC 与普通 Service 动作
+
+完整的作用域架构、调用时序、并发与代理边界见[注解监听与运行时事实作用域](../../docs/注解监听与运行时事实作用域.md)。
 
 `MonitoringFixtureController` 展示了两种注解模式：
 
@@ -207,16 +209,19 @@ public Map<String, Object> query() {
     return Collections.singletonMap("status", "ok");
 }
 
-@PostMapping("/exports")
+@Service
+public class ExportService {
 @MonitorAction(BuiltInActions.SensitiveView.class)
-public Map<String, Object> export(
-    @RequestBody @ActionFact(value = BuiltInFacts.DataCount.class, path = "report.rows")
-    ExportRequest request) {
-    return exportResponse();
+public ExportResult export(ExportRequest request) {
+    ExportResult result = createExport(request);
+    MonitoringFacts.put(BuiltInFacts.DataCount.class,
+        Long.valueOf(result.getRowCount()));
+    return result;
+}
 }
 ```
 
-`@MonitorAction` 负责将成功/拒绝结果转换为事件（IA-03）；`@ActionFact` 可从受限参数路径提取并预校验强类型事实（IA-04）。注解不会自动信任请求体，也不会推断任意业务 Fact。对导出、登录、鉴权失败、权限变更和异步任务等高风险场景，应优先使用程序化入口提交服务端事实。
+`@MonitorAction` 负责将成功/拒绝结果转换为事件（IA-03）；普通 Service 可在当前作用域中用 `MonitoringFacts.put` 追加服务端事实（IA-04）。注解不会自动信任请求体。异步任务和需要完整上下文控制的高风险场景应使用程序化入口。
 
 ### 7. 注册真实且幂等的控制处理器
 
