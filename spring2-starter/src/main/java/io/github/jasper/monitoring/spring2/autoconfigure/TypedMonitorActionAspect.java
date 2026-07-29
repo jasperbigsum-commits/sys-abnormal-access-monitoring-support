@@ -6,10 +6,14 @@ import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.api.fact.FactType;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.spring.support.ActionFactExtractor;
 import io.github.jasper.monitoring.spring.support.MonitorActionContractValidator;
+import io.github.jasper.monitoring.spring.support.MonitoringFactScope;
 import java.lang.reflect.Method;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import org.aopalliance.intercept.MethodInterceptor;
@@ -45,20 +49,25 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
         MonitorActionContractValidator.MethodBinding binding = contracts.validate(invocation.getMethod());
         ActionFacts suppliedFacts = facts.extract(binding, invocation.getArguments());
         long startedAt = System.nanoTime();
-        Object result;
+        MonitoringFactScope scope = MonitoringFactScope.open();
         try {
-            result = invocation.proceed();
-        } catch (Throwable failure) {
             try {
-                monitor(binding, suppliedFacts, ActionOutcome.failure("ACTION_INVOCATION_FAILED",
-                    ActionOutcome.ExceptionClassification.UNKNOWN, elapsed(startedAt)));
-            } catch (RuntimeException monitoringFailure) {
-                failure.addSuppressed(monitoringFailure);
+                Object result = invocation.proceed();
+                monitor(binding, suppliedFacts, scope.snapshot(), outcome(result, elapsed(startedAt)));
+                return result;
+            } catch (Throwable failure) {
+                try {
+                    monitor(binding, suppliedFacts, scope.snapshot(),
+                        ActionOutcome.failure("ACTION_INVOCATION_FAILED",
+                            ActionOutcome.ExceptionClassification.UNKNOWN, elapsed(startedAt)));
+                } catch (RuntimeException monitoringFailure) {
+                    failure.addSuppressed(monitoringFailure);
+                }
+                throw failure;
             }
-            throw failure;
+        } finally {
+            scope.close();
         }
-        monitor(binding, suppliedFacts, outcome(result, elapsed(startedAt)));
-        return result;
     }
 
     private static ActionOutcome outcome(Object value, long elapsed) {
@@ -76,9 +85,28 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
     }
 
     private void monitor(MonitorActionContractValidator.MethodBinding binding,
-            ActionFacts suppliedFacts, ActionOutcome outcome) {
+            ActionFacts parameterFacts, ActionFacts runtimeFacts, ActionOutcome outcome) {
+        ActionFacts.Builder merged = ActionFacts.builder();
+        Map<Class<? extends FactType<?>>, FactSource> sources =
+            new LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
+        addFacts(merged, sources, parameterFacts, FactSource.METHOD_PARAMETER);
+        addFacts(merged, sources, runtimeFacts, FactSource.HOST_PROVIDER);
         monitoring.monitor(ActionExecution.of(binding.getActionType(), context.requestContext(),
-            context.identityContext(), outcome, suppliedFacts, FactSource.METHOD_PARAMETER));
+            context.identityContext(), outcome, merged.build(), sources));
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void addFacts(ActionFacts.Builder merged,
+            Map<Class<? extends FactType<?>>, FactSource> sources,
+            ActionFacts facts, FactSource source) {
+        for (Map.Entry<Class<? extends FactType<?>>, Object> entry : facts.asMap().entrySet()) {
+            if (sources.containsKey(entry.getKey())) {
+                throw new IllegalStateException("Multiple supplied sources returned same fact: "
+                    + entry.getKey().getName());
+            }
+            merged.put((Class) entry.getKey(), entry.getValue());
+            sources.put(entry.getKey(), source);
+        }
     }
 
     private static long elapsed(long startedAt) {

@@ -8,20 +8,21 @@ import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
-import io.github.jasper.monitoring.api.action.ActionDefinition;
-import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.action.MonitorAction;
-import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactCatalog;
+import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.core.application.DefaultMonitoringRuntime;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
+import io.github.jasper.monitoring.core.domain.EventFact;
 import io.github.jasper.monitoring.core.port.EventRepository;
 import io.github.jasper.monitoring.spring.support.ActionFactExtractor;
 import io.github.jasper.monitoring.spring.support.MonitorActionContractValidator;
+import io.github.jasper.monitoring.spring.support.MonitoringFacts;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -33,6 +34,16 @@ import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.http.ResponseEntity;
 
 class TypedMonitorActionAspectTest {
+    @Test
+    void capturesRuntimeFactFromAnOrdinaryServiceMethod() {
+        Fixture fixture = new Fixture();
+
+        fixture.proxy().runtimeFact();
+
+        assertEquals(37L, fixture.events.last.getDataCount());
+        assertEquals(FactSource.HOST_PROVIDER, fixture.fact("data_count").getSource());
+    }
+
     @Test
     void resolvesReturnAndExceptionOutcomes() {
         Fixture fixture = new Fixture();
@@ -59,6 +70,7 @@ class TypedMonitorActionAspectTest {
         ResponseEntity<Void> badRequest();
         ResponseEntity<Void> serverError();
         String throwsFailure();
+        String runtimeFact();
     }
 
     static class MonitoredService implements MonitoredApi {
@@ -68,6 +80,10 @@ class TypedMonitorActionAspectTest {
         @Override @MonitorAction(BuiltInActions.Query.class) public ResponseEntity<Void> badRequest() { return ResponseEntity.badRequest().build(); }
         @Override @MonitorAction(BuiltInActions.Query.class) public ResponseEntity<Void> serverError() { return ResponseEntity.status(500).build(); }
         @Override @MonitorAction(BuiltInActions.Query.class) public String throwsFailure() { throw new IllegalStateException("failed"); }
+        @Override @MonitorAction(BuiltInActions.SensitiveView.class) public String runtimeFact() {
+            MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(37L));
+            return "ok";
+        }
     }
 
     static final class Fixture {
@@ -76,10 +92,7 @@ class TypedMonitorActionAspectTest {
         private final FactCatalog facts = facts();
 
         MonitoredApi proxy() {
-            MonitoringRuntimePort runtime = new MonitoringRuntimePort() {
-                @Override public ActionDefinition resolve(Class<? extends ActionType> type) { return actions.require(type); }
-                @Override public FactCollection collect(ActionExecution execution, ActionDefinition action) { return FactCollection.empty(); }
-            };
+            MonitoringRuntimePort runtime = new DefaultMonitoringRuntime(actions, facts, Collections.emptyList());
             MonitoringService monitoring = new MonitoringService(events,
                 new SecurityEventAssembler("test", Clock.fixed(Instant.parse("2026-07-26T00:00:00Z"), ZoneOffset.UTC)),
                 runtime, (a, d, e, f, s, i, o) -> { });
@@ -102,6 +115,13 @@ class TypedMonitorActionAspectTest {
         void assertOutcome(SecurityEventResult result, String reason) {
             assertEquals(result, events.last.getResult());
             assertEquals(reason, events.last.getReasonCode());
+        }
+
+        EventFact fact(String key) {
+            for (EventFact fact : events.last.getFacts()) {
+                if (key.equals(fact.getKey())) return fact;
+            }
+            throw new AssertionError("Missing event fact " + key);
         }
     }
 
