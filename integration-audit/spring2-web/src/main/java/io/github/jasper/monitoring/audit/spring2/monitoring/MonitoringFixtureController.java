@@ -6,7 +6,6 @@ import io.github.jasper.monitoring.api.action.MonitorAction;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
-import io.github.jasper.monitoring.api.fact.ActionFact;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.core.application.MonitoringService;
@@ -33,10 +32,13 @@ public class MonitoringFixtureController {
     private static final long SERVER_REPORTED_ROW_COUNT = 37L;
     private final MonitoringService monitoring;
     private final MonitoringContextAccessor contexts;
+    private final AnnotatedMonitoringService annotatedMonitoring;
 
-    public MonitoringFixtureController(MonitoringService monitoring, MonitoringContextAccessor contexts) {
+    public MonitoringFixtureController(MonitoringService monitoring, MonitoringContextAccessor contexts,
+            AnnotatedMonitoringService annotatedMonitoring) {
         this.monitoring = monitoring;
         this.contexts = contexts;
+        this.annotatedMonitoring = annotatedMonitoring;
     }
 
     @PostMapping("/login-failure")
@@ -79,19 +81,16 @@ public class MonitoringFixtureController {
     }
 
     /**
-     * 注解动作 + 嵌套参数事实绑定示例。
+     * 普通 Service 注解动作 + 运行时事实示例。
      *
      * <p><strong>用例编号</strong>：IA-04。</p>
-     * <p><strong>验证核心点</strong>：`@ActionFact(path = "report.rows")` 能将嵌套入参映射为强类型 Fact，
-     * 并在入库事实中保留 METHOD_PARAMETER 来源。</p>
-     * <p><strong>注意细节</strong>：路径解析失败或类型不匹配应在采集阶段显式失败，避免脏事实入库。</p>
+     * <p><strong>验证核心点</strong>：普通 Service 方法内可追加执行后得到的 Fact，
+     * 并在入库事实中保留 HOST_PROVIDER 来源。</p>
+     * <p><strong>注意细节</strong>：客户端上报的行数不会覆盖服务端计算结果。</p>
      */
     @PostMapping("/annotated-export")
-    @MonitorAction(BuiltInActions.SensitiveView.class)
-    public Map<String, Object> annotatedExport(
-            @RequestBody @ActionFact(value = BuiltInFacts.DataCount.class, path = "report.rows")
-            AuditExportRequest ignored) {
-        return exportResponse();
+    public Map<String, Object> annotatedExport(@RequestBody AuditExportRequest ignored) {
+        return exportResponse(annotatedMonitoring.export(ignored));
     }
 
     /**
@@ -108,8 +107,12 @@ public class MonitoringFixtureController {
     }
 
     private static Map<String, Object> exportResponse() {
+        return exportResponse(SERVER_REPORTED_ROW_COUNT);
+    }
+
+    private static Map<String, Object> exportResponse(long rowCount) {
         Map<String, Object> body = new LinkedHashMap<String, Object>();
-        body.put("rowCount", Long.valueOf(SERVER_REPORTED_ROW_COUNT));
+        body.put("rowCount", Long.valueOf(rowCount));
         return body;
     }
 

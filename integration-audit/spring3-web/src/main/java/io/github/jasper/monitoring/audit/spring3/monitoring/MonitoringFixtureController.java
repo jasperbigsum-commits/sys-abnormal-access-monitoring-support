@@ -6,7 +6,6 @@ import io.github.jasper.monitoring.api.action.MonitorAction;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
-import io.github.jasper.monitoring.api.fact.ActionFact;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.core.application.MonitoringService;
@@ -30,8 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
  *     <li>{@link #export(AuditExportRequest)}：显式提交服务端选择的资源标识和数据量，
  *     客户端请求体只作为触发入口；</li>
  *     <li>{@link #annotatedQuery()}：只使用 {@code @MonitorAction}，验证无额外 Fact 的固定 MVC 动作；</li>
- *     <li>{@link #annotatedExport(AuditExportRequest)}：使用 {@code @ActionFact} 从受限参数路径提取
- *     {@code data_count}，验证方法参数事实绑定；</li>
+ *     <li>{@link #annotatedExport(AuditExportRequest)}：委托普通 Service，在注解作用域内追加服务端
+ *     {@code data_count}，验证运行时事实采集；</li>
  *     <li>{@link #annotatedExportDenied(AuditExportRequest)}：通过 {@code 403} 响应验证注解切面
  *     对成功、拒绝和异常结果的分类。</li>
  * </ol>
@@ -46,10 +45,13 @@ public class MonitoringFixtureController {
     private static final long SERVER_REPORTED_ROW_COUNT = 37L;
     private final MonitoringService monitoring;
     private final MonitoringContextAccessor contexts;
+    private final AnnotatedMonitoringService annotatedMonitoring;
 
-    public MonitoringFixtureController(MonitoringService monitoring, MonitoringContextAccessor contexts) {
+    public MonitoringFixtureController(MonitoringService monitoring, MonitoringContextAccessor contexts,
+            AnnotatedMonitoringService annotatedMonitoring) {
         this.monitoring = monitoring;
         this.contexts = contexts;
+        this.annotatedMonitoring = annotatedMonitoring;
     }
 
     /**
@@ -79,8 +81,8 @@ public class MonitoringFixtureController {
      * {@link FactSource#HOST_PROVIDER}。真实系统应在导出 Service 完成授权、查询和计数后，
      * 用实际业务结果替换这些值，再调用同一个程序化入口。</p>
      *
-     * <p>与 {@link #annotatedExport(AuditExportRequest)} 的区别是：显式入口能提交执行后才知道的
-     * 事实，例如最终生成行数、实际影响行数、事务结果和下游返回结果；注解参数提取不应承担这些职责。</p>
+     * <p>与 {@link #annotatedExport(AuditExportRequest)} 的区别是：这里直接构造完整执行对象；后者由
+     * 注解切面建立调用作用域，Service 只追加执行后才知道的事实。</p>
      *
      * @param ignored 仅用于触发 HTTP 请求，本示例不把客户端字段当作事实
      * @return 新建事件的 ID 和 Action 编码
@@ -133,26 +135,22 @@ public class MonitoringFixtureController {
     }
 
     /**
-     * 注解动作 + 嵌套参数事实绑定示例。
+     * 普通 Service 注解动作 + 运行时事实示例。
      *
      * <p><strong>用例编号</strong>：IA-04。</p>
-     * <p><strong>验证核心点</strong>：`@ActionFact(path = "report.rows")` 能将嵌套入参映射为强类型 Fact，
-     * 并在入库事实中保留 METHOD_PARAMETER 来源。</p>
-     * <p><strong>注意细节</strong>：路径解析失败或类型不匹配应在采集阶段显式失败，避免脏事实入库。</p>
+     * <p><strong>验证核心点</strong>：普通 Service 方法内可追加执行后得到的 Fact，
+     * 并在入库事实中保留 HOST_PROVIDER 来源。</p>
+     * <p><strong>注意细节</strong>：客户端上报的行数不会覆盖服务端计算结果。</p>
      *
-     * <p>该方式适合 Fact 已经稳定存在于公开方法参数、且在方法执行前即可安全读取的场景。
-     * {@code report.rows} 只示范参数路径解析，不代表可以信任客户端声明的最终行数；真实导出、
-     * 批量更新和事务结果仍应在业务 Service 中用 {@code HOST_PROVIDER} 显式提交。</p>
+     * <p>Controller 通过 Spring 代理调用带 {@code @MonitorAction} 的 Service。Service 在完成业务计算后
+     * 调用 {@code MonitoringFacts.put}，客户端请求中的 {@code report.rows} 不参与事实采集。</p>
      *
-     * @param ignored 请求参数对象；切面从其公开属性路径读取测试用的行数
+     * @param ignored 请求参数对象；客户端行数仅用于证明它不能覆盖服务端事实
      * @return 固定的成功响应
      */
     @PostMapping("/annotated-export")
-    @MonitorAction(BuiltInActions.SensitiveView.class)
-    public Map<String, Object> annotatedExport(
-            @RequestBody @ActionFact(value = BuiltInFacts.DataCount.class, path = "report.rows")
-            AuditExportRequest ignored) {
-        return exportResponse();
+    public Map<String, Object> annotatedExport(@RequestBody AuditExportRequest ignored) {
+        return exportResponse(annotatedMonitoring.export(ignored));
     }
 
     /**
@@ -177,8 +175,12 @@ public class MonitoringFixtureController {
 
     /** 返回注解示例使用的固定响应，同时避免把生成结果误认为监测事实。 */
     private static Map<String, Object> exportResponse() {
+        return exportResponse(SERVER_REPORTED_ROW_COUNT);
+    }
+
+    private static Map<String, Object> exportResponse(long rowCount) {
         Map<String, Object> body = new LinkedHashMap<String, Object>();
-        body.put("rowCount", Long.valueOf(SERVER_REPORTED_ROW_COUNT));
+        body.put("rowCount", Long.valueOf(rowCount));
         return body;
     }
 

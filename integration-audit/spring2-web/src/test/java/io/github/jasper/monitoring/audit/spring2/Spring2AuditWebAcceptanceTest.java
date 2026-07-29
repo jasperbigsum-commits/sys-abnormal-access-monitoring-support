@@ -166,8 +166,8 @@ class Spring2AuditWebAcceptanceTest {
     }
 
     @Test
-    @DisplayName("IA-04 nested action facts are typed and prevalidated")
-    void ia04_nestedActionFactsAreTypedAndPrevalidated() {
+    @DisplayName("IA-04 ordinary service methods append server-computed runtime facts")
+    void ia04_ordinaryServiceMethodsAppendServerComputedRuntimeFacts() {
         ResponseEntity<String> response = restTemplate.postForEntity(url("/audit/annotated-export"),
             exportRequest("audit-export-2026", "org-a", 5000, "audit-exporter"), String.class);
 
@@ -175,8 +175,8 @@ class Spring2AuditWebAcceptanceTest {
         SecurityEvent event = latestEvent("resource:view-sensitive");
         assertEquals(SecurityEventType.VIEW_SENSITIVE, event.getEventType());
         assertEquals(SecurityEventResult.SUCCESS, event.getResult());
-        assertEquals(5000L, event.getDataCount());
-        assertEquals("METHOD_PARAMETER", jdbc.queryForObject("SELECT source_type FROM monitoring_security_event_fact "
+        assertEquals(SERVER_REPORTED_ROW_COUNT, event.getDataCount());
+        assertEquals("HOST_PROVIDER", jdbc.queryForObject("SELECT source_type FROM monitoring_security_event_fact "
             + "WHERE event_id=? AND fact_key='data_count'", String.class, event.getEventId()));
     }
 
