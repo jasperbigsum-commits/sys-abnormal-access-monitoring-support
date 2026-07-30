@@ -38,6 +38,22 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     }
 
     @Test
+    void disablesTheEntireStarterWithoutRequiringPersistence() {
+        new ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
+            .withPropertyValues(
+                "abnormal.access.monitor.enabled=false",
+                "abnormal.access.monitor.instrumentation.enabled=true",
+                "abnormal.access.monitor.ip-control.enabled=true")
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                assertThat(context).doesNotHaveBean(AbnormalAccessMonitorProperties.class);
+                assertThat(context).doesNotHaveBean(MonitoringService.class);
+                assertThat(context).doesNotHaveBean(ResourceAccessGuard.class);
+            });
+    }
+
+    @Test
     void createsTypedRuntimeOutsideSpringMvc() {
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(MonitoringService.class);

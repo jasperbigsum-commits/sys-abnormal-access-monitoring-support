@@ -14,6 +14,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties("abnormal.access.monitor")
 public class AbnormalAccessMonitorProperties {
+    private boolean enabled = true;
     private String systemId = "application";
     private MonitoringMode mode = MonitoringMode.OBSERVE;
     private Frontend frontend = new Frontend();
@@ -23,6 +24,10 @@ public class AbnormalAccessMonitorProperties {
     private Notification notification = new Notification();
     private List<String> trustedProxies = new ArrayList<String>();
 
+    /** @return 是否启用异常访问监控 Starter */
+    public boolean isEnabled() { return enabled; }
+    /** @param enabled 是否启用异常访问监控 Starter */
+    public void setEnabled(boolean enabled) { this.enabled = enabled; }
     /** @return 写入每个安全事件的稳定系统标识 */
     public String getSystemId() { return systemId; }
     /** @param systemId 写入每个安全事件的稳定系统标识 */

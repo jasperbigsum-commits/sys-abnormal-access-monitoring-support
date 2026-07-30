@@ -83,6 +83,8 @@ import org.springframework.scheduling.annotation.Scheduled;
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(name = "org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration")
+@ConditionalOnProperty(prefix = "abnormal.access.monitor", name = "enabled",
+    havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(AbnormalAccessMonitorProperties.class)
 public class AbnormalAccessMonitorAutoConfiguration {
     @Bean
