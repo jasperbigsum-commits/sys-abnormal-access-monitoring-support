@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
 import BasicForm from './BasicForm.vue';
+import BasicModal from './BasicModal.vue';
 import DictTag from './DictTag.vue';
 import { useOverlay } from './useOverlay';
 import { useTable } from './useTable';
@@ -73,5 +74,15 @@ describe('Jeecg-compatible component contracts', () => {
 
         expect(setProps).toHaveBeenNthCalledWith(1, { recordId: 'ALT-001', open: true });
         expect(setProps).toHaveBeenNthCalledWith(2, { open: false });
+    });
+
+    it('keeps dynamic overlay titles and loading state in sync', async () => {
+        const wrapper = mount(BasicModal, { attachTo: document.body, props: { open: true, title: '初始标题', confirmLoading: false } });
+
+        await wrapper.setProps({ title: '关闭告警 · ALT-001', confirmLoading: true });
+
+        expect(document.body.textContent).toContain('关闭告警 · ALT-001');
+        expect(document.body.querySelector('.ant-btn-loading')).not.toBeNull();
+        wrapper.unmount();
     });
 });

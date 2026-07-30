@@ -12,6 +12,8 @@ const props = withDefaults(defineProps<{ open?: boolean; title?: string; width?:
 const emit = defineEmits<{ register: [instance: OverlayInstance<Record<string, unknown>>]; close: []; 'update:open': [open: boolean] }>();
 const state = reactive({ open: props.open, title: props.title, width: props.width });
 watch(() => props.open, (value) => { state.open = value; });
+watch(() => props.title, (value) => { state.title = value; });
+watch(() => props.width, (value) => { state.width = value; });
 
 function setProps(next: Record<string, unknown> & { open?: boolean }): void {
     Object.assign(state, next);

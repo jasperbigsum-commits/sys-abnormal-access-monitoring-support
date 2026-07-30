@@ -10,7 +10,7 @@ export const routes: RouteRecordRaw[] = [
         redirect: '/dashboard',
         children: [
             { path: 'dashboard', name: 'dashboard', component: () => import('@/views/dashboard/DashboardView.vue'), meta: { title: '风险态势' } },
-            { path: 'alerts', name: 'alerts', component: PlaceholderView, meta: { title: '告警中心' } },
+            { path: 'alerts', name: 'alerts', component: () => import('@/views/alerts/AlertListView.vue'), meta: { title: '告警中心' } },
             { path: 'events', name: 'events', component: () => import('@/views/events/EventListView.vue'), meta: { title: '事件审计' } },
             { path: 'controls', name: 'controls', component: PlaceholderView, meta: { title: '控制中心' } },
             { path: 'rules', name: 'rules', component: PlaceholderView, meta: { title: '检测策略' } },
