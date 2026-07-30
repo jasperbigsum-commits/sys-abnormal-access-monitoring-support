@@ -12,7 +12,7 @@ export const routes: RouteRecordRaw[] = [
             { path: 'dashboard', name: 'dashboard', component: () => import('@/views/dashboard/DashboardView.vue'), meta: { title: '风险态势' } },
             { path: 'alerts', name: 'alerts', component: () => import('@/views/alerts/AlertListView.vue'), meta: { title: '告警中心' } },
             { path: 'events', name: 'events', component: () => import('@/views/events/EventListView.vue'), meta: { title: '事件审计' } },
-            { path: 'controls', name: 'controls', component: PlaceholderView, meta: { title: '控制中心' } },
+            { path: 'controls', name: 'controls', component: () => import('@/views/controls/ControlCenterView.vue'), meta: { title: '控制中心' } },
             { path: 'rules', name: 'rules', component: PlaceholderView, meta: { title: '检测策略' } },
             { path: 'whitelists', name: 'whitelists', component: PlaceholderView, meta: { title: '白名单' } },
             { path: 'management-audit', name: 'management-audit', component: () => import('@/views/audit/ManagementAuditView.vue'), meta: { title: '管理审计' } }

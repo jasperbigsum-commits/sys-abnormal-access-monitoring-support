@@ -109,6 +109,7 @@ button.metric-item:hover { background: #f8fbfa; }
 .drawer-section .ant-timeline-item-content small { color: var(--text-muted); }
 .drawer-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .operation-warning { margin-bottom: 16px; padding: 10px 12px; border-left: 3px solid var(--approval); background: var(--approval-soft); color: #755517; font-size: 12px; line-height: 1.6; }
+.failure-text { color: var(--danger); }
 
 @media (max-width: 900px) {
     .risk-layout, .risk-layout--collapsed { padding-left: 0; }
