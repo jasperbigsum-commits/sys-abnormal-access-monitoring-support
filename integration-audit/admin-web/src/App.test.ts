@@ -1,0 +1,6 @@
+import { mount } from '@vue/test-utils';
+import App from './App.vue';
+
+it('renders the monitoring application root', () => {
+    expect(mount(App).get('[data-testid="app-root"]').exists()).toBe(true);
+});
