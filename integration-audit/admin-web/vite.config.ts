@@ -4,6 +4,9 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
     plugins: [vue()],
+    build: {
+        chunkSizeWarningLimit: 600
+    },
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url))

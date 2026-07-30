@@ -11,3 +11,6 @@ Object.defineProperty(window, 'matchMedia', {
         dispatchEvent: () => false
     })
 });
+
+const nativeWindowGetComputedStyle = window.getComputedStyle.bind(window);
+window.getComputedStyle = (element: Element) => nativeWindowGetComputedStyle(element);

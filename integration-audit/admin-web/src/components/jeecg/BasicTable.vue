@@ -7,10 +7,10 @@ import type { TablePagination } from './useTable';
 
 const props = withDefaults(defineProps<{
     columns: TableColumnType[];
-    dataSource: Record<string, unknown>[];
+    dataSource: object[];
     loading?: boolean;
     pagination?: TablePagination | false;
-    rowKey?: string | ((record: Record<string, unknown>) => string);
+    rowKey?: string | ((record: object) => string);
     selectedRowKeys?: (string | number)[];
     scrollX?: number;
 }>(), {

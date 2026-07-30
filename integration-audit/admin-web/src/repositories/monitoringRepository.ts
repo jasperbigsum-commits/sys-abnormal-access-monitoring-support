@@ -37,3 +37,12 @@ export interface MonitoringRepository {
     transitionWhitelist(command: WhitelistTransitionCommand): Promise<WhitelistRecord>;
     searchManagementAudit(query: ManagementAuditQuery): Promise<PageResult<ManagementAuditRecord>>;
 }
+
+export const monitoringRepositoryKey: InjectionKey<MonitoringRepository> = Symbol('MonitoringRepository');
+
+export function useMonitoringRepository(): MonitoringRepository {
+    const repository = inject(monitoringRepositoryKey);
+    if (!repository) throw new Error('MonitoringRepository is not provided');
+    return repository;
+}
+import { inject, type InjectionKey } from 'vue';
