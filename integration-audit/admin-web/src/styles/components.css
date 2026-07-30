@@ -110,6 +110,11 @@ button.metric-item:hover { background: #f8fbfa; }
 .drawer-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .operation-warning { margin-bottom: 16px; padding: 10px 12px; border-left: 3px solid var(--approval); background: var(--approval-soft); color: #755517; font-size: 12px; line-height: 1.6; }
 .failure-text { color: var(--danger); }
+.runtime-warning { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding: 11px 14px; border: 1px solid #e7c977; border-left: 4px solid var(--approval); border-radius: var(--radius); background: var(--approval-soft); color: #684e1b; }
+.runtime-warning > .anticon { font-size: 20px; }
+.runtime-warning div { display: flex; flex-direction: column; gap: 2px; }
+.runtime-warning strong { font-size: 13px; }
+.runtime-warning span { font-size: 12px; }
 
 @media (max-width: 900px) {
     .risk-layout, .risk-layout--collapsed { padding-left: 0; }
