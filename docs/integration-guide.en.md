@@ -6,6 +6,19 @@ This guide is for host and management API developers.
 
 Use exactly one starter (`spring2-legacy-starter` for Boot 2.1, `spring2-starter` for Boot 2.7, `spring3-starter` for Boot 3), apply the monitoring schema through controlled migrations, provide a `SqlSessionFactory`, and start in `OBSERVE`. Missing MyBatis persistence is a startup error; H2 and memory fixtures are test-only.
 
+### Global Enablement
+
+The starter is enabled by default. Set `abnormal.access.monitor.enabled=false` to keep the entire integration out of an application context that is not ready to provide persistence or host SPIs.
+
+```yaml
+abnormal:
+  access:
+    monitor:
+      enabled: false
+```
+
+When disabled, the starter registers no monitoring runtime, Servlet/AOP integration, management services, notification scheduling, or IP controls, and it does not require a `SqlSessionFactory`. The property is evaluated only at application startup. A disabled production deployment emits no events, alerts, or controls from this component, so monitoring and audit expectations must be adjusted accordingly.
+
 ## Typed Actions and Facts
 
 Built-in and custom actions use the same `ActionType` system. A custom action must be concrete and final, registered once in `ActionCatalog`, and associated with a complete `ActionDefinition`. Use an `ActionContract` only for an explicit shared capability.
