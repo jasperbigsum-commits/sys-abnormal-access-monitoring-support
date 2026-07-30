@@ -9,7 +9,11 @@ export interface MockMonitoringRepositoryOptions {
 }
 
 export class MockScenario {
-    constructor(private readonly options: MockMonitoringRepositoryOptions = {}) {}
+    constructor(private options: MockMonitoringRepositoryOptions = {}) {}
+
+    configure(options: MockMonitoringRepositoryOptions): void {
+        this.options = options;
+    }
 
     async prepare(operation: MockOperation): Promise<void> {
         const delayMs = Math.max(0, this.options.delayMs ?? 0);

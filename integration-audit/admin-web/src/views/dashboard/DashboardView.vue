@@ -20,6 +20,7 @@ const riskColors: Record<RiskLevel, string> = { CRITICAL: '#b72f2d', HIGH: '#d15
 const riskOptions = Object.entries(riskLabels).map(([value, label]) => ({ value, label, color: riskColors[value as RiskLevel] }));
 const maxRiskCount = computed(() => Math.max(1, ...Object.values(summary.value?.riskDistribution ?? {})));
 const maxRuleCount = computed(() => Math.max(1, ...(summary.value?.ruleContribution.map((item) => item.count) ?? [1])));
+const dataSourceLabel = import.meta.env.VITE_DATA_MODE === 'http' ? 'HTTP 联调数据' : 'Mock 确定性数据';
 
 async function load(): Promise<void> {
     loading.value = true;
@@ -43,7 +44,7 @@ onMounted(() => void load());
 <template>
     <section class="page-section dashboard-view">
         <header class="page-heading dashboard-heading">
-            <div><h1>今日风险运营</h1><p><ClockCircleOutlined /> 最后同步 {{ updatedAt || '--:--:--' }} · Mock 确定性数据</p></div>
+            <div><h1>今日风险运营</h1><p><ClockCircleOutlined /> 最后同步 {{ updatedAt || '--:--:--' }} · {{ dataSourceLabel }}</p></div>
             <AButton :loading="loading" @click="load"><ReloadOutlined />刷新</AButton>
         </header>
 

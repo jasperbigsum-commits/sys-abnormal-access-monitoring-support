@@ -16,6 +16,7 @@ import {
     UserOutlined
 } from '@ant-design/icons-vue';
 import { Avatar as AAvatar, Badge as ABadge, Button as AButton, Drawer as ADrawer, Tooltip as ATooltip } from 'ant-design-vue';
+import MockScenarioPanel from '@/components/dev/MockScenarioPanel.vue';
 
 interface NavigationItem {
     path: string;
@@ -38,6 +39,7 @@ const route = useRoute();
 const collapsed = ref(false);
 const mobileOpen = ref(false);
 const pageTitle = computed(() => String(route.meta.title ?? '风险态势'));
+const showMockPanel = import.meta.env.DEV && import.meta.env.VITE_DATA_MODE !== 'http';
 
 function closeMobile(): void {
     mobileOpen.value = false;
@@ -100,5 +102,6 @@ function closeMobile(): void {
                 </RouterLink>
             </nav>
         </ADrawer>
+        <MockScenarioPanel v-if="showMockPanel" />
     </div>
 </template>

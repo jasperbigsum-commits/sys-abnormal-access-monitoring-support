@@ -30,6 +30,8 @@ import type { MonitoringRepository } from '@/repositories/monitoringRepository';
 
 export interface MockMonitoringRepository extends MonitoringRepository {
     reset(): void;
+    configure(options: MockMonitoringRepositoryOptions): void;
+    clear(): void;
 }
 
 function clone<T>(value: T): T {
@@ -138,6 +140,20 @@ class DeterministicMockMonitoringRepository implements MockMonitoringRepository 
         this.alertIdempotency.clear();
         this.controlIdempotency.clear();
         this.ruleIdempotency.clear();
+    }
+
+    configure(options: MockMonitoringRepositoryOptions): void {
+        this.scenario.configure(options);
+    }
+
+    clear(): void {
+        this.alerts = [];
+        this.events = [];
+        this.controls = [];
+        this.rules = [];
+        this.whitelists = [];
+        this.auditRecords = [];
+        this.riskTrend = [];
     }
 
     private async prepare(operation: MockOperation): Promise<void> {

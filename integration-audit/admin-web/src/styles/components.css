@@ -115,6 +115,12 @@ button.metric-item:hover { background: #f8fbfa; }
 .runtime-warning div { display: flex; flex-direction: column; gap: 2px; }
 .runtime-warning strong { font-size: 13px; }
 .runtime-warning span { font-size: 12px; }
+.mock-scenario { position: fixed; right: 18px; bottom: 18px; z-index: 80; }
+.mock-scenario.is-open { display: grid; width: 210px; gap: 10px; padding: 12px; border: 1px solid var(--border-strong); border-top: 3px solid var(--approval); border-radius: var(--radius); background: var(--surface); box-shadow: 0 10px 30px rgba(16,47,56,.18); }
+.mock-scenario__trigger { width: 42px; height: 42px; border-color: var(--nav-active); background: var(--nav); color: #fff; box-shadow: var(--shadow); }
+.mock-scenario__trigger:hover { border-color: var(--approval) !important; background: var(--nav-active) !important; color: #fff !important; }
+.mock-scenario__heading { display: flex; align-items: center; justify-content: space-between; color: var(--nav); font-size: 13px; font-weight: 700; }
+.mock-scenario__heading .ant-btn { width: 28px; height: 28px; }
 
 @media (max-width: 900px) {
     .risk-layout, .risk-layout--collapsed { padding-left: 0; }
