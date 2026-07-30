@@ -3,6 +3,7 @@
     { "name": "abnormal.access.monitor", "type": "io.github.jasper.monitoring.spring3.autoconfigure.AbnormalAccessMonitorProperties" }
   ],
   "properties": [
+    { "name": "abnormal.access.monitor.enabled", "type": "java.lang.Boolean", "defaultValue": true, "description": "是否启用异常访问监控 Starter；关闭后不注册任何监控、Web、调度、通知、管理或控制组件。" },
     { "name": "abnormal.access.monitor.system-id", "type": "java.lang.String", "defaultValue": "application", "description": "写入每条审计事件的系统标识；同一部署实例保持稳定。" },
     { "name": "abnormal.access.monitor.mode", "type": "io.github.jasper.monitoring.api.MonitoringMode", "defaultValue": "OBSERVE", "description": "OBSERVE 只记录告警；ENFORCE 还调用已注册的控制方法。" },
     { "name": "abnormal.access.monitor.frontend.enabled", "type": "java.lang.Boolean", "defaultValue": true, "description": "是否接收前端补充信号；不影响服务端 @MonitorAction 审计。" },
