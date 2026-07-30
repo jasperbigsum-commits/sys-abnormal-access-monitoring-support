@@ -56,7 +56,7 @@ This simultaneously proves that the global switch wins over local switches and b
 Run:
 
 ```powershell
-mvn -pl spring2-legacy-starter,spring2-starter,spring3-starter -am -Dtest=AbnormalAccessMonitorAutoConfigurationTest -Dsurefire.failIfNoSpecifiedTests=false test
+mvn -pl spring2-legacy-starter,spring2-starter,spring3-starter -am -Dtest=AbnormalAccessMonitorAutoConfigurationTest "-Dsurefire.failIfNoSpecifiedTests=false" test
 ```
 
 Expected: all three new tests fail because the existing auto-configuration still attempts to start and requires persistence.
@@ -110,7 +110,7 @@ public void setEnabled(boolean enabled) {
 Run:
 
 ```powershell
-mvn -pl spring2-legacy-starter,spring2-starter,spring3-starter -am -Dtest=AbnormalAccessMonitorAutoConfigurationTest -Dsurefire.failIfNoSpecifiedTests=false test
+mvn -pl spring2-legacy-starter,spring2-starter,spring3-starter -am -Dtest=AbnormalAccessMonitorAutoConfigurationTest "-Dsurefire.failIfNoSpecifiedTests=false" test
 ```
 
 Expected: `BUILD SUCCESS`; existing default-enabled tests still pass and each explicit-disabled context starts without monitoring beans.
@@ -190,13 +190,20 @@ abnormal:
 
 - [ ] **Step 2: Add the equivalent English installation note**
 
-```markdown
+````markdown
 ### Global Enablement
 
 The starter is enabled by default. Set `abnormal.access.monitor.enabled=false` to keep the entire integration out of an application context that is not ready to provide persistence or host SPIs.
 
-When disabled, the starter registers no monitoring runtime, Servlet/AOP integration, management services, notification scheduling, or IP controls, and it does not require a `SqlSessionFactory`. The property is evaluated only at application startup. A disabled production deployment emits no events, alerts, or controls from this component, so monitoring and audit expectations must be adjusted accordingly.
+```yaml
+abnormal:
+  access:
+    monitor:
+      enabled: false
 ```
+
+When disabled, the starter registers no monitoring runtime, Servlet/AOP integration, management services, notification scheduling, or IP controls, and it does not require a `SqlSessionFactory`. The property is evaluated only at application startup. A disabled production deployment emits no events, alerts, or controls from this component, so monitoring and audit expectations must be adjusted accordingly.
+````
 
 - [ ] **Step 3: Check documentation references and formatting**
 
