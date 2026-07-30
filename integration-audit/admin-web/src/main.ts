@@ -4,6 +4,7 @@ import 'ant-design-vue/dist/reset.css';
 import App from './App.vue';
 import { router } from './router';
 import './styles/theme.css';
+import './styles/components.css';
 
 createApp(App)
     .use(createPinia())
