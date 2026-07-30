@@ -1,13 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
 import { ManagementError } from '@/domain/errors';
-import { createMockMonitoringRepository } from '@/repositories/mockMonitoringRepository';
+import { createMockMonitoringRepository } from '@/mocks/mockMonitoringRepository';
 
 function expectManagementError(category: string) {
     return expect.objectContaining({ category });
 }
 
 describe('MockMonitoringRepository', () => {
+    it('filters dashboard trend points with the requested time range', async () => {
+        const repository = createMockMonitoringRepository();
+
+        const inRange = await repository.dashboard({
+            from: '2026-07-30T09:00:00+08:00',
+            to: '2026-07-30T10:00:00+08:00'
+        });
+        const outsideRange = await repository.dashboard({
+            from: '2026-08-01T00:00:00+08:00',
+            to: '2026-08-02T00:00:00+08:00'
+        });
+
+        expect(inRange.riskTrend.map((item) => item.occurredAt)).toEqual([
+            '2026-07-30T09:00:00+08:00',
+            '2026-07-30T10:00:00+08:00'
+        ]);
+        expect(outsideRange.riskTrend).toEqual([]);
+    });
+
     it('paginates alerts and combines keyword, status, risk and time filters', async () => {
         const repository = createMockMonitoringRepository();
 
@@ -138,6 +157,27 @@ describe('MockMonitoringRepository', () => {
         expect(closed).toMatchObject({ status: 'CLOSED', version: 4 });
     });
 
+    it('investigates a new alert directly and closes an acknowledged alert directly', async () => {
+        const investigateRepository = createMockMonitoringRepository();
+        const investigated = await investigateRepository.transitionAlert({
+            id: 'ALT-20260730-001',
+            action: 'INVESTIGATE',
+            expectedVersion: 1,
+            reason: '严重告警直接进入研判'
+        });
+
+        const closeRepository = createMockMonitoringRepository();
+        const closed = await closeRepository.transitionAlert({
+            id: 'ALT-20260730-004',
+            action: 'CLOSE',
+            expectedVersion: 2,
+            reason: '已确认并完成快速闭环'
+        });
+
+        expect(investigated).toMatchObject({ status: 'IN_PROGRESS', version: 2 });
+        expect(closed).toMatchObject({ status: 'CLOSED', version: 3 });
+    });
+
     it('approves, retries and executes controls with version validation', async () => {
         const repository = createMockMonitoringRepository();
         const approved = await repository.transitionControl({
@@ -219,6 +259,74 @@ describe('MockMonitoringRepository', () => {
         expect(revoked).toMatchObject({ status: 'REVOKED', version: 2 });
         expect(granted).toMatchObject({ status: 'ACTIVE', version: 3 });
         expect(audit.items).toHaveLength(4);
+        expect(audit.items.find((item) => item.id.startsWith('AUD-MOCK') && item.operation === 'RULE_CHANGE')).toMatchObject({
+            actorId: 'risk-admin-01',
+            targetId: changed.id
+        });
+    });
+
+    it('deduplicates repeated rule changes and manual control executions by idempotency key', async () => {
+        const repository = createMockMonitoringRepository();
+        const ruleCommand = {
+            id: 'RULE-BULK-QUERY',
+            mode: 'ENFORCE' as const,
+            threshold: 80,
+            expectedVersion: 4,
+            reason: '幂等规则变更演示',
+            approverId: 'risk-approver-01',
+            idempotencyKey: 'rule-idempotency-01'
+        };
+        const controlCommand = {
+            subject: 'acct-demo-9911',
+            action: 'STEP_UP_AUTH',
+            ttlMinutes: 30,
+            reason: '幂等控制执行演示',
+            idempotencyKey: 'control-idempotency-01'
+        };
+
+        const changed = await repository.changeRule(ruleCommand);
+        const duplicateChange = await repository.changeRule(ruleCommand);
+        const executed = await repository.executeControl(controlCommand);
+        const duplicateExecution = await repository.executeControl(controlCommand);
+        const audit = await repository.searchManagementAudit({
+            page: 1,
+            pageSize: 100,
+            operations: ['RULE_CHANGE', 'CONTROL_EXECUTE']
+        });
+
+        expect(duplicateChange).toEqual(changed);
+        expect(duplicateExecution).toEqual(executed);
+        expect(audit.items.filter((item) => item.id.startsWith('AUD-MOCK'))).toHaveLength(2);
+    });
+
+    it('deduplicates alert transitions and rejects reuse of an idempotency key with another payload', async () => {
+        const repository = createMockMonitoringRepository();
+        const alertCommand = {
+            id: 'ALT-20260730-001',
+            action: 'ACKNOWLEDGE' as const,
+            expectedVersion: 1,
+            reason: '幂等告警确认演示',
+            idempotencyKey: 'alert-idempotency-01'
+        };
+        const controlCommand = {
+            subject: 'acct-demo-9921',
+            action: 'STEP_UP_AUTH',
+            ttlMinutes: 30,
+            reason: '幂等键载荷校验演示',
+            idempotencyKey: 'control-idempotency-conflict-01'
+        };
+
+        const acknowledged = await repository.transitionAlert(alertCommand);
+        const duplicateAcknowledgement = await repository.transitionAlert(alertCommand);
+        await repository.executeControl(controlCommand);
+
+        expect(duplicateAcknowledgement).toEqual(acknowledged);
+        await expect(repository.executeControl({ ...controlCommand, subject: 'acct-demo-9922' })).rejects.toMatchObject({
+            category: 'CONFLICT',
+            errorCode: 'MOCK-409-IDEMPOTENCY'
+        });
+        const audit = await repository.searchManagementAudit({ page: 1, pageSize: 100, operations: ['ALERT_ACKNOWLEDGE'] });
+        expect(audit.items.filter((item) => item.id.startsWith('AUD-MOCK'))).toHaveLength(1);
     });
 
     it('returns not found and invalid transition errors for missing or terminal resources', async () => {
@@ -276,5 +384,28 @@ describe('MockMonitoringRepository', () => {
         expect(Date.now() - startedAt).toBeGreaterThanOrEqual(15);
         const dashboard = await repository.dashboard();
         expect(dashboard.metrics.eventsToday).toBeGreaterThan(0);
+    });
+
+    it('injects a forbidden permission failure without affecting other operations', async () => {
+        const repository = createMockMonitoringRepository({
+            failures: {
+                changeRule: {
+                    category: 'FORBIDDEN',
+                    message: '当前演示角色无规则审批权限',
+                    errorCode: 'MOCK-403-RULE'
+                }
+            }
+        });
+
+        await expect(repository.changeRule({
+            id: 'RULE-BULK-QUERY',
+            mode: 'ENFORCE',
+            threshold: 80,
+            expectedVersion: 4,
+            reason: '模拟权限拒绝',
+            approverId: 'risk-approver-01',
+            idempotencyKey: 'rule-forbidden-01'
+        })).rejects.toMatchObject({ category: 'FORBIDDEN', errorCode: 'MOCK-403-RULE' });
+        await expect(repository.getAlert('ALT-20260730-001')).resolves.toMatchObject({ id: 'ALT-20260730-001' });
     });
 });
