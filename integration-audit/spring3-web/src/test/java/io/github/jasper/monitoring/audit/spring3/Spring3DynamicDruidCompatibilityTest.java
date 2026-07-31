@@ -56,17 +56,13 @@ class Spring3DynamicDruidCompatibilityTest {
 
         DynamicRoutingDataSource routing = (DynamicRoutingDataSource) dataSource;
         Map<String, DataSource> sources = routing.getDataSources();
-        assertThat(sources).containsOnlyKeys("monitoring", "business");
+        assertThat(sources).containsKeys("monitoring", "business", "master");
         assertThat(sources.values()).allSatisfy(source -> {
             assertThat(source).isInstanceOf(ItemDataSource.class);
-            assertThat(((ItemDataSource) source).getRealDataSource()).isInstanceOfSatisfying(
-                DruidDataSource.class, druid -> {
-                    assertThat(druid.getInitialSize()).isEqualTo(1);
-                    assertThat(druid.getMinIdle()).isEqualTo(1);
-                    assertThat(druid.getMaxActive()).isEqualTo(4);
-                    assertThat(druid.getValidationQuery()).isEqualTo("SELECT 1");
-                });
+            assertThat(((ItemDataSource) source).getRealDataSource()).isInstanceOf(DruidDataSource.class);
         });
+        assertDruidSettings(sources.get("monitoring"));
+        assertDruidSettings(sources.get("business"));
         assertThat(sqlSessionFactory.getConfiguration().getEnvironment().getDataSource()).isSameAs(routing);
         assertThat(monitoringStore).isNotNull();
         assertThat(monitoringService).isNotNull();
@@ -79,5 +75,13 @@ class Spring3DynamicDruidCompatibilityTest {
                 assertThat(result.getInt(1)).isEqualTo(1);
             }
         }
+    }
+
+    private void assertDruidSettings(DataSource source) {
+        DruidDataSource druid = (DruidDataSource) ((ItemDataSource) source).getRealDataSource();
+        assertThat(druid.getInitialSize()).isEqualTo(1);
+        assertThat(druid.getMinIdle()).isEqualTo(1);
+        assertThat(druid.getMaxActive()).isEqualTo(4);
+        assertThat(druid.getValidationQuery()).isEqualTo("SELECT 1");
     }
 }

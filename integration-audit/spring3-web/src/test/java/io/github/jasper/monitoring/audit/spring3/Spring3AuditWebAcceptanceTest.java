@@ -187,7 +187,7 @@ class Spring3AuditWebAcceptanceTest {
             exportRequest("ignored", "ignored", 1, "audit-exporter"), String.class);
         ResponseEntity<String> response = get("/audit/management/events", "audit-admin");
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertTrue(response.getBody().contains("\"count\":"));
+        assertTrue(response.getBody().contains("\"totalElements\":"), response::getBody);
         assertTrue(jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_management_audit WHERE system_id = ? "
             + "AND actor_id = ? AND action = ? AND outcome = ?", Long.class,
             "audit-spring3-web", "audit-admin", "EVENT_READ", "SUCCEEDED").longValue() >= 1L);
