@@ -34,8 +34,8 @@ public final class PrivilegeGrantService {
         boolean granted = roles.grantUnlessSelf(actor.getUserId(), targetUserId, roleId, Instant.now());
         ActionFacts facts = ActionFacts.builder()
             .put(BuiltInFacts.TargetUserId.class, targetUserId)
-            .put(BuiltInFacts.PrivilegeIncrease.class, "true")
-            .put(BuiltInFacts.HighPrivilege.class, "true")
+            .put(BuiltInFacts.PrivilegeIncrease.class, Boolean.TRUE)
+            .put(BuiltInFacts.HighPrivilege.class, Boolean.TRUE)
             .build();
         monitoring.monitor(ActionExecution.of(BuiltInActions.PrivilegeChange.class, request, actor,
             granted ? ActionOutcome.success(0L) : ActionOutcome.denied(SELF_ESCALATION, 0L),

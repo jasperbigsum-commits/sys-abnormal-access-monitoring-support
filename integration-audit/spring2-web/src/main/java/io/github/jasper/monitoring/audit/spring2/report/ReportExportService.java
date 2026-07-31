@@ -54,7 +54,7 @@ public class ReportExportService {
         MonitoringFacts.put(BuiltInFacts.ResourceId.class, reportId);
         MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(rows));
         if (request.getFields() != null && request.getFields().contains("sensitiveValue")) {
-            MonitoringFacts.put(BuiltInFacts.Sensitivity.class, "HIGH");
+            MonitoringFacts.put(BuiltInFacts.Sensitivity.class, BuiltInFacts.SensitivityLevel.HIGH);
         }
         MonitoringGate.checkpoint();
         List<Map<String, Object>> data = fixtures.findReportRows(reportId, request.getMinId(),

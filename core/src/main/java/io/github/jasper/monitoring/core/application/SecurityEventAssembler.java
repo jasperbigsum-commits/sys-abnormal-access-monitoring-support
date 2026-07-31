@@ -13,8 +13,9 @@ import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.event.ObservationIssue;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
-import io.github.jasper.monitoring.api.fact.FactType;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
+import io.github.jasper.monitoring.api.fact.FactDefinition;
+import io.github.jasper.monitoring.api.fact.FactType;
 import io.github.jasper.monitoring.api.rule.RuleType;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.EventFact;
@@ -62,18 +63,18 @@ public final class SecurityEventAssembler {
             .occurredAt(Instant.now(clock)).reasonCode(outcome.getReasonCode()).latencyMs(outcome.getLatencyMs());
         String resourceId = facts.get(BuiltInFacts.ResourceId.class);
         Long dataCount = facts.get(BuiltInFacts.DataCount.class);
-        String sensitivity = facts.get(BuiltInFacts.Sensitivity.class);
+        BuiltInFacts.SensitivityLevel sensitivity = facts.get(BuiltInFacts.Sensitivity.class);
         if (resourceId != null) draft.resourceId(resourceId);
         if (dataCount != null) draft.dataCount(dataCount.longValue());
-        if (sensitivity != null) draft.attribute("sensitivity", sensitivity);
-        putAttribute(draft, "different_networks", facts.get(BuiltInFacts.DifferentNetworks.class));
-        putAttribute(draft, "sequential_access", facts.get(BuiltInFacts.SequentialAccess.class));
-        putAttribute(draft, "sensitive", facts.get(BuiltInFacts.Sensitive.class));
-        putAttribute(draft, "work_hours", facts.get(BuiltInFacts.WorkHours.class));
-        putAttribute(draft, "privilege_increase", facts.get(BuiltInFacts.PrivilegeIncrease.class));
-        putAttribute(draft, "high_privilege", facts.get(BuiltInFacts.HighPrivilege.class));
-        putAttribute(draft, "target_user_id", facts.get(BuiltInFacts.TargetUserId.class));
-        putAttribute(draft, "baseline_ratio", facts.get(BuiltInFacts.BaselineRatio.class));
+        putAttribute(draft, BuiltInFacts.SENSITIVITY, sensitivity);
+        putAttribute(draft, BuiltInFacts.DIFFERENT_NETWORKS, facts.get(BuiltInFacts.DifferentNetworks.class));
+        putAttribute(draft, BuiltInFacts.SEQUENTIAL_ACCESS, facts.get(BuiltInFacts.SequentialAccess.class));
+        putAttribute(draft, BuiltInFacts.SENSITIVE, facts.get(BuiltInFacts.Sensitive.class));
+        putAttribute(draft, BuiltInFacts.WORK_HOURS, facts.get(BuiltInFacts.WorkHours.class));
+        putAttribute(draft, BuiltInFacts.PRIVILEGE_INCREASE, facts.get(BuiltInFacts.PrivilegeIncrease.class));
+        putAttribute(draft, BuiltInFacts.HIGH_PRIVILEGE, facts.get(BuiltInFacts.HighPrivilege.class));
+        putAttribute(draft, BuiltInFacts.TARGET_USER_ID, facts.get(BuiltInFacts.TargetUserId.class));
+        putAttribute(draft, BuiltInFacts.BASELINE_RATIO, facts.get(BuiltInFacts.BaselineRatio.class));
         List<ObservationIssue> observations = new ArrayList<ObservationIssue>();
         List<EventInputIssue> inputIssues = new ArrayList<EventInputIssue>();
         for (Class<? extends FactType<?>> fact : action.getRequiredFacts()) {
@@ -95,8 +96,8 @@ public final class SecurityEventAssembler {
         return new AssemblyResult(event, facts, outcome, observations, ineligible);
     }
 
-    private static void putAttribute(SecurityEventDraft.Builder draft, String key, String value) {
-        if (value != null) draft.attribute(key, value);
+    private static <T> void putAttribute(SecurityEventDraft.Builder draft, FactDefinition<T> definition, T value) {
+        if (value != null) draft.attribute(definition.getKey(), definition.encode(value));
     }
 
     private static SecurityEvent copyWithFacts(SecurityEvent event, List<EventFact> facts) {

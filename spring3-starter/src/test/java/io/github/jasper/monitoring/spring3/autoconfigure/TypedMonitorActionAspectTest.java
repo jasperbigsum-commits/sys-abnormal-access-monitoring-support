@@ -41,7 +41,7 @@ class TypedMonitorActionAspectTest {
         Fixture fixture = new Fixture();
         MonitoredApi proxy = fixture.proxy();
 
-        proxy.runtimeFact("true");
+        proxy.runtimeFact(Boolean.TRUE);
 
         assertEquals("true", fixture.fact("sensitive").getValueText());
         assertEquals(37L, fixture.events.last.getDataCount());
@@ -111,7 +111,7 @@ class TypedMonitorActionAspectTest {
         ResponseEntity<Void> badRequest();
         ResponseEntity<Void> serverError();
         String throwsFailure();
-        String runtimeFact(String sensitive);
+        String runtimeFact(Boolean sensitive);
         String duplicateFact(Long count);
         String throwsAfterRuntimeFact();
         String outer();
@@ -128,7 +128,7 @@ class TypedMonitorActionAspectTest {
         @Override @MonitorAction(BuiltInActions.Query.class) public ResponseEntity<Void> serverError() { return ResponseEntity.status(500).build(); }
         @Override @MonitorAction(BuiltInActions.Query.class) public String throwsFailure() { throw new IllegalStateException("failed"); }
         @Override @MonitorAction(BuiltInActions.SensitiveView.class)
-        public String runtimeFact(@ActionFact(BuiltInFacts.Sensitive.class) String sensitive) {
+        public String runtimeFact(@ActionFact(BuiltInFacts.Sensitive.class) Boolean sensitive) {
             MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(37L));
             return String.valueOf(sensitive);
         }

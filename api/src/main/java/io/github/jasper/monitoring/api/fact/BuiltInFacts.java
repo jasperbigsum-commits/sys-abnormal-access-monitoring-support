@@ -1,5 +1,6 @@
 package io.github.jasper.monitoring.api.fact;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -53,31 +54,30 @@ public final class BuiltInFacts {
      * 用例：
      * 标注为 low/medium/high/internal，用于区分普通查询与高敏查看风险。
      */
-    public static final FactDefinition<String> SENSITIVITY = FactDefinition
-        .builder(Sensitivity.class, "sensitivity", String.class)
+    public static final FactDefinition<SensitivityLevel> SENSITIVITY = FactDefinition
+        .builder(Sensitivity.class, "sensitivity", SensitivityLevel.class)
         .allowedSources(FactSource.TRUSTED_REQUEST, FactSource.HOST_PROVIDER)
         .sensitivity(FactDefinition.Sensitivity.INTERNAL)
         .maxLength(64)
         .storage(FactDefinition.Storage.EXTENSION)
-        .codec(FactDefinition.stringCodec(
-            value -> value.trim().toLowerCase(java.util.Locale.ROOT)))
+        .codec(FactDefinition.enumCodec(SensitivityLevel.class))
         .build();
 
     /** 跨网络访问标记（对象：同主体访问来源网络是否变化）。 */
-    public static final FactDefinition<String> DIFFERENT_NETWORKS = booleanFact(
+    public static final FactDefinition<Boolean> DIFFERENT_NETWORKS = booleanFact(
         DifferentNetworks.class, "different_networks");
     /** 顺序访问标记（对象：资源访问路径是否呈连续遍历特征）。 */
-    public static final FactDefinition<String> SEQUENTIAL_ACCESS = booleanFact(
+    public static final FactDefinition<Boolean> SEQUENTIAL_ACCESS = booleanFact(
         SequentialAccess.class, "sequential_access");
     /** 敏感对象标记（对象：当前资源是否属于敏感数据对象）。 */
-    public static final FactDefinition<String> SENSITIVE = booleanFact(Sensitive.class, "sensitive");
+    public static final FactDefinition<Boolean> SENSITIVE = booleanFact(Sensitive.class, "sensitive");
     /** 工作时段标记（对象：行为发生时间是否在业务定义的工作时段内）。 */
-    public static final FactDefinition<String> WORK_HOURS = booleanFact(WorkHours.class, "work_hours");
+    public static final FactDefinition<Boolean> WORK_HOURS = booleanFact(WorkHours.class, "work_hours");
     /** 提权操作标记（对象：权限变更是否导致权限上升）。 */
-    public static final FactDefinition<String> PRIVILEGE_INCREASE = booleanFact(
+    public static final FactDefinition<Boolean> PRIVILEGE_INCREASE = booleanFact(
         PrivilegeIncrease.class, "privilege_increase");
     /** 高权限标记（对象：目标权限是否属于高危/高敏权限）。 */
-    public static final FactDefinition<String> HIGH_PRIVILEGE = booleanFact(HighPrivilege.class, "high_privilege");
+    public static final FactDefinition<Boolean> HIGH_PRIVILEGE = booleanFact(HighPrivilege.class, "high_privilege");
     /**
      * 目标用户标识（对象：被操作或被授权变更的用户主体）。
      * <p>
@@ -96,13 +96,13 @@ public final class BuiltInFacts {
      * 用例：
      * 当前导出量 / 用户近 30 天平均导出量，或当前查询频率 / 历史稳定频率。
      */
-    public static final FactDefinition<String> BASELINE_RATIO = FactDefinition
-        .builder(BaselineRatio.class, "baseline_ratio", String.class)
+    public static final FactDefinition<BigDecimal> BASELINE_RATIO = FactDefinition
+        .builder(BaselineRatio.class, "baseline_ratio", BigDecimal.class)
         .allowedSources(FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
         .sensitivity(FactDefinition.Sensitivity.INTERNAL).maxLength(32)
         .storage(FactDefinition.Storage.EXTENSION)
-        .codec(FactDefinition.stringCodec(value -> value.trim()))
-        .validator(BuiltInFacts::validNonNegativeNumber).build();
+        .codec(FactDefinition.bigDecimalCodec())
+        .validator(value -> value.signum() >= 0).build();
 
     private static final List<FactDefinition<?>> ALL = Collections.unmodifiableList(
         Arrays.<FactDefinition<?>>asList(RESOURCE_ID, DATA_COUNT, SENSITIVITY, DIFFERENT_NETWORKS,
@@ -137,44 +137,41 @@ public final class BuiltInFacts {
     }
 
     /** 敏感级别 token：例如 low、medium、high。 */
-    public static final class Sensitivity implements BuiltInFactType<String> {
+    public static final class Sensitivity implements BuiltInFactType<SensitivityLevel> {
         private Sensitivity() {
         }
     }
+    /** 内置敏感级别。 */
+    public enum SensitivityLevel {
+        LOW,
+        MEDIUM,
+        HIGH,
+        INTERNAL
+    }
+
     /** 跨网络访问 token：true 表示来源网络发生变化。 */
-    public static final class DifferentNetworks implements BuiltInFactType<String> { private DifferentNetworks() { } }
+    public static final class DifferentNetworks implements BuiltInFactType<Boolean> { private DifferentNetworks() { } }
     /** 顺序访问 token：true 表示疑似连续枚举/遍历资源。 */
-    public static final class SequentialAccess implements BuiltInFactType<String> { private SequentialAccess() { } }
+    public static final class SequentialAccess implements BuiltInFactType<Boolean> { private SequentialAccess() { } }
     /** 敏感对象 token：true 表示当前资源属于敏感对象。 */
-    public static final class Sensitive implements BuiltInFactType<String> { private Sensitive() { } }
+    public static final class Sensitive implements BuiltInFactType<Boolean> { private Sensitive() { } }
     /** 工作时段 token：true 表示行为发生于工作时段。 */
-    public static final class WorkHours implements BuiltInFactType<String> { private WorkHours() { } }
+    public static final class WorkHours implements BuiltInFactType<Boolean> { private WorkHours() { } }
     /** 提权操作 token：true 表示权限变更方向为上升。 */
-    public static final class PrivilegeIncrease implements BuiltInFactType<String> { private PrivilegeIncrease() { } }
+    public static final class PrivilegeIncrease implements BuiltInFactType<Boolean> { private PrivilegeIncrease() { } }
     /** 高权限 token：true 表示变更目标为高权限集合。 */
-    public static final class HighPrivilege implements BuiltInFactType<String> { private HighPrivilege() { } }
+    public static final class HighPrivilege implements BuiltInFactType<Boolean> { private HighPrivilege() { } }
     /** 目标用户 token：表示被操作的用户 ID。 */
     public static final class TargetUserId implements BuiltInFactType<String> { private TargetUserId() { } }
     /** 基线比值 token：表示当前行为相对基线的偏离倍率。 */
-    public static final class BaselineRatio implements BuiltInFactType<String> { private BaselineRatio() { } }
+    public static final class BaselineRatio implements BuiltInFactType<BigDecimal> { private BaselineRatio() { } }
 
-    /** 布尔类 Fact 的统一定义：值仅允许 "true"/"false"。 */
-    private static <F extends FactType<String>> FactDefinition<String> booleanFact(Class<F> type, String key) {
-        return FactDefinition.builder(type, key, String.class)
+    /** 布尔类 Fact 的统一定义。 */
+    private static <F extends FactType<Boolean>> FactDefinition<Boolean> booleanFact(Class<F> type, String key) {
+        return FactDefinition.builder(type, key, Boolean.class)
             .allowedSources(FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
             .sensitivity(FactDefinition.Sensitivity.INTERNAL).maxLength(5)
             .storage(FactDefinition.Storage.EXTENSION)
-            .codec(FactDefinition.stringCodec(value -> value.trim().toLowerCase(java.util.Locale.ROOT)))
-            .validator(value -> "true".equals(value) || "false".equals(value)).build();
-    }
-
-    /** 验证字符串是否可解析为有限且非负的数值。 */
-    private static boolean validNonNegativeNumber(String value) {
-        try {
-            double parsed = Double.parseDouble(value);
-            return !Double.isNaN(parsed) && !Double.isInfinite(parsed) && parsed >= 0.0d;
-        } catch (NumberFormatException ignored) {
-            return false;
-        }
+            .codec(FactDefinition.booleanCodec()).build();
     }
 }

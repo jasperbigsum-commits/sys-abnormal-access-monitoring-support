@@ -53,7 +53,7 @@ public final class ReportQueryService {
         }
         ActionFacts facts = ActionFacts.builder()
             .put(BuiltInFacts.ResourceId.class, resourceId)
-            .put(BuiltInFacts.SequentialAccess.class, Boolean.toString(sequential)).build();
+            .put(BuiltInFacts.SequentialAccess.class, Boolean.valueOf(sequential)).build();
         monitoringRecorder.record(BuiltInActions.Query.class, ActionOutcome.success(0L), facts);
         return HttpStatus.OK;
     }

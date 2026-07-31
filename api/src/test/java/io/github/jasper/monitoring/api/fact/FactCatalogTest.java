@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.api.fact;
 
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
+import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,10 +15,17 @@ class FactCatalogTest {
         catalog.freeze();
 
         assertEquals(BuiltInFacts.DATA_COUNT, catalog.require(BuiltInFacts.DataCount.class));
-        assertEquals("true", BuiltInFacts.SEQUENTIAL_ACCESS.encode(" TRUE "));
-        assertEquals("3.5", BuiltInFacts.BASELINE_RATIO.encode("3.5"));
-        assertThrows(IllegalArgumentException.class, () -> BuiltInFacts.SEQUENTIAL_ACCESS.encode("yes"));
-        assertThrows(IllegalArgumentException.class, () -> BuiltInFacts.BASELINE_RATIO.encode("NaN"));
+        assertEquals("high", BuiltInFacts.SENSITIVITY.encode(BuiltInFacts.SensitivityLevel.HIGH));
+        assertEquals("true", BuiltInFacts.SEQUENTIAL_ACCESS.encode(Boolean.TRUE));
+        assertEquals("3.5", BuiltInFacts.BASELINE_RATIO.encode(new BigDecimal("3.50")));
+        assertEquals(BuiltInFacts.SensitivityLevel.HIGH, BuiltInFacts.SENSITIVITY.decode("HIGH"));
+        assertEquals(Boolean.FALSE, BuiltInFacts.SEQUENTIAL_ACCESS.decode("false"));
+        assertEquals(new BigDecimal("3.5"), BuiltInFacts.BASELINE_RATIO.decode("3.50"));
+        assertThrows(IllegalArgumentException.class, () -> BuiltInFacts.SEQUENTIAL_ACCESS.decode("yes"));
+        assertThrows(IllegalArgumentException.class, () -> BuiltInFacts.BASELINE_RATIO.decode("NaN"));
+        assertThrows(IllegalArgumentException.class, () -> BuiltInFacts.BASELINE_RATIO.encode(new BigDecimal("-1")));
+        assertThrows(IllegalArgumentException.class,
+            () -> BuiltInFacts.SENSITIVITY.encodeRaw("high"));
         assertThrows(MonitoringConfigurationException.class,
             () -> catalog.register(BuiltInFacts.DATA_COUNT));
     }

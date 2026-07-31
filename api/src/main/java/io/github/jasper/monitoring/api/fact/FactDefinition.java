@@ -1,7 +1,9 @@
 package io.github.jasper.monitoring.api.fact;
 
+import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -110,6 +112,74 @@ public final class FactDefinition<T> {
             @Override
             public String decode(String encoded) {
                 return encoded;
+            }
+        };
+    }
+
+    /** Creates an enum codec with lowercase persistence values and case-insensitive decoding. */
+    public static <E extends Enum<E>> Codec<E> enumCodec(final Class<E> enumType) {
+        Objects.requireNonNull(enumType, "enumType");
+        return new Codec<E>() {
+            @Override
+            public E normalize(E value) {
+                return value;
+            }
+
+            @Override
+            public String encode(E value) {
+                return value.name().toLowerCase(Locale.ROOT);
+            }
+
+            @Override
+            public E decode(String encoded) {
+                return Enum.valueOf(enumType, encoded.toUpperCase(Locale.ROOT));
+            }
+        };
+    }
+
+    /** Creates the canonical boolean codec. */
+    public static Codec<Boolean> booleanCodec() {
+        return new Codec<Boolean>() {
+            @Override
+            public Boolean normalize(Boolean value) {
+                return value;
+            }
+
+            @Override
+            public String encode(Boolean value) {
+                return value.toString();
+            }
+
+            @Override
+            public Boolean decode(String encoded) {
+                if ("true".equalsIgnoreCase(encoded)) {
+                    return Boolean.TRUE;
+                }
+                if ("false".equalsIgnoreCase(encoded)) {
+                    return Boolean.FALSE;
+                }
+                throw new IllegalArgumentException("Invalid boolean fact representation");
+            }
+        };
+    }
+
+    /** Creates the canonical decimal codec without exponent notation. */
+    public static Codec<BigDecimal> bigDecimalCodec() {
+        return new Codec<BigDecimal>() {
+            @Override
+            public BigDecimal normalize(BigDecimal value) {
+                BigDecimal normalized = value.stripTrailingZeros();
+                return normalized.signum() == 0 ? BigDecimal.ZERO : normalized;
+            }
+
+            @Override
+            public String encode(BigDecimal value) {
+                return value.toPlainString();
+            }
+
+            @Override
+            public BigDecimal decode(String encoded) {
+                return new BigDecimal(encoded);
             }
         };
     }

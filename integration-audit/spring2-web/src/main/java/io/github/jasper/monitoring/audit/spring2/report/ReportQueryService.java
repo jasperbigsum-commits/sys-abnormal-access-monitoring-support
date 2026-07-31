@@ -32,7 +32,7 @@ public final class ReportQueryService {
         if (fixtures.hasActiveControl(userId,"DENY",clock.instant())) return HttpStatus.FORBIDDEN;
         if (fixtures.hasActiveControl(userId,"RATE_LIMIT",clock.instant())) return HttpStatus.TOO_MANY_REQUESTS;
         ActionFacts facts=ActionFacts.builder().put(BuiltInFacts.ResourceId.class,resourceId)
-            .put(BuiltInFacts.SequentialAccess.class,Boolean.toString(sequential)).build();
+            .put(BuiltInFacts.SequentialAccess.class, Boolean.valueOf(sequential)).build();
         monitoringRecorder.record(BuiltInActions.Query.class, ActionOutcome.success(0L), facts);
         return HttpStatus.OK;
     }
