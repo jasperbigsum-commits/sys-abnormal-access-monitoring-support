@@ -1,6 +1,5 @@
 package io.github.jasper.monitoring.audit.spring3.management;
 
-import java.util.Collections;
 import io.github.jasper.monitoring.api.error.ManagementAccessDeniedException;
 import io.github.jasper.monitoring.api.error.ManagementConflictException;
 import org.springframework.http.HttpStatus;
@@ -20,12 +19,18 @@ public class ManagementExceptionHandler {
     @ExceptionHandler({SecurityException.class, ManagementAccessDeniedException.class})
     public ResponseEntity<?> denied(RuntimeException ignored) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-            .body(Collections.singletonMap("status", "FORBIDDEN"));
+            .body(ManagementResult.failure(403, "无权访问管理资源", "FORBIDDEN"));
     }
 
     @ExceptionHandler(ManagementConflictException.class)
     public ResponseEntity<?> conflict(ManagementConflictException ignored) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-            .body(Collections.singletonMap("status", "CONFLICT"));
+            .body(ManagementResult.failure(409, "数据版本或状态已变化", "CONFLICT"));
+    }
+
+    @ExceptionHandler({IllegalArgumentException.class})
+    public ResponseEntity<?> validation(IllegalArgumentException ignored) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+            .body(ManagementResult.failure(422, "请求参数不合法", "VALIDATION"));
     }
 }

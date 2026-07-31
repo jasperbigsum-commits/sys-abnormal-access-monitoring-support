@@ -1,6 +1,11 @@
 package io.github.jasper.monitoring.spring.support;
 
 import io.github.jasper.monitoring.api.fact.FactType;
+import io.github.jasper.monitoring.api.action.ActionDecision;
+import io.github.jasper.monitoring.api.action.ActionType;
+import io.github.jasper.monitoring.api.error.ActionBlockedException;
+import io.github.jasper.monitoring.api.event.ActionAttempt;
+import io.github.jasper.monitoring.api.event.ActionOutcome;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -9,6 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -21,6 +27,41 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MonitoringFactsTest {
+    @Test
+    void managedAttemptTracksACompletedBlockingDecision() {
+        try (MonitoringFactScope scope = MonitoringFactScope.open(TestAction.class,
+                facts -> ActionDecision.blocked("EXPT-01"))) {
+            MonitoringFacts.put(DataCountFact.class, Long.valueOf(5000L));
+
+            assertThrows(ActionBlockedException.class, MonitoringGate::checkpoint);
+            assertEquals(ActionAttempt.Status.DECIDED_BLOCKED, scope.attempt().getStatus());
+            scope.complete(ActionOutcome.denied("ACTION_BLOCKED", 1L));
+            assertEquals(ActionAttempt.Status.COMPLETED_DENIED, scope.attempt().getStatus());
+        }
+    }
+
+    @Test
+    void checkpointFreezesFactsAndReusesTheFirstBlockingDecision() {
+        AtomicInteger decisions = new AtomicInteger();
+        try (MonitoringFactScope scope = MonitoringFactScope.open(facts -> {
+            decisions.incrementAndGet();
+            assertEquals(Long.valueOf(5000L), facts.get(DataCountFact.class));
+            return ActionDecision.blocked("EXPT-01");
+        })) {
+            MonitoringFacts.put(DataCountFact.class, Long.valueOf(5000L));
+
+            assertThrows(ActionBlockedException.class, MonitoringGate::checkpoint);
+            assertThrows(ActionBlockedException.class, MonitoringGate::checkpoint);
+            assertThrows(IllegalStateException.class,
+                () -> MonitoringFacts.put(TextFact.class, "late-fact"));
+            assertEquals(1, decisions.get());
+        }
+    }
+
+    @Test
+    void checkpointRequiresAManagedActionScope() {
+        assertThrows(IllegalStateException.class, MonitoringGate::checkpoint);
+    }
 
     @Test
     void addsFactsToTheActiveScopeAndCleansItAfterClose() {
@@ -130,6 +171,7 @@ class MonitoringFactsTest {
 
     static final class DataCountFact implements FactType<Long> { }
     static final class TextFact implements FactType<String> { }
+    static final class TestAction implements ActionType { }
 
     private static final class RecordingHandler extends Handler {
         private final List<String> messages = Collections.synchronizedList(new ArrayList<String>());

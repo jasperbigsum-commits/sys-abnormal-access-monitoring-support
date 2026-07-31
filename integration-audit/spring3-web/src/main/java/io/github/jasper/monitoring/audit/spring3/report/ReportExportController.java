@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.audit.spring3.report;
 
 import io.github.jasper.monitoring.audit.spring3.security.AuditReportAuthorizationInterceptor;
+import io.github.jasper.monitoring.api.error.ActionBlockedException;
 import java.util.Collections;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
@@ -42,10 +43,6 @@ public class ReportExportController {
     public ResponseEntity<?> export(@RequestBody ReportExportRequest selection, HttpServletRequest request) {
         AuditReportCatalog.AuditReport report = authorizedReport(request);
         ReportExportService.Result result = exports.export(report.getId(), selection);
-        if (result.isBlocked()) {
-            return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(Collections.singletonMap("status", "AWAITING_APPROVAL"));
-        }
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
@@ -61,6 +58,12 @@ public class ReportExportController {
     public ResponseEntity<?> invalid(IllegalArgumentException ignored) {
         return ResponseEntity.badRequest()
             .body(Collections.singletonMap("status", "INVALID_EXPORT_REQUEST"));
+    }
+
+    @ExceptionHandler(ActionBlockedException.class)
+    public ResponseEntity<?> blocked(ActionBlockedException ignored) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+            .body(Collections.singletonMap("status", "AWAITING_APPROVAL"));
     }
 
     private static AuditReportCatalog.AuditReport authorizedReport(HttpServletRequest request) {

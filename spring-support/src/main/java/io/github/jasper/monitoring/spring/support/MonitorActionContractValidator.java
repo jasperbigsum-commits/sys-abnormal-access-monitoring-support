@@ -83,7 +83,7 @@ public final class MonitorActionContractValidator {
                 result.add(new ParameterFact(index, factType, fact.path()));
             }
         }
-        return new MethodBinding(actionType, result);
+        return new MethodBinding(actionType, action, result);
     }
 
     private void rejectProviderConflict(Class<? extends ActionType> actionType,
@@ -103,14 +103,18 @@ public final class MonitorActionContractValidator {
     /** Immutable action and parameter fact metadata consumed by instrumentation adapters. */
     public static final class MethodBinding {
         private final Class<? extends ActionType> actionType;
+        private final ActionDefinition action;
         private final List<ParameterFact> facts;
 
-        private MethodBinding(Class<? extends ActionType> actionType, List<ParameterFact> facts) {
+        private MethodBinding(Class<? extends ActionType> actionType, ActionDefinition action,
+                List<ParameterFact> facts) {
             this.actionType = actionType;
+            this.action = action;
             this.facts = Collections.unmodifiableList(new ArrayList<ParameterFact>(facts));
         }
 
         public Class<? extends ActionType> getActionType() { return actionType; }
+        public ActionDefinition getAction() { return action; }
         public List<ParameterFact> getFacts() { return facts; }
     }
 

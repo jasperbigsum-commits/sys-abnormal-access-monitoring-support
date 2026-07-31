@@ -1,7 +1,12 @@
 package io.github.jasper.monitoring.audit.spring3.report;
 
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
+import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureRepository;
+import io.github.jasper.monitoring.spring.support.MonitoringFacts;
+import io.github.jasper.monitoring.spring.support.MonitoringGate;
 import java.io.ByteArrayOutputStream;
 import java.time.Clock;
 import java.util.Arrays;
@@ -23,24 +28,19 @@ import org.springframework.stereotype.Service;
  * 请求字段只是选择条件，不能作为可信事实或授权依据。</p>
  */
 @Service
-public final class ReportExportService {
+public class ReportExportService {
     private static final Set<String> ALLOWED_FIELDS = new LinkedHashSet<String>(
         Arrays.asList("rowId", "displayValue", "amount"));
     private static final Set<String> KNOWN_FIELDS = new LinkedHashSet<String>(
         Arrays.asList("rowId", "displayValue", "amount", "sensitiveValue"));
 
     private final AuditFixtureRepository fixtures;
-    private final ExportRiskGuard risks;
-    private final ReportExportAuditService audit;
     private final MonitoringContextAccessor contexts;
     private final AtomicInteger workbookInvocations = new AtomicInteger();
     private final Clock clock = Clock.systemUTC();
 
-    public ReportExportService(AuditFixtureRepository fixtures, ExportRiskGuard risks,
-                               ReportExportAuditService audit, MonitoringContextAccessor contexts) {
+    public ReportExportService(AuditFixtureRepository fixtures, MonitoringContextAccessor contexts) {
         this.fixtures = fixtures;
-        this.risks = risks;
-        this.audit = audit;
         this.contexts = contexts;
     }
 
@@ -55,23 +55,22 @@ public final class ReportExportService {
      * @param request 客户端选择意图，不包含可信行数、组织或授权结论
      * @return 阻断结果或包含已生成 XLSX 内容的成功结果
      */
+    @MonitorAction(BuiltInActions.ReportExport.class)
     public Result export(String reportId, ReportExportRequest request) {
         validate(reportId, request);
         List<String> fields = authorizedFields(request.getFields());
         long rows = fixtures.countReportRows(reportId, request.getMinId(), request.getMaxId(),
             request.getSelectedIds());
         String userId = contexts.identityContext().getUserId();
-        ExportRiskGuard.Decision decision = risks.evaluate(userId, rows, request.getFields());
-        if (decision.isBlocked()) {
-            audit.record(reportId, rows, decision.isSensitive(), false);
-            fixtures.recordExport(UUID.randomUUID().toString(), userId, reportId, rows, "DENIED",
-                clock.instant());
-            return Result.blocked(rows);
+        MonitoringFacts.put(BuiltInFacts.ResourceId.class, reportId);
+        MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(rows));
+        if (request.getFields() != null && request.getFields().contains("sensitiveValue")) {
+            MonitoringFacts.put(BuiltInFacts.Sensitivity.class, "HIGH");
         }
+        MonitoringGate.checkpoint();
         List<Map<String, Object>> data = fixtures.findReportRows(reportId, request.getMinId(),
             request.getMaxId(), request.getSelectedIds());
         byte[] workbook = workbook(fields, data);
-        audit.record(reportId, data.size(), false, true);
         fixtures.recordExport(UUID.randomUUID().toString(), userId, reportId, data.size(), "SUCCEEDED",
             clock.instant());
         return Result.completed(workbook, data.size());
@@ -141,26 +140,16 @@ public final class ReportExportService {
     }
 
     public static final class Result {
-        private final boolean blocked;
         private final byte[] content;
         private final long rows;
 
-        private Result(boolean blocked, byte[] content, long rows) {
-            this.blocked = blocked;
+        private Result(byte[] content, long rows) {
             this.content = content;
             this.rows = rows;
         }
 
-        static Result blocked(long rows) {
-            return new Result(true, null, rows);
-        }
-
         static Result completed(byte[] content, long rows) {
-            return new Result(false, content, rows);
-        }
-
-        public boolean isBlocked() {
-            return blocked;
+            return new Result(content, rows);
         }
 
         public byte[] getContent() {

@@ -20,6 +20,7 @@ public enum MonitoringErrorCode {
     ALERT_NOT_FOUND("MON-201"),
     INVALID_ALERT_TRANSITION("MON-202"),
     ENFORCEMENT_HANDLER_REQUIRED("MON-301"),
+    ACTION_BLOCKED("MON-302"),
     PERSISTENCE_OPERATION_FAILED("MON-401");
 
     private final String code;

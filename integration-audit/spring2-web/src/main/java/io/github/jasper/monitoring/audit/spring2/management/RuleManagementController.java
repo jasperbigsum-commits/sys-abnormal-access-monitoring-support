@@ -3,13 +3,17 @@ package io.github.jasper.monitoring.audit.spring2.management;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.management.ManagementActor;
 import io.github.jasper.monitoring.api.management.RuleCatalogService;
+import io.github.jasper.monitoring.api.management.ManagementPage;
 import io.github.jasper.monitoring.api.management.command.RuleChangeCommand;
 import io.github.jasper.monitoring.api.management.model.RuleView;
+import io.github.jasper.monitoring.api.management.query.RuleQuery;
 import io.github.jasper.monitoring.api.rule.RuleMode;
 import io.github.jasper.monitoring.audit.spring2.security.AuditRuleApproverContext;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,12 +37,22 @@ public class RuleManagementController {
         this.approvers = approvers;
     }
 
+    @GetMapping
+    public ManagementResult<ManagementPage<RuleView>> search(@RequestParam(value = "page", required = false) Integer page,
+        @RequestParam(value = "size", required = false) Integer size) {
+        return ManagementResult.ok(rules.search(actor(), RuleQuery.of(
+            ManagementHttpParameters.page(page, size, RuleQuery.Sort.ID))));
+    }
+
+    @GetMapping("/{id}")
+    public ManagementResult<RuleView> get(@PathVariable("id") String id) { return ManagementResult.ok(rules.get(actor(), id)); }
+
     @PostMapping("/{id}/versions")
-    public RuleView change(@PathVariable("id") String id, @RequestBody RuleChangeRequest request) {
+    public ManagementResult<RuleView> change(@PathVariable("id") String id, @RequestBody RuleChangeRequest request) {
         ManagementActor requester = actor();
-        return rules.change(requester, approvers.require(requester.getActorId()),
+        return ManagementResult.ok(rules.change(requester, approvers.require(requester.getActorId()),
             RuleChangeCommand.of(id, request.getExpectedVersion(), RuleMode.valueOf(request.getMode()),
-                request.getThreshold(), request.getReason(), request.getIdempotencyKey()));
+                request.getThreshold(), request.getReason(), request.getIdempotencyKey())));
     }
 
     private ManagementActor actor() {

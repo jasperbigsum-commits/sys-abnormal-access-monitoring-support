@@ -3,6 +3,8 @@ package io.github.jasper.monitoring.api.rule;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.api.action.ActionContract;
+import io.github.jasper.monitoring.api.action.ActionDisposition;
+import io.github.jasper.monitoring.api.action.ActionRequirement;
 import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.api.fact.FactType;
@@ -26,6 +28,8 @@ public final class RuleDefinition<R extends RuleType> {
     private final Duration historyWindow;
     private final long threshold;
     private final RiskLevel risk;
+    private final ActionDisposition disposition;
+    private final Set<ActionRequirement> requirements;
     private final Set<ControlActionType> controls;
     private final RuleMode mode;
     private final RuleSource source;
@@ -40,6 +44,8 @@ public final class RuleDefinition<R extends RuleType> {
         historyWindow = builder.historyWindow;
         threshold = builder.threshold;
         risk = builder.risk;
+        disposition = builder.disposition;
+        requirements = immutableSet(builder.requirements);
         controls = immutableSet(builder.controls);
         mode = builder.mode;
         source = builder.source;
@@ -86,6 +92,14 @@ public final class RuleDefinition<R extends RuleType> {
         return risk;
     }
 
+    public ActionDisposition getDisposition() {
+        return disposition;
+    }
+
+    public Set<ActionRequirement> getRequirements() {
+        return requirements;
+    }
+
     public Set<ControlActionType> getControls() {
         return controls;
     }
@@ -127,6 +141,8 @@ public final class RuleDefinition<R extends RuleType> {
         private Duration historyWindow;
         private long threshold;
         private RiskLevel risk;
+        private ActionDisposition disposition = ActionDisposition.ALLOW;
+        private final Set<ActionRequirement> requirements = EnumSet.noneOf(ActionRequirement.class);
         private final Set<ControlActionType> controls = EnumSet.noneOf(ControlActionType.class);
         private RuleMode mode;
         private RuleSource source;
@@ -190,6 +206,16 @@ public final class RuleDefinition<R extends RuleType> {
 
         public Builder<R> risk(RiskLevel risk) {
             this.risk = Objects.requireNonNull(risk, "risk");
+            return this;
+        }
+
+        public Builder<R> disposition(ActionDisposition disposition) {
+            this.disposition = Objects.requireNonNull(disposition, "disposition");
+            return this;
+        }
+
+        public Builder<R> requirement(ActionRequirement requirement) {
+            requirements.add(Objects.requireNonNull(requirement, "requirement"));
             return this;
         }
 

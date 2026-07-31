@@ -7,6 +7,20 @@ export interface ManagementPage<T> {
     totalElements: number;
 }
 
+export interface ManagementDebugSession {
+    actorId: string;
+    systemScope: string;
+    contract: string;
+    serverTime: string;
+}
+
+export interface ManagementRequestPreview {
+    page: number;
+    size: number;
+    from: string;
+    to: string;
+}
+
 export const managementApi = {
     dashboard: <T>(params: object) => defHttp.get<T>({ url: '/dashboard', params }),
     alerts: <T>(params: object) => defHttp.get<ManagementPage<T>>({ url: '/alerts', params }),
@@ -21,5 +35,7 @@ export const managementApi = {
     changeRule: <T>(id: string, data: object) => defHttp.post<T>({ url: `/rules/${encodeURIComponent(id)}/versions`, data }),
     whitelists: <T>(params: object) => defHttp.get<ManagementPage<T>>({ url: '/whitelists', params }),
     whitelistTransition: <T>(id: string, action: string, data: object) => defHttp.post<T>({ url: `/whitelists/${encodeURIComponent(id)}/${action}`, data }),
-    managementAudit: <T>(params: object) => defHttp.get<ManagementPage<T>>({ url: '/audit-log', params })
+    managementAudit: <T>(params: object) => defHttp.get<ManagementPage<T>>({ url: '/audit-log', params }),
+    debugSession: () => defHttp.get<ManagementDebugSession>({ url: '/debug/session' }),
+    previewRequest: (data: object) => defHttp.post<ManagementRequestPreview>({ url: '/debug/request-preview', data })
 };

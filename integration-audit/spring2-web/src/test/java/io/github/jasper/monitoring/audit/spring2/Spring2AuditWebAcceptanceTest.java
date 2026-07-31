@@ -344,6 +344,10 @@ class Spring2AuditWebAcceptanceTest {
         assertEquals(generated,policyExports.getWorkbookInvocationCount());
         assertEquals(8000L,jdbc.queryForObject("SELECT SUM(row_count) FROM audit_export_ledger "
             + "WHERE user_id='audit-export-daily' AND outcome='SUCCEEDED'",Long.class).longValue());
+        assertEquals(HttpStatus.OK,export("audit-export-daily",exportBody(1L,1000L,
+            java.util.Arrays.asList("rowId","displayValue"))).getStatusCode());
+        assertEquals(9000L,jdbc.queryForObject("SELECT SUM(row_count) FROM audit_export_ledger "
+            + "WHERE user_id='audit-export-daily' AND outcome='SUCCEEDED'",Long.class).longValue());
         assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
             + "WHERE rule_id='EXPT-02' AND subject='audit-export-daily'",Long.class).longValue());
     }

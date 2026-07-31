@@ -10,13 +10,35 @@ import io.github.jasper.monitoring.api.rule.RuleDefinition;
 import io.github.jasper.monitoring.api.rule.RuleSource;
 import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.action.ActionDisposition;
+import io.github.jasper.monitoring.api.action.ActionRequirement;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class DefaultRuleCatalogCoverageTest {
+    @Test
+    void exportRulesDeclareCurrentAttemptBlockingWithoutUsingDenyAsTheDecision() {
+        RuleDefinition<?> exptOne = definition("EXPT-01");
+        RuleDefinition<?> exptTwo = definition("EXPT-02");
+
+        assertEquals(ActionDisposition.BLOCK, exptOne.getDisposition());
+        assertTrue(exptOne.getRequirements().contains(ActionRequirement.APPROVAL));
+        assertFalse(exptOne.getControls().contains(ControlActionType.DENY));
+        assertEquals(ActionDisposition.BLOCK, exptTwo.getDisposition());
+        assertFalse(exptTwo.getControls().contains(ControlActionType.DENY));
+    }
+
+    private static RuleDefinition<?> definition(String id) {
+        for (DetectionRule<?> rule : DefaultRuleCatalog.typedRules()) {
+            if (id.equals(rule.getRuleId())) return rule.definition();
+        }
+        throw new AssertionError("Missing rule " + id);
+    }
 
     @Test
     void includesEveryInitialRuleFromTheConstructionBaseline() {

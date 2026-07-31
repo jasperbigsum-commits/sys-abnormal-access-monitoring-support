@@ -173,24 +173,20 @@ abnormal:
 
 ### 5. 在业务事实产生处提交强类型事件
 
-夹具的 `ReportExportAuditService` 在文件生成前预检或生成后完成时调用 `MonitoringRecorder`。Recorder 自动补全当前请求与身份上下文，并以 `HOST_PROVIDER` 声明资源 ID、行数和敏感级别：
+夹具的 `ReportExportService` 使用 `@MonitorAction` 建立动作作用域，在服务端完成数据准备后提交资源 ID、行数和敏感级别，并在生成文件前同步决策：
 
 ```java
-monitoringRecorder.record(
-    BuiltInActions.ReportExport.class,
-    ActionOutcome.denied("EXPORT_PREFLIGHT_DENIED", 0L),
-    ActionFacts.builder()
-        .put(BuiltInFacts.ResourceId.class, reportId)
-        .put(BuiltInFacts.DataCount.class, Long.valueOf(rows))
-        .put(BuiltInFacts.Sensitivity.class, "high")
-        .build());
+MonitoringFacts.put(BuiltInFacts.ResourceId.class, reportId);
+MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(rows));
+MonitoringFacts.put(BuiltInFacts.Sensitivity.class, "high");
+MonitoringGate.checkpoint();
 ```
 
 关键要求：
 
 - 资源、数据量、权限变化和敏感级别必须来自服务端已校验的业务结果。
 - 客户端传入的报告 ID、组织、数量或状态不能覆盖服务端事实（IA-05）。
-- 高风险导出必须先预检、先记录拒绝，再阻断 XLSX 生成（TC-08、TC-09）。
+- 高风险导出必须在事实完整后同步决策，并在 XLSX 生成前阻断（TC-08、TC-09）。
 - 密码、Token、Cookie、密钥和原始请求/响应载荷不得写入事实、属性、异常原因或日志（TC-15）。
 
 ### 6. 使用注解处理 MVC 与普通 Service 动作
@@ -267,7 +263,7 @@ public ControlExecution revokeSession(ControlCommand command) {
 | 登录失败、挑战和限流 | `security/AuthenticationController`、`AuditAuthenticationService` | TC-01、TC-02、TC-03、TC-17 |
 | 报告资源范围授权 | `security/AuditReportAuthorizationInterceptor` | TC-05、IA-07 |
 | 查询遍历与阈值控制 | `report/ReportQueryService`、`ReportQueryController` | TC-06、TC-07 |
-| 导出预检与台账 | `report/ReportExportService`、`ReportExportAuditService` | TC-08、TC-09、IA-05 |
+| 导出同步决策与台账 | `report/ReportExportService` | TC-08、TC-09、IA-05 |
 | 权限提升拒绝 | `privilege/PrivilegeGrantService` | TC-10 |
 | 管理、白名单、规则和处置 | `management/*Controller` | TC-04、TC-12、TC-16、TC-18、IA-11 |
 | 控制幂等 | `control/AuditControlActions` | TC-11、TC-13、IA-08 至 IA-10 |

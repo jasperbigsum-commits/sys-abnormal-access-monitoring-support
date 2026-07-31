@@ -7,7 +7,10 @@ import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.action.ActionDefinition;
+import io.github.jasper.monitoring.api.action.ActionDecision;
+import io.github.jasper.monitoring.api.action.ActionDisposition;
 import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
+import io.github.jasper.monitoring.api.action.ActionRequirement;
 import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.control.ControlCatalog;
 import io.github.jasper.monitoring.api.control.ControlStatus;
@@ -60,8 +63,36 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TypedRuleEvaluationServiceTest {
+    @Test
+    void synchronousDecisionAggregatesRuleOutputsWithoutCreatingSideEffects() {
+        Store store = new Store();
+        Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
+        RecordingControlStore controlStore = new RecordingControlStore();
+        TypedRuleEvaluationService evaluator = new TypedRuleEvaluationService(store, store, store, store, store,
+            Collections.<DetectionRule<? extends RuleType>>singletonList(new BlockingRule()),
+            MonitoringMode.ENFORCE,
+            new ControlExecutionService(controlStore, ControlCatalog.<ControlHandler>builder().freeze(), clock),
+            notifications(store, NotificationChannel.noop(), clock), clock);
+        ActionDefinition action = ActionDefinition.builder("data:query")
+            .eventType(SecurityEventType.QUERY).resourceType("report")
+            .failurePolicy(ActionFailurePolicy.FAIL_CLOSED).build();
+        MonitoringService service = new MonitoringService(store, new SecurityEventAssembler("demo", clock),
+            new FixedRuntime(action), evaluator);
+
+        ActionDecision decision = service.decide(ActionExecution.of(QueryAction.class, request(),
+            IdentityContext.anonymous(), ActionOutcome.success(0L)));
+
+        assertEquals(ActionDisposition.BLOCK, decision.getDisposition());
+        assertTrue(decision.getRequirements().contains(ActionRequirement.APPROVAL));
+        assertTrue(decision.getMatchedRuleIds().contains("BLOCK-01"));
+        assertEquals(0, store.events.size());
+        assertEquals(0, store.alerts.size());
+        assertEquals(0, store.observations.size());
+        assertEquals(0, controlStore.reservations);
+    }
     @Test
     void disabledRuleIsNotEvaluated() {
         ModeFixture fixture = new ModeFixture(RuleMode.DISABLED, MonitoringMode.ENFORCE);
@@ -270,7 +301,9 @@ class TypedRuleEvaluationServiceTest {
         @Override public RuleDefinition<QueryRule> definition() { return definition; }
         @Override public Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
             return Optional.of(new RuleMatch("QUERY-01", RiskLevel.HIGH, context.getEvent().subject(),
-                "reports", "query observed", Collections.singletonList(ControlActionType.RECORD)));
+                "reports", "query observed", ActionDisposition.ALLOW,
+                Collections.<ActionRequirement>emptySet(),
+                Collections.singleton(ControlActionType.RECORD), Duration.ofMinutes(15)));
         }
     }
 
@@ -305,7 +338,8 @@ class TypedRuleEvaluationServiceTest {
 
     private static RuleMatch match(String ruleId, RuleEvaluationContext context) {
         return new RuleMatch(ruleId, RiskLevel.MEDIUM, context.getEvent().subject(), "reports",
-            "observed", Collections.singletonList(ControlActionType.RECORD));
+            "observed", ActionDisposition.ALLOW, Collections.<ActionRequirement>emptySet(),
+            Collections.singleton(ControlActionType.RECORD), Duration.ofMinutes(15));
     }
 
     static final class ModeFixture {
@@ -359,8 +393,25 @@ class TypedRuleEvaluationServiceTest {
         @Override public Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
             evaluations++;
             return Optional.of(new RuleMatch("MODE-01", RiskLevel.HIGH, context.getEvent().subject(),
-                "reports", "query observed",
-                Collections.singletonList(ControlActionType.REQUIRE_APPROVAL)));
+                "reports", "query observed", ActionDisposition.ALLOW,
+                Collections.<ActionRequirement>emptySet(),
+                Collections.singleton(ControlActionType.REQUIRE_APPROVAL), Duration.ofMinutes(15)));
+        }
+    }
+
+    static final class BlockingRule implements DetectionRule<QueryRule> {
+        private final RuleDefinition<QueryRule> definition = RuleDefinition.builder(QueryRule.class, "BLOCK-01")
+            .appliesTo(QueryAction.class).historyWindow(Duration.ZERO).threshold(1L)
+            .risk(RiskLevel.HIGH).disposition(ActionDisposition.BLOCK)
+            .requirement(ActionRequirement.APPROVAL)
+            .mode(RuleMode.ENFORCE).source(RuleSource.INTERNAL).build();
+
+        @Override public RuleDefinition<QueryRule> definition() { return definition; }
+        @Override public Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
+            return Optional.of(new RuleMatch("BLOCK-01", RiskLevel.HIGH,
+                context.getEvent().subject(), "reports", "approval required",
+                ActionDisposition.BLOCK, Collections.singleton(ActionRequirement.APPROVAL),
+                Collections.<ControlActionType>emptySet(), Duration.ofMinutes(15)));
         }
     }
 

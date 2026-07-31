@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.SecurityEventResult;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -162,6 +163,7 @@ class DefaultRuleCatalogAuthenticationTest {
             .occurredAt(occurredAt)
             .sourceIp(SOURCE_IP)
             .userId("alice")
+            .result(SecurityEventResult.SUCCESS)
             .dataCount(dataCount)
             .build();
     }

@@ -28,8 +28,7 @@
 2. [AuditReportAuthorizationInterceptor.java](src/main/java/io/github/jasper/monitoring/audit/spring3/security/AuditReportAuthorizationInterceptor.java)：资源加载和组织范围授权发生在哪里。
 3. [ReportExportController.java](src/main/java/io/github/jasper/monitoring/audit/spring3/report/ReportExportController.java)：HTTP DTO 如何进入业务 Service。
 4. [ReportExportService.java](src/main/java/io/github/jasper/monitoring/audit/spring3/report/ReportExportService.java)：服务端重新计算行数和字段，执行当前请求的风险中断；风险阻断时不生成 XLSX。
-5. [ReportExportAuditService.java](src/main/java/io/github/jasper/monitoring/audit/spring3/report/ReportExportAuditService.java)：在阻断或成功的明确业务结果点调用 `MonitoringRecorder.record(...)`，提交 `ReportExport`、`ResourceId`、`DataCount`、敏感级别和结果。
-6. [Spring3AuditWebAcceptanceTest.java](src/test/java/io/github/jasper/monitoring/audit/spring3/Spring3AuditWebAcceptanceTest.java)：HTTP 响应、组件表、宿主表和副作用计数如何共同验收。
+5. [Spring3AuditWebAcceptanceTest.java](src/test/java/io/github/jasper/monitoring/audit/spring3/Spring3AuditWebAcceptanceTest.java)：HTTP 响应、组件表、宿主表和副作用计数如何共同验收。
 
 其他场景按同样方式定位：登录和会话在 security，控制处理器在 control，通知在 notification，组件管理服务的 HTTP 适配在 management，注解采集示例在 monitoring，测试夹具仓储只在 persistence。
 
@@ -78,15 +77,14 @@ Spring3AuditApplication 启动时执行组件 Schema 和 db/audit-fixture-schema
       -> ReportExportController
       -> ReportExportService
       -> AuditFixtureRepository.countReportRows
-      -> ExportRiskGuard
+      -> MonitoringFacts / MonitoringGate.checkpoint
       -> XLSX generation
-      -> ReportExportAuditService (SUCCESS Action/Fact)
+      -> @MonitorAction final outcome
       -> audit_export_ledger
 
-阻断路径在 `ExportRiskGuard` 后结束：先调用 `ReportExportAuditService` 写入 `ReportExport` 的 DENIED 事件，
-再写入宿主导出台账，但不调用 XLSX 生成。跨组织访问则在拦截器阶段提交 `AccessDenied` 事件并返回 404，
-导出 Service 不会被调用。监测组件新产生的 `DENY`、`REQUIRE_APPROVAL` 等控制由宿主 `ControlHandler`
-落地，通常保护后续请求；如果业务要求当前请求立即停止，必须在文件生成前检查已生效控制或执行本包的风险预检。
+阻断路径在 `MonitoringGate.checkpoint()` 结束：切面同步返回 `BLOCK` 决策并记录 `DENIED` 结果，
+但不写成功台账，也不调用 XLSX 生成。跨组织访问则在拦截器阶段提交 `AccessDenied` 事件并返回 404，
+导出 Service 不会被调用。审批、MFA、验证码要求与当前动作的阻断结论独立，宿主控制处理器负责持久化后续重试所需的工作流状态。
 
 ### 监测接入对照
 

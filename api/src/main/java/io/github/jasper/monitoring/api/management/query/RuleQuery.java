@@ -4,6 +4,8 @@ import io.github.jasper.monitoring.api.management.ManagementPageRequest;
 
 /** 规则目录查询条件。 */
 public final class RuleQuery extends ManagementQuery {
+    /** 规则列表支持的固定排序字段。 */
+    public enum Sort { ID, CREATED_AT }
     private RuleQuery(ManagementPageRequest p) {
         super(p);
     }

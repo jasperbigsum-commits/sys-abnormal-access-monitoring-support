@@ -5,11 +5,9 @@ import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.RuleMatch;
 
 
-import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.rule.RuleDefinition;
 import io.github.jasper.monitoring.api.rule.RuleType;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -37,7 +35,7 @@ abstract class AbstractDetectionRule<R extends RuleType> implements DetectionRul
     protected final Optional<RuleMatch> match(SecurityEvent event, String subject, Duration controlTtl) {
         String resource = event.getResourceType() == null ? "" : event.getResourceType() + ":" + nullToEmpty(event.getResourceId());
         return Optional.of(new RuleMatch(definition.getId(), definition.getRisk(), subject, resource, reason,
-            new ArrayList<ControlActionType>(definition.getControls()), controlTtl));
+            definition.getDisposition(), definition.getRequirements(), definition.getControls(), controlTtl));
     }
 
     private static String nullToEmpty(String value) {

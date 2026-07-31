@@ -6,8 +6,15 @@ import io.github.jasper.monitoring.api.management.ManagementActor;
 import io.github.jasper.monitoring.api.management.command.AlertAcknowledgeCommand;
 import io.github.jasper.monitoring.api.management.command.AlertAssignmentCommand;
 import io.github.jasper.monitoring.api.management.command.AlertCloseCommand;
+import io.github.jasper.monitoring.api.management.command.AlertFalsePositiveCommand;
 import io.github.jasper.monitoring.api.management.command.AlertStartInvestigationCommand;
+import io.github.jasper.monitoring.api.management.ManagementPage;
+import io.github.jasper.monitoring.api.management.query.AlertAssignmentQuery;
+import io.github.jasper.monitoring.api.management.query.AlertQuery;
+import io.github.jasper.monitoring.api.management.model.AlertAssignmentView;
 import io.github.jasper.monitoring.api.management.model.AlertView;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,27 +38,52 @@ public class AlertManagementController {
         this.alerts = alerts;
     }
 
+    @GetMapping
+    public ManagementResult<ManagementPage<AlertView>> search(@RequestParam(value = "page", required = false) Integer page,
+        @RequestParam(value = "size", required = false) Integer size) {
+        return ManagementResult.ok(alerts.search(actor(), AlertQuery.of(
+            ManagementHttpParameters.page(page, size, AlertQuery.Sort.CREATED_AT))));
+    }
+
+    @GetMapping("/{id}")
+    public ManagementResult<AlertView> get(@PathVariable("id") String id) {
+        return ManagementResult.ok(alerts.get(actor(), id));
+    }
+
+    @GetMapping("/{id}/assignments")
+    public ManagementResult<ManagementPage<AlertAssignmentView>> assignments(@PathVariable("id") String id,
+        @RequestParam(value = "page", required = false) Integer page, @RequestParam(value = "size", required = false) Integer size) {
+        return ManagementResult.ok(alerts.assignmentHistory(actor(), id, AlertAssignmentQuery.of(
+            ManagementHttpParameters.page(page, size, AlertAssignmentQuery.Sort.CREATED_AT))));
+    }
+
     @PostMapping("/{id}/acknowledge")
-    public AlertView acknowledge(@PathVariable("id") String id, @RequestBody AlertRequest request) {
-        return alerts.acknowledge(actor(), AlertAcknowledgeCommand.of(id, request.getExpectedVersion(),
-            request.getReason(), request.getIdempotencyKey()));
+    public ManagementResult<AlertView> acknowledge(@PathVariable("id") String id, @RequestBody AlertRequest request) {
+        return ManagementResult.ok(alerts.acknowledge(actor(), AlertAcknowledgeCommand.of(id, request.getExpectedVersion(),
+            request.getReason(), request.getIdempotencyKey())));
     }
 
     @PostMapping("/{id}/assign")
-    public AlertView assign(@PathVariable("id") String id, @RequestBody AlertRequest request) {
-        return alerts.assign(actor(), AlertAssignmentCommand.of(id, request.getExpectedVersion(),
-            request.getAssigneeId(), request.getReason(), request.getIdempotencyKey()));
+    public ManagementResult<AlertView> assign(@PathVariable("id") String id, @RequestBody AlertRequest request) {
+        return ManagementResult.ok(alerts.assign(actor(), AlertAssignmentCommand.of(id, request.getExpectedVersion(),
+            request.getAssigneeId(), request.getReason(), request.getIdempotencyKey())));
     }
 
     @PostMapping("/{id}/investigate")
-    public AlertView investigate(@PathVariable("id") String id, @RequestBody AlertRequest request) {
-        return alerts.startInvestigation(actor(), AlertStartInvestigationCommand.of(id,
-            request.getExpectedVersion(), request.getReason()));
+    public ManagementResult<AlertView> investigate(@PathVariable("id") String id, @RequestBody AlertRequest request) {
+        return ManagementResult.ok(alerts.startInvestigation(actor(), AlertStartInvestigationCommand.of(id,
+            request.getExpectedVersion(), request.getReason())));
     }
 
     @PostMapping("/{id}/close")
-    public AlertView close(@PathVariable("id") String id, @RequestBody AlertRequest request) {
-        return alerts.close(actor(), AlertCloseCommand.of(id, request.getExpectedVersion(), request.getReason()));
+    public ManagementResult<AlertView> close(@PathVariable("id") String id, @RequestBody AlertRequest request) {
+        return ManagementResult.ok(alerts.close(actor(), AlertCloseCommand.of(id, request.getExpectedVersion(), request.getReason())));
+    }
+
+    @PostMapping("/{id}/false-positive")
+    public ManagementResult<AlertView> falsePositive(@PathVariable("id") String id, @RequestBody AlertRequest request) {
+        return ManagementResult.ok(alerts.markFalsePositive(actor(), AlertFalsePositiveCommand.of(id,
+            request.getExpectedVersion(), request.getReason())));
     }
 
     private ManagementActor actor() {

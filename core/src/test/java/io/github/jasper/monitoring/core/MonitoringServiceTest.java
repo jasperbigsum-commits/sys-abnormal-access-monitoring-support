@@ -4,6 +4,8 @@ import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.action.ActionDefinition;
+import io.github.jasper.monitoring.api.action.ActionDecision;
+import io.github.jasper.monitoring.api.action.ActionDisposition;
 import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.action.ActionType;
@@ -29,8 +31,46 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class MonitoringServiceTest {
+    @Test
+    void decidesFromCompletedFactsWithoutPersistingACandidateEvent() {
+        RecordingEventRepository repository = new RecordingEventRepository();
+        ActionDefinition action = ActionDefinition.builder("demo:query").eventType(SecurityEventType.QUERY)
+            .resourceType("report").failurePolicy(ActionFailurePolicy.FAIL_CLOSED).build();
+        ActionCatalog catalog = new ActionCatalog();
+        catalog.register(QueryAction.class, action);
+        catalog.freeze();
+        MonitoringService service = new MonitoringService(repository,
+            new SecurityEventAssembler("demo", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)),
+            new MonitoringRuntimePort() {
+                public ActionDefinition resolve(Class<? extends ActionType> type) { return catalog.require(type); }
+                public MonitoringRuntimePort.FactCollection collect(ActionExecution execution, ActionDefinition definition) {
+                    return MonitoringRuntimePort.FactCollection.empty();
+                }
+            }, new MonitoringService.RuleEvaluationPort() {
+                @Override public void evaluate(Class<? extends ActionType> type, ActionDefinition definition,
+                        SecurityEvent event, ActionFacts facts,
+                        java.util.Map<Class<? extends FactType<?>>, FactSource> sources,
+                        java.util.Set<Class<? extends RuleType>> ineligible,
+                        java.util.List<io.github.jasper.monitoring.api.event.ObservationIssue> issues) { }
+
+                @Override public ActionDecision decide(Class<? extends ActionType> type,
+                        ActionDefinition definition, SecurityEvent event, ActionFacts facts,
+                        java.util.Map<Class<? extends FactType<?>>, FactSource> sources,
+                        java.util.Set<Class<? extends RuleType>> ineligible,
+                        java.util.List<io.github.jasper.monitoring.api.event.ObservationIssue> issues) {
+                    return ActionDecision.blocked("TEST-01");
+                }
+            });
+
+        ActionDecision decision = service.decide(ActionExecution.of(QueryAction.class, request(),
+            IdentityContext.anonymous(), ActionOutcome.success(0L)));
+
+        assertEquals(ActionDisposition.BLOCK, decision.getDisposition());
+        assertTrue(repository.events.isEmpty());
+    }
     @Test
     void persistsEventBeforeEvaluatingRules() {
         RecordingEventRepository repository = new RecordingEventRepository();

@@ -3,7 +3,10 @@ package io.github.jasper.monitoring.core.domain.rule;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.RiskLevel;
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.action.ActionType;
+import io.github.jasper.monitoring.api.action.ActionDisposition;
+import io.github.jasper.monitoring.api.action.ActionRequirement;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.control.ControlType;
 import io.github.jasper.monitoring.api.rule.RuleCatalog;
@@ -80,9 +83,8 @@ public final class DefaultRuleCatalog {
             event -> truthy(event.getAttribute("sensitive")) && falsy(event.getAttribute("work_hours")),
             WindowAggregateRule.Scope.USER, WindowAggregateRule.Aggregation.DATA_COUNT,
             "sensitive access outside work hours"));
-        rules.add(condition(definition(Expt01.class, "EXPT-01", RiskLevel.HIGH,
-            BuiltInActions.ReportExport.class, Duration.ZERO, 1L,
-            ControlActionType.DENY, ControlActionType.REQUIRE_APPROVAL),
+        rules.add(condition(blockingDefinition(Expt01.class, "EXPT-01", RiskLevel.HIGH,
+            BuiltInActions.ReportExport.class, Duration.ZERO, 1L, ActionRequirement.APPROVAL),
             event -> event.getEventType() == SecurityEventType.EXPORT
                 && (event.getDataCount() >= 5000
                     || "HIGH".equalsIgnoreCase(event.getAttribute("sensitivity"))),
@@ -144,6 +146,21 @@ public final class DefaultRuleCatalog {
         for (ControlActionType control : controls) {
             builder.control(control);
         }
+        return builder.build();
+    }
+
+    private static <R extends RuleType, A extends ActionType> RuleDefinition<R> blockingDefinition(
+            Class<R> type, String id, RiskLevel risk, Class<A> actionType,
+            Duration historyWindow, long threshold, ActionRequirement... requirements) {
+        RuleDefinition.Builder<R> builder = RuleDefinition.builder(type, id)
+            .appliesTo(actionType)
+            .historyWindow(historyWindow)
+            .threshold(threshold)
+            .risk(risk)
+            .disposition(ActionDisposition.BLOCK)
+            .mode(RuleMode.ENFORCE)
+            .source(RuleSource.INTERNAL);
+        for (ActionRequirement requirement : requirements) builder.requirement(requirement);
         return builder.build();
     }
 
@@ -225,8 +242,8 @@ public final class DefaultRuleCatalog {
     }
 
     private static DetectionRule<Expt02> exportTwo() {
-        final RuleDefinition<Expt02> definition = definition(Expt02.class, "EXPT-02", RiskLevel.HIGH,
-            BuiltInActions.ReportExport.class, Duration.ofDays(1), 10000L, ControlActionType.DENY);
+        final RuleDefinition<Expt02> definition = blockingDefinition(Expt02.class, "EXPT-02", RiskLevel.HIGH,
+            BuiltInActions.ReportExport.class, Duration.ofDays(1), 10000L);
         return new AbstractDetectionRule<Expt02>(definition, "daily export exceeds baseline") {
             @Override
             public Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
@@ -240,11 +257,18 @@ public final class DefaultRuleCatalog {
                 for (SecurityEvent candidate : context.getHistory()) {
                     if (!candidate.getOccurredAt().isBefore(start)
                             && !candidate.getOccurredAt().isAfter(event.getOccurredAt())
+                            && candidate != event
+                            && (candidate.getEventId() == null || event.getEventId() == null
+                                || !candidate.getEventId().equals(event.getEventId()))
                             && event.subject().equals(candidate.subject())
                             && candidate.getEventType() == SecurityEventType.EXPORT
+                            && candidate.getResult() == SecurityEventResult.SUCCESS
                             && candidate.hasDataCount()) {
                         total = addSaturated(total, candidate.getDataCount());
                     }
+                }
+                if (event.hasDataCount()) {
+                    total = addSaturated(total, event.getDataCount());
                 }
                 return total >= definition.getThreshold()
                     || atLeast(event.getAttribute("baseline_ratio"), 3.0d)

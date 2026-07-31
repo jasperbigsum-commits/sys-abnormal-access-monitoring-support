@@ -3,6 +3,9 @@ package io.github.jasper.monitoring.core.application;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.MonitoringMode;
 import io.github.jasper.monitoring.api.action.ActionDefinition;
+import io.github.jasper.monitoring.api.action.ActionDecision;
+import io.github.jasper.monitoring.api.action.ActionDisposition;
+import io.github.jasper.monitoring.api.action.ActionRequirement;
 import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.event.ObservationIssue;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
@@ -34,6 +37,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.UUID;
 
 /** Typed rule, alert and durable-control orchestration for the production runtime. */
@@ -84,6 +89,40 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
         if (mode == MonitoringMode.ENFORCE) {
             executeControls(result);
         }
+    }
+
+    @Override
+    public ActionDecision decide(Class<? extends ActionType> actionType, ActionDefinition action,
+            SecurityEvent event, ActionFacts facts,
+            Map<Class<? extends FactType<?>>, FactSource> factSources,
+            Set<Class<? extends RuleType>> ineligibleRuleTypes,
+            List<ObservationIssue> issues) {
+        if (mode != MonitoringMode.ENFORCE) return ActionDecision.allow();
+        List<SecurityEvent> history = canonicalHistory(event, events.findSince(event.getSystemId(),
+            event.getOccurredAt().minus(Duration.ofDays(1))));
+        RuleEvaluationContext.Builder context = RuleEvaluationContext.builder(event, actionType, action)
+            .history(history).facts(facts);
+        for (Map.Entry<Class<? extends FactType<?>>, FactSource> source : factSources.entrySet()) {
+            context.factSource(source.getKey(), source.getValue());
+        }
+        RuleEvaluationContext input = context.build();
+        ActionDisposition disposition = ActionDisposition.ALLOW;
+        Set<ActionRequirement> requirements = EnumSet.noneOf(ActionRequirement.class);
+        Set<ControlActionType> requestedControls = EnumSet.noneOf(ControlActionType.class);
+        Set<String> matchedRuleIds = new LinkedHashSet<String>();
+        for (DetectionRule<? extends RuleType> rule : rules) {
+            if (rule.definition().getMode() != RuleMode.ENFORCE
+                    || ineligibleRuleTypes.contains(rule.type())) continue;
+            RuleEvaluationContext.Evaluation evaluation = evaluate(input, rule);
+            if (!evaluation.getMatch().isPresent()) continue;
+            RuleMatch match = evaluation.getMatch().get();
+            if (whitelist.isActive(match.getRuleId(), match.getSubject(), Instant.now(clock))) continue;
+            matchedRuleIds.add(match.getRuleId());
+            if (match.getDisposition() == ActionDisposition.BLOCK) disposition = ActionDisposition.BLOCK;
+            requirements.addAll(match.getRequirements());
+            requestedControls.addAll(match.getControls());
+        }
+        return ActionDecision.of(disposition, requirements, requestedControls, matchedRuleIds);
     }
 
     private EvaluationResult evaluateInTransaction(Class<? extends ActionType> actionType,
@@ -179,13 +218,27 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
         for (int index = 0; index < result.controlMatches.size(); index++) {
             RuleMatch match = result.controlMatches.get(index);
             SecurityAlert alert = result.controlAlerts.get(index);
-            for (ControlActionType action : match.getActions()) {
+            for (ControlActionType action : match.getControls()) {
                 if (action == ControlActionType.RECORD) {
                     continue;
                 }
                 controls.execute(new ControlCommand(alert.getAlertId() + ":" + action, alert.getAlertId(),
                     match.getSubject(), action, Instant.now(clock).plus(match.getControlTtl()), match.getRuleId()));
             }
+            for (ActionRequirement requirement : match.getRequirements()) {
+                ControlActionType workflow = workflowControl(requirement);
+                controls.execute(new ControlCommand(alert.getAlertId() + ":" + workflow, alert.getAlertId(),
+                    match.getSubject(), workflow, Instant.now(clock).plus(match.getControlTtl()), match.getRuleId()));
+            }
+        }
+    }
+
+    private static ControlActionType workflowControl(ActionRequirement requirement) {
+        switch (requirement) {
+            case APPROVAL: return ControlActionType.REQUIRE_APPROVAL;
+            case MFA: return ControlActionType.REQUIRE_MFA;
+            case CAPTCHA: return ControlActionType.REQUIRE_CAPTCHA;
+            default: throw new IllegalArgumentException("Unsupported action requirement: " + requirement);
         }
     }
 
