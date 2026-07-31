@@ -409,6 +409,20 @@ AUTH-03：
 3. 更新集成指南、领域模型、架构运维说明和 schema 迁移注释。
 4. 删除旧 `LoginFailure` Action 和 `attempted_account_hash` 字符串属性兼容逻辑。
 
+### 阶段五：旧结构清理
+
+项目尚未发布，本次迁移不保留新旧双轨或仅标记 `Deprecated` 的过渡结构。完成实现前必须同步删除：
+
+- `BuiltInActions.LoginFailure` 及其注册、测试夹具和文档引用。
+- `attempted_account_hash` 裸 attribute、规则 fallback、测试构造器和文档说明。
+- `ActionOutcome`、`AuthorizationDecision` 及其他公共边界的 String 原因重载。
+- 认证服务中手工构造 `ActionExecution`、直接调用 `MonitoringService`、伪造已认证 `IdentityContext` 和重复记录的路径。
+- 已被稳定代码枚举替代的字符串常量、分支比较和无类型失败类别。
+- 只服务旧结构的 import、字段、Bean、配置属性、测试辅助类和 Maven 依赖。
+- 基线 schema、升级脚本和示例数据中已经失去消费者的旧字段、索引或说明。
+
+清理必须遵循模块所有权：公共契约只留在 `api`，领域实现只留在 `core`，Spring 模块只做上下文与 Bean 装配，认证验收逻辑只留在对应 `integration-audit` 模块。不得通过新的兼容 facade、别名常量或复制实现继续隐藏旧结构。
+
 ## 10. 测试与验收
 
 ### 10.1 API 和目录
@@ -452,6 +466,15 @@ AUTH-03：
 - MyBatis H2 集成测试覆盖 Fact 查询索引语义和有效控制查询。
 - 全量 `mvn clean verify -DskipTests=false` 通过。
 
+### 10.6 整洁性验收
+
+- 全仓搜索不再出现生产代码引用 `LoginFailure`、`attempted_account_hash` 或接受 String 原因的 Outcome/Decision 工厂。
+- Spring 2/3 认证实现只依赖 `AuthenticationMonitor`，不存在并行的直接 `MonitoringService` 提交路径。
+- `api`、`core`、Starter 和 integration 模块之间没有反向依赖或为迁移临时增加的跨层访问。
+- 编译器、测试和 IDE 静态检查不存在由迁移产生的未使用类型、import、Bean 或配置元数据。
+- 文档、示例、测试命名和数据库注释只描述最终模型，不继续教授旧接入方式。
+- Git 差异不包含无关格式化、生成文件或用户已有修改。
+
 ## 11. 最终决策摘要
 
 - 采用“薄治理内核 + 领域目录 + 专用认证门面”。
@@ -460,3 +483,4 @@ AUTH-03：
 - 登录失败主体不是 `user_id`；内部主体由组件从 `loginUser + realm` 规范化并保护生成。
 - 宿主允许扩展 ReasonCode，但必须经过 OWNER 命名空间和冻结目录。
 - 定义只保留治理必需元数据，避免运营和展示职责侵入核心领域。
+- 尚未发布版本直接删除旧结构，不保留兼容双轨，以最终模块边界作为整洁性验收标准。
