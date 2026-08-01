@@ -48,6 +48,6 @@ abnormal:
 
 monitoring:
   authentication:
-    enabled: true
+    enabled: false
     subject-key: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
     control-failure-policy: OBSERVE_ONLY
