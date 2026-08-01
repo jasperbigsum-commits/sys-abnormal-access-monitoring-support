@@ -3,6 +3,7 @@ package io.github.jasper.monitoring.audit.spring2.privilege;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
@@ -20,7 +21,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public final class PrivilegeGrantService {
-    private static final String SELF_ESCALATION = "SELF_PRIVILEGE_ESCALATION";
     private final PrivilegeGrantRepository roles;
     private final MonitoringService monitoring;
 
@@ -38,7 +38,8 @@ public final class PrivilegeGrantService {
             .put(BuiltInFacts.HighPrivilege.class, Boolean.TRUE)
             .build();
         monitoring.monitor(ActionExecution.of(BuiltInActions.PrivilegeChange.class, request, actor,
-            granted ? ActionOutcome.success(0L) : ActionOutcome.denied(SELF_ESCALATION, 0L),
+            granted ? ActionOutcome.success(0L) : ActionOutcome.denied(
+                BuiltInReasonCodes.Privilege.SELF_ESCALATION, 0L),
             facts, FactSource.HOST_PROVIDER));
         return granted;
     }

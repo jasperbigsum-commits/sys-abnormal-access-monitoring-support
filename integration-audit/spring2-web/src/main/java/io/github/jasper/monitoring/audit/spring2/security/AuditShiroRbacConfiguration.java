@@ -80,7 +80,8 @@ public class AuditShiroRbacConfiguration {
                 && report.getOrganization().equals(((AuditRbacRealm) realm).organization(principal))
                 && subject.isPermitted(permission);
             return allowed ? AuthorizationDecision.allowed()
-                : AuthorizationDecision.denied("RESOURCE_SCOPE_DENIED");
+                : AuthorizationDecision.denied(
+                    io.github.jasper.monitoring.api.code.BuiltInReasonCodes.Authorization.RESOURCE_SCOPE_DENIED);
         };
     }
 

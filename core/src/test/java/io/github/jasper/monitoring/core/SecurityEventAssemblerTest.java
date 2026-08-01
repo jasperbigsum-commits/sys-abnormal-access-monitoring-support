@@ -54,11 +54,12 @@ class SecurityEventAssemblerTest {
         MonitoringRequestContext request = MonitoringRequestContext.builder().method("GET").path("/reports")
             .sourceIp("10.0.0.1").requestId("req-1").build();
         IdentityContext identity = new IdentityContext("alice", null, Collections.singleton("analyst"), "session-hash");
-        ActionExecution execution = ActionExecution.of(ExportAction.class, request, identity, ActionOutcome.denied("server-denied", 17L));
+        ActionExecution execution = ActionExecution.of(ExportAction.class, request, identity,
+            ActionOutcome.denied(io.github.jasper.monitoring.api.code.BuiltInReasonCodes.Action.BLOCKED, 17L));
         SecurityEventAssembler.AssemblyResult result = new SecurityEventAssembler("demo", fixedClock())
             .assemble(ExportAction.class, ACTION, execution, ActionFacts.builder().build());
         assertEquals(SecurityEventResult.DENIED, result.getEvent().getResult());
-        assertEquals("server-denied", result.getEvent().getReasonCode());
+        assertEquals("MON.ACTION.BLOCKED", result.getEvent().getReasonCode());
         assertEquals("10.0.0.1", result.getEvent().getSourceIp());
         assertEquals(17L, result.getEvent().getLatencyMs());
     }

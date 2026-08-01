@@ -4,8 +4,10 @@ import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.action.MonitorAction;
 import io.github.jasper.monitoring.api.action.ActionDecision;
 import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
+import io.github.jasper.monitoring.api.event.FailureClass;
 import io.github.jasper.monitoring.api.error.ActionBlockedException;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
@@ -73,21 +75,21 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
             try {
                 result = invocation.proceed();
             } catch (ActionBlockedException blocked) {
-                scope.complete(ActionOutcome.denied("ACTION_BLOCKED", elapsed(startedAt)));
+                scope.complete(ActionOutcome.denied(BuiltInReasonCodes.Action.BLOCKED, elapsed(startedAt)));
                 try {
                     monitor(binding, suppliedFacts, scope.snapshot(),
-                        ActionOutcome.denied("ACTION_BLOCKED", elapsed(startedAt)));
+                        ActionOutcome.denied(BuiltInReasonCodes.Action.BLOCKED, elapsed(startedAt)));
                 } catch (RuntimeException monitoringFailure) {
                     blocked.addSuppressed(monitoringFailure);
                 }
                 throw blocked;
             } catch (Throwable failure) {
-                scope.complete(ActionOutcome.failure("ACTION_INVOCATION_FAILED",
-                    ActionOutcome.ExceptionClassification.UNKNOWN, elapsed(startedAt)));
+                scope.complete(ActionOutcome.failure(BuiltInReasonCodes.Action.INVOCATION_FAILED,
+                    FailureClass.UNKNOWN, elapsed(startedAt)));
                 try {
                     monitor(binding, suppliedFacts, scope.snapshot(),
-                        ActionOutcome.failure("ACTION_INVOCATION_FAILED",
-                            ActionOutcome.ExceptionClassification.UNKNOWN, elapsed(startedAt)));
+                        ActionOutcome.failure(BuiltInReasonCodes.Action.INVOCATION_FAILED,
+                            FailureClass.UNKNOWN, elapsed(startedAt)));
                 } catch (RuntimeException monitoringFailure) {
                     failure.addSuppressed(monitoringFailure);
                 }
@@ -106,11 +108,11 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
         if (value instanceof ResponseEntity) {
             int status = ((ResponseEntity<?>) value).getStatusCode().value();
             if (status == 401 || status == 403) {
-                return ActionOutcome.denied("HTTP_ACCESS_DENIED", elapsed);
+                return ActionOutcome.denied(BuiltInReasonCodes.Action.BLOCKED, elapsed);
             }
             if (status >= 400) {
-                return ActionOutcome.failure("HTTP_REQUEST_FAILED",
-                    ActionOutcome.ExceptionClassification.UNKNOWN, elapsed);
+                return ActionOutcome.failure(BuiltInReasonCodes.Action.REQUEST_FAILED,
+                    FailureClass.UNKNOWN, elapsed);
             }
         }
         return ActionOutcome.success(elapsed);

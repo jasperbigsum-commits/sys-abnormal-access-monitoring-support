@@ -35,7 +35,8 @@ class MonitoringFactsTest {
 
             assertThrows(ActionBlockedException.class, MonitoringGate::checkpoint);
             assertEquals(ActionAttempt.Status.DECIDED_BLOCKED, scope.attempt().getStatus());
-            scope.complete(ActionOutcome.denied("ACTION_BLOCKED", 1L));
+            scope.complete(ActionOutcome.denied(
+                io.github.jasper.monitoring.api.code.BuiltInReasonCodes.Action.BLOCKED, 1L));
             assertEquals(ActionAttempt.Status.COMPLETED_DENIED, scope.attempt().getStatus());
         }
     }

@@ -4,6 +4,7 @@ import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.core.application.MonitoringService;
@@ -85,7 +86,8 @@ class AbnormalAccessMonitorAutoConfigurationTest {
             AuthorizationDecision decision = context.getBean(ResourceAccessGuard.class).authorize(
                 IdentityContext.anonymous(), new ResourceScopeRequest(request, "order", "o-1", "org-a"));
             assertThat(decision.isAllowed()).isFalse();
-            assertThat(decision.getReasonCode()).isEqualTo("RESOURCE_SCOPE_AUTHORIZER_NOT_CONFIGURED");
+            assertThat(decision.getReason()).isEqualTo(
+                BuiltInReasonCodes.Authorization.AUTHORIZER_NOT_CONFIGURED);
         });
     }
 

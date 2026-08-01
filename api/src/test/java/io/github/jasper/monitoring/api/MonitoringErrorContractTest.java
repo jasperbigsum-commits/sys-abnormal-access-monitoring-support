@@ -24,7 +24,7 @@ class MonitoringErrorContractTest {
         MonitoringPersistenceException persistence = new MonitoringPersistenceException(
             MonitoringErrorCode.PERSISTENCE_OPERATION_FAILED, "Monitoring persistence failed", cause);
 
-        assertEquals("MON-001", validation.getErrorCode().getCode());
+        assertEquals("MON.API.REQUIRED_FIELD_MISSING", validation.getErrorCode().getCode());
         assertTrue(validation instanceof IllegalArgumentException);
         assertTrue(configuration instanceof IllegalStateException);
         assertTrue(state instanceof IllegalStateException);

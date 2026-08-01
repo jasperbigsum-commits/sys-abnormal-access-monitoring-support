@@ -1,6 +1,9 @@
 package io.github.jasper.monitoring.api;
 
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
@@ -15,9 +18,12 @@ class HostIntegrationContractsTest {
             .requestId("req-1")
             .build();
         ResourceScopeRequest scope = new ResourceScopeRequest(request, "user", "u-2", "org-2");
-        AuthorizationDecision decision = AuthorizationDecision.denied("RESOURCE_SCOPE_DENIED");
+        AuthorizationDecision decision = AuthorizationDecision.denied(
+            BuiltInReasonCodes.Authorization.RESOURCE_SCOPE_DENIED);
 
         assertFalse(decision.isAllowed());
+        assertEquals(BuiltInReasonCodes.Authorization.RESOURCE_SCOPE_DENIED,
+            decision.getReason());
         assertTrue(scope.getRequest().getPath().startsWith("/admin"));
     }
 }

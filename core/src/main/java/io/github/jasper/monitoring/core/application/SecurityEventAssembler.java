@@ -60,7 +60,8 @@ public final class SecurityEventAssembler {
             .sourceIp(request.getSourceIp()).requestId(request.getRequestId()).traceId(request.getTraceId())
             .userId(identity.getUserId()).accountType(identity.getAccountType()).roleIds(identity.getRoleIds())
             .sessionIdHash(identity.getSessionIdHash()).resourceType(action.getResourceType())
-            .occurredAt(Instant.now(clock)).reasonCode(outcome.getReasonCode()).latencyMs(outcome.getLatencyMs());
+            .occurredAt(Instant.now(clock)).reasonCode(outcome.getReason() == null ? null : outcome.getReason().getCode())
+            .latencyMs(outcome.getLatencyMs());
         String resourceId = facts.get(BuiltInFacts.ResourceId.class);
         Long dataCount = facts.get(BuiltInFacts.DataCount.class);
         BuiltInFacts.SensitivityLevel sensitivity = facts.get(BuiltInFacts.Sensitivity.class);

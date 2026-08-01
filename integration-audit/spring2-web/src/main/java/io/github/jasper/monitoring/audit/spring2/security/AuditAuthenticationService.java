@@ -4,8 +4,11 @@ import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.AccountType;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+import io.github.jasper.monitoring.api.code.ReasonCode;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
+import io.github.jasper.monitoring.api.event.FailureClass;
 import io.github.jasper.monitoring.audit.spring2.persistence.AuditFixtureRepository;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import java.time.Clock;
@@ -71,7 +74,12 @@ public final class AuditAuthenticationService {
             .requestId(UUID.randomUUID().toString()).build();
         monitoring.monitor(ActionExecution.of(BuiltInActions.LoginFailure.class, request,
             new IdentityContext(userId, AccountType.PERSON, Collections.singleton(userId), null), ActionOutcome.failure(
-                reason, ActionOutcome.ExceptionClassification.AUTHORIZATION, 0L)));
+                reasonCode(reason), FailureClass.AUTHORIZATION, 0L)));
+    }
+
+    private static ReasonCode reasonCode(String reason) {
+        if ("ACCOUNT_DISABLED".equals(reason)) return BuiltInReasonCodes.Authentication.ACCOUNT_DISABLED;
+        return BuiltInReasonCodes.Authentication.INVALID_CREDENTIAL;
     }
 
     public static final class AuthenticationResult {

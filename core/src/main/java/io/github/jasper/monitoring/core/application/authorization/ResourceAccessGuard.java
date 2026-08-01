@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.core.application.authorization;
 
 import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
@@ -44,10 +45,10 @@ public final class ResourceAccessGuard {
         try {
             decision = authorizer.authorize(identity == null ? IdentityContext.anonymous() : identity, resource);
             if (decision == null) {
-                decision = AuthorizationDecision.denied("AUTHORIZATION_NO_DECISION");
+                decision = AuthorizationDecision.denied(BuiltInReasonCodes.Authorization.NO_DECISION);
             }
         } catch (RuntimeException ignored) {
-            decision = AuthorizationDecision.denied("AUTHORIZATION_ERROR");
+            decision = AuthorizationDecision.denied(BuiltInReasonCodes.Authorization.EVALUATION_ERROR);
         }
         recordDecision(identity == null ? IdentityContext.anonymous() : identity, resource, decision);
         return decision;
@@ -62,7 +63,7 @@ public final class ResourceAccessGuard {
                 facts.put(BuiltInFacts.ResourceId.class, resource.getResourceId());
             }
             ActionOutcome outcome = decision.isAllowed() ? ActionOutcome.success(0L)
-                : ActionOutcome.denied(decision.getReasonCode(), 0L);
+                : ActionOutcome.denied(decision.getReason(), 0L);
             typedMonitoring.monitor(ActionExecution.of(type, resource.getRequest(), identity, outcome,
                 facts.build(), FactSource.TRUSTED_REQUEST));
         } catch (RuntimeException ignored) {

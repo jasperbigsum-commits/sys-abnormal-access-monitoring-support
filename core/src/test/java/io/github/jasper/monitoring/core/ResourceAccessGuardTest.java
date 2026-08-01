@@ -33,7 +33,8 @@ class ResourceAccessGuardTest {
     void preservesDeniedDecisionAndRecordsTypedAccessDeniedAction() {
         RecordingEvents events = new RecordingEvents();
         ResourceAccessGuard guard = guard(
-            (identity, request) -> AuthorizationDecision.denied("RESOURCE_SCOPE_DENIED"), events);
+            (identity, request) -> AuthorizationDecision.denied(
+                io.github.jasper.monitoring.api.code.BuiltInReasonCodes.Authorization.RESOURCE_SCOPE_DENIED), events);
 
         AuthorizationDecision decision = guard.authorize(identity(), resource("o-2"));
 
@@ -41,7 +42,7 @@ class ResourceAccessGuardTest {
         assertEquals(SecurityEventType.ACCESS_DENIED, events.single().getEventType());
         assertEquals("authz:access-denied", events.single().getAction());
         assertEquals("o-2", events.single().getResourceId());
-        assertEquals("RESOURCE_SCOPE_DENIED", events.single().getReasonCode());
+        assertEquals("MON.AUTHZ.RESOURCE_SCOPE_DENIED", events.single().getReasonCode());
     }
 
     @Test

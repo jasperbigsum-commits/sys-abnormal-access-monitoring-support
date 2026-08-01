@@ -6,6 +6,7 @@ import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.MonitoringMode;
 import io.github.jasper.monitoring.api.AuthorizationDecision;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
@@ -403,7 +404,8 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ResourceScopeAuthorizer abnormalAccessResourceScopeAuthorizer() {
-        return (identity, request) -> AuthorizationDecision.denied("RESOURCE_SCOPE_AUTHORIZER_NOT_CONFIGURED");
+        return (identity, request) -> AuthorizationDecision.denied(
+            BuiltInReasonCodes.Authorization.AUTHORIZER_NOT_CONFIGURED);
     }
 
     @Bean

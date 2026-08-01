@@ -52,15 +52,15 @@ class TypedMonitorActionAspectTest {
         proxy.ok();
         fixture.assertOutcome(SecurityEventResult.SUCCESS, null);
         proxy.unauthorized();
-        fixture.assertOutcome(SecurityEventResult.DENIED, "HTTP_ACCESS_DENIED");
+        fixture.assertOutcome(SecurityEventResult.DENIED, "MON.ACTION.BLOCKED");
         proxy.forbidden();
-        fixture.assertOutcome(SecurityEventResult.DENIED, "HTTP_ACCESS_DENIED");
+        fixture.assertOutcome(SecurityEventResult.DENIED, "MON.ACTION.BLOCKED");
         proxy.badRequest();
-        fixture.assertOutcome(SecurityEventResult.FAILURE, "HTTP_REQUEST_FAILED");
+        fixture.assertOutcome(SecurityEventResult.FAILURE, "MON.ACTION.REQUEST_FAILED");
         proxy.serverError();
-        fixture.assertOutcome(SecurityEventResult.FAILURE, "HTTP_REQUEST_FAILED");
+        fixture.assertOutcome(SecurityEventResult.FAILURE, "MON.ACTION.REQUEST_FAILED");
         assertThrows(IllegalStateException.class, proxy::throwsFailure);
-        fixture.assertOutcome(SecurityEventResult.FAILURE, "ACTION_INVOCATION_FAILED");
+        fixture.assertOutcome(SecurityEventResult.FAILURE, "MON.ACTION.INVOCATION_FAILED");
     }
 
     interface MonitoredApi {

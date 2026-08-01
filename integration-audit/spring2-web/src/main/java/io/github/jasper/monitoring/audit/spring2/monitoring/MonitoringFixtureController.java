@@ -2,8 +2,10 @@ package io.github.jasper.monitoring.audit.spring2.monitoring;
 
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.action.MonitorAction;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
+import io.github.jasper.monitoring.api.event.FailureClass;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
@@ -42,7 +44,7 @@ public class MonitoringFixtureController {
     @PostMapping("/login-failure")
     public Map<String, Object> loginFailure() {
         return response(monitoringRecorder.record(BuiltInActions.LoginFailure.class, ActionOutcome.failure(
-            "INVALID_PASSWORD", ActionOutcome.ExceptionClassification.AUTHORIZATION, 0L),
+            BuiltInReasonCodes.Authentication.INVALID_CREDENTIAL, FailureClass.AUTHORIZATION, 0L),
             ActionFacts.builder().build()));
     }
 
