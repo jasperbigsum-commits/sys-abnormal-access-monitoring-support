@@ -77,7 +77,7 @@ class DefaultRuleCatalogCoverageTest {
     private static <R extends RuleType> RuleDefinition<R> definition(Class<R> type, String id,
             RuleMode mode, ControlActionType... controls) {
         RuleDefinition.Builder<R> builder = RuleDefinition.builder(type, id)
-            .appliesTo(BuiltInActions.LoginFailure.class)
+            .appliesTo(BuiltInActions.Login.class)
             .historyWindow(java.time.Duration.ZERO).threshold(1).risk(RiskLevel.HIGH)
             .mode(mode).source(RuleSource.INTERNAL);
         for (ControlActionType control : controls) builder.control(control);

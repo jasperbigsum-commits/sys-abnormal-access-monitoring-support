@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.api.action;
 
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
 
@@ -31,6 +32,9 @@ public final class BuiltInActions {
      * 调用方应在完成注册后对目录执行 freeze，确保运行期订阅与语义不可变。
      */
     public static void registerInto(ActionCatalog catalog) {
+        catalog.registerContract(AuthenticationContract.class, ActionContractDefinition.builder()
+            .minimumFailurePolicy(ActionFailurePolicy.OBSERVE_ONLY)
+            .build());
         // ExportContract：导出类统一契约。对象=导出行为；用例=报表导出、批量数据导出前统一校验资源ID和数据量。
         catalog.registerContract(ExportContract.class, ActionContractDefinition.builder()
             .require(BuiltInFacts.ResourceId.class,
@@ -48,8 +52,15 @@ public final class BuiltInActions {
             .optional(BuiltInFacts.BaselineRatio.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
             .failurePolicy(ActionFailurePolicy.FAIL_CLOSED)
             .build());
-        // auth:login-failure：登录失败事件。对象=认证失败行为；用例=密码错误、验证码错误、账号锁定前失败尝试。
-        catalog.register(LoginFailure.class, action("auth:login-failure", SecurityEventType.LOGIN_FAILURE));
+        // auth:login：统一登录动作。最终结果决定 LOGIN_SUCCESS 或 LOGIN_FAILURE 事件类型。
+        catalog.register(Login.class, ActionDefinition.builder("auth:login")
+            .eventType(SecurityEventType.LOGIN_FAILURE)
+            .eventTypeFor(SecurityEventResult.SUCCESS, SecurityEventType.LOGIN_SUCCESS)
+            .resourceType("authentication")
+            .require(BuiltInFacts.LoginSubjectKey.class, FactSource.FRAMEWORK_OUTCOME)
+            .require(BuiltInFacts.AuthenticationStageFact.class, FactSource.FRAMEWORK_OUTCOME)
+            .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY)
+            .build());
         // data:query：普通查询动作。对象=业务数据读取；用例=详情查询、列表检索、按条件筛选查询。
         catalog.register(Query.class, ActionDefinition.builder("data:query")
             .eventType(SecurityEventType.QUERY).resourceType("resource")
@@ -114,6 +125,10 @@ public final class BuiltInActions {
     public interface ExportContract extends ActionContract {
     }
 
+    /** Authentication actions share identity/attempted-subject semantics. */
+    public interface AuthenticationContract extends ActionContract {
+    }
+
     /** 内置报表导出行为；用例：导出订单、财务、审计报表。 */
     public static final class ReportExport implements BuiltInActionType, ExportContract {
         private ReportExport() {
@@ -125,8 +140,8 @@ public final class BuiltInActions {
         private SensitiveView() {
         }
     }
-    /** 登录失败行为；用例：账号密码校验失败、验证码失败。 */
-    public static final class LoginFailure implements BuiltInActionType { private LoginFailure() { } }
+    /** Unified login behavior; outcome maps to success or failure event types. */
+    public static final class Login implements BuiltInActionType, AuthenticationContract { private Login() { } }
     /** 普通查询行为；用例：列表查询、检索、按条件读取业务数据。 */
     public static final class Query implements BuiltInActionType { private Query() { } }
     /** 会话并发行为；用例：同账号在多终端/多IP同时操作。 */

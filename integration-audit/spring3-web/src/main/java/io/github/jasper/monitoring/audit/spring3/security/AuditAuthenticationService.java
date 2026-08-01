@@ -72,7 +72,7 @@ public final class AuditAuthenticationService {
         MonitoringRequestContext request = MonitoringRequestContext.builder().method("POST")
             .path("/audit/authentication/login").sourceIp(clientIp)
             .requestId(UUID.randomUUID().toString()).build();
-        monitoring.monitor(ActionExecution.of(BuiltInActions.LoginFailure.class, request,
+        monitoring.monitor(ActionExecution.of(BuiltInActions.Login.class, request,
             new IdentityContext(userId, AccountType.PERSON, Collections.singleton(userId), null), ActionOutcome.failure(
                 reasonCode(reason), FailureClass.AUTHORIZATION, 0L)));
     }

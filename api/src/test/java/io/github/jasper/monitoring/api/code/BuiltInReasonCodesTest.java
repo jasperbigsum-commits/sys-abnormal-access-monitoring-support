@@ -34,6 +34,6 @@ class BuiltInReasonCodesTest {
             BuiltInReasonCodes.Authentication.INVALID_CREDENTIAL.getCode());
         assertTrue(credential.getAllowedOutcomes().contains(SecurityEventResult.DENIED));
         assertFalse(credential.getAllowedOutcomes().contains(SecurityEventResult.SUCCESS));
-        assertTrue(credential.appliesTo(BuiltInActions.LoginFailure.class));
+        assertTrue(credential.appliesTo(BuiltInActions.Login.class));
     }
 }

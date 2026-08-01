@@ -56,7 +56,7 @@ public final class SecurityEventAssembler {
         IdentityContext identity = Objects.requireNonNull(execution.getIdentityContext(), "identityContext");
         ActionOutcome outcome = Objects.requireNonNull(execution.getOutcome(), "outcome");
         SecurityEventDraft.Builder draft = SecurityEventDraft.builder()
-            .eventType(action.getEventType()).action(action.getCode()).result(outcome.getResult())
+            .eventType(action.resolveEventType(outcome.getResult())).action(action.getCode()).result(outcome.getResult())
             .sourceIp(request.getSourceIp()).requestId(request.getRequestId()).traceId(request.getTraceId())
             .userId(identity.getUserId()).accountType(identity.getAccountType()).roleIds(identity.getRoleIds())
             .sessionIdHash(identity.getSessionIdHash()).resourceType(action.getResourceType())

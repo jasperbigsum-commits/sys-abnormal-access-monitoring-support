@@ -217,9 +217,6 @@ public final class EventInputIssue {
         if ("sourceIp".equals(factName)) {
             return EventInputIssueCode.MISSING_SOURCE_IP;
         }
-        if ("attemptedAccountHash".equals(factName)) {
-            return EventInputIssueCode.MISSING_ATTEMPTED_ACCOUNT_HASH;
-        }
         if ("targetUserId".equals(factName)) {
             return EventInputIssueCode.MISSING_TARGET_USER_ID;
         }

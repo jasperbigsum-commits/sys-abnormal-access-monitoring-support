@@ -11,15 +11,30 @@ import io.github.jasper.monitoring.api.EventInputValidation;
 import io.github.jasper.monitoring.api.SecurityEventDraft;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
+import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.core.domain.EventFact;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.api.error.MonitoringValidationException;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class SecurityEventTest {
+    @Test
+    void decodesTypedPersistedFactsByTheirRegisteredDefinition() {
+        SecurityEvent event = SecurityEvent.builder()
+            .facts(Collections.singletonList(new EventFact("login_subject_key", String.class.getName(),
+                "v1:opaque", FactSource.FRAMEWORK_OUTCOME)))
+            .build();
+
+        Optional<String> subject = event.getFact(BuiltInFacts.LOGIN_SUBJECT_KEY);
+
+        assertEquals("v1:opaque", subject.get());
+    }
 
     @Test
     void preservesInputQualityAndKnownFactFlagsOnAcceptedEvent() {

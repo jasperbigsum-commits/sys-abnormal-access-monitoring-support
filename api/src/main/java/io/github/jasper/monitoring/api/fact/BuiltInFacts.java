@@ -1,5 +1,6 @@
 package io.github.jasper.monitoring.api.fact;
 
+import io.github.jasper.monitoring.api.authentication.AuthenticationStage;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
@@ -104,10 +105,31 @@ public final class BuiltInFacts {
         .codec(FactDefinition.bigDecimalCodec())
         .validator(value -> value.signum() >= 0).build();
 
+    /** Opaque, framework-derived subject used to correlate login attempts. */
+    public static final FactDefinition<String> LOGIN_SUBJECT_KEY = FactDefinition
+        .builder(LoginSubjectKey.class, "login_subject_key", String.class)
+        .allowedSources(FactSource.FRAMEWORK_OUTCOME)
+        .sensitivity(FactDefinition.Sensitivity.SENSITIVE)
+        .maxLength(128)
+        .storage(FactDefinition.Storage.EXTENSION)
+        .codec(FactDefinition.stringCodec(value -> value.trim()))
+        .validator(value -> !value.isEmpty())
+        .build();
+
+    /** Authentication checkpoint that produced the result. */
+    public static final FactDefinition<AuthenticationStage> AUTHENTICATION_STAGE = FactDefinition
+        .builder(AuthenticationStageFact.class, "authentication_stage", AuthenticationStage.class)
+        .allowedSources(FactSource.FRAMEWORK_OUTCOME)
+        .sensitivity(FactDefinition.Sensitivity.INTERNAL)
+        .maxLength(16)
+        .storage(FactDefinition.Storage.EXTENSION)
+        .codec(FactDefinition.enumCodec(AuthenticationStage.class))
+        .build();
+
     private static final List<FactDefinition<?>> ALL = Collections.unmodifiableList(
         Arrays.<FactDefinition<?>>asList(RESOURCE_ID, DATA_COUNT, SENSITIVITY, DIFFERENT_NETWORKS,
             SEQUENTIAL_ACCESS, SENSITIVE, WORK_HOURS, PRIVILEGE_INCREASE, HIGH_PRIVILEGE,
-            TARGET_USER_ID, BASELINE_RATIO));
+            TARGET_USER_ID, BASELINE_RATIO, LOGIN_SUBJECT_KEY, AUTHENTICATION_STAGE));
 
     private BuiltInFacts() {
     }
@@ -165,6 +187,12 @@ public final class BuiltInFacts {
     public static final class TargetUserId implements BuiltInFactType<String> { private TargetUserId() { } }
     /** 基线比值 token：表示当前行为相对基线的偏离倍率。 */
     public static final class BaselineRatio implements BuiltInFactType<BigDecimal> { private BaselineRatio() { } }
+    /** Protected opaque login subject token. */
+    public static final class LoginSubjectKey implements BuiltInFactType<String> { private LoginSubjectKey() { } }
+    /** Authentication stage token. */
+    public static final class AuthenticationStageFact implements BuiltInFactType<AuthenticationStage> {
+        private AuthenticationStageFact() { }
+    }
 
     /** 布尔类 Fact 的统一定义。 */
     private static <F extends FactType<Boolean>> FactDefinition<Boolean> booleanFact(Class<F> type, String key) {

@@ -62,7 +62,7 @@ public final class BuiltInReasonCodes {
         for (Authentication code : Authentication.values()) {
             outcomes(catalog, code, code == Authentication.AUTHENTICATION_UNAVAILABLE
                 ? SecurityEventResult.FAILURE : SecurityEventResult.DENIED,
-                BuiltInActions.LoginFailure.class);
+                BuiltInActions.Login.class);
         }
         for (Authorization code : Authorization.values()) {
             outcomes(catalog, code,

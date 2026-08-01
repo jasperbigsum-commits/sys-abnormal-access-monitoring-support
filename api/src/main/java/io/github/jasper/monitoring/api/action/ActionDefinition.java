@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.api.action;
 
 import io.github.jasper.monitoring.api.SecurityEventType;
+import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.api.fact.FactSource;
@@ -9,6 +10,7 @@ import io.github.jasper.monitoring.api.rule.RuleType;
 
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -23,6 +25,7 @@ public final class ActionDefinition {
 
     private final String code;
     private final SecurityEventType eventType;
+    private final Map<SecurityEventResult, SecurityEventType> eventTypes;
     private final String resourceType;
     private final Set<String> ruleTags;
     private final Set<Class<? extends RuleType>> ruleTypes;
@@ -32,12 +35,13 @@ public final class ActionDefinition {
     private final ActionFailurePolicy failurePolicy;
 
     private ActionDefinition(Builder builder) {
-        this(builder.code, builder.eventType, builder.resourceType, builder.ruleTags,
+        this(builder.code, builder.eventType, builder.eventTypes, builder.resourceType, builder.ruleTags,
             builder.ruleTypes, builder.requiredFacts, builder.optionalFacts,
             builder.allowedSources, builder.failurePolicy);
     }
 
-    private ActionDefinition(String code, SecurityEventType eventType, String resourceType,
+    private ActionDefinition(String code, SecurityEventType eventType,
+            Map<SecurityEventResult, SecurityEventType> eventTypes, String resourceType,
             Set<String> ruleTags, Set<Class<? extends RuleType>> ruleTypes,
             Set<Class<? extends FactType<?>>> requiredFacts,
             Set<Class<? extends FactType<?>>> optionalFacts,
@@ -45,6 +49,10 @@ public final class ActionDefinition {
             ActionFailurePolicy failurePolicy) {
         this.code = code;
         this.eventType = eventType;
+        EnumMap<SecurityEventResult, SecurityEventType> mappedTypes =
+            new EnumMap<SecurityEventResult, SecurityEventType>(SecurityEventResult.class);
+        mappedTypes.putAll(eventTypes);
+        this.eventTypes = Collections.unmodifiableMap(mappedTypes);
         this.resourceType = resourceType;
         this.ruleTags = immutableSet(ruleTags);
         this.ruleTypes = immutableSet(ruleTypes);
@@ -68,6 +76,11 @@ public final class ActionDefinition {
 
     public SecurityEventType getEventType() {
         return eventType;
+    }
+
+    public SecurityEventType resolveEventType(SecurityEventResult result) {
+        SecurityEventType resolved = eventTypes.get(Objects.requireNonNull(result, "result"));
+        return resolved == null ? eventType : resolved;
     }
 
     public String getResourceType() {
@@ -125,7 +138,7 @@ public final class ActionDefinition {
                 mergedSources.put(entry.getKey(), intersection);
             }
         }
-        return new ActionDefinition(code, eventType, resourceType, ruleTags, mergedRules,
+        return new ActionDefinition(code, eventType, eventTypes, resourceType, ruleTags, mergedRules,
             mergedRequired, mergedOptional, mergedSources,
             ActionFailurePolicy.strictest(failurePolicy, contract.getMinimumFailurePolicy()));
     }
@@ -149,6 +162,8 @@ public final class ActionDefinition {
     public static final class Builder {
         private final String code;
         private SecurityEventType eventType;
+        private final Map<SecurityEventResult, SecurityEventType> eventTypes =
+            new EnumMap<SecurityEventResult, SecurityEventType>(SecurityEventResult.class);
         private String resourceType;
         private final Set<String> ruleTags = new LinkedHashSet<String>();
         private final Set<Class<? extends RuleType>> ruleTypes =
@@ -167,6 +182,12 @@ public final class ActionDefinition {
 
         public Builder eventType(SecurityEventType eventType) {
             this.eventType = Objects.requireNonNull(eventType, "eventType");
+            return this;
+        }
+
+        public Builder eventTypeFor(SecurityEventResult result, SecurityEventType eventType) {
+            eventTypes.put(Objects.requireNonNull(result, "result"),
+                Objects.requireNonNull(eventType, "eventType"));
             return this;
         }
 

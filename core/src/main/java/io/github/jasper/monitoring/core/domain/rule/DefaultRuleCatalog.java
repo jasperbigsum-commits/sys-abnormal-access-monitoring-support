@@ -38,7 +38,7 @@ public final class DefaultRuleCatalog {
         rules.add(authOne());
         rules.add(authTwo());
         rules.add(condition(definition(Auth03.class, "AUTH-03", RiskLevel.HIGH,
-            BuiltInActions.LoginFailure.class, Duration.ZERO, 1L, ControlActionType.DENY),
+            BuiltInActions.Login.class, Duration.ZERO, 1L, ControlActionType.DENY),
             event -> event.getEventType() == SecurityEventType.LOGIN_FAILURE
                 && ("DISABLED".equalsIgnoreCase(event.getAttribute("account_status"))
                     || "ACCOUNT_DISABLED".equalsIgnoreCase(event.getReasonCode())),
@@ -178,7 +178,7 @@ public final class DefaultRuleCatalog {
 
     private static DetectionRule<Auth01> authOne() {
         final RuleDefinition<Auth01> definition = definition(Auth01.class, "AUTH-01", RiskLevel.MEDIUM,
-            BuiltInActions.LoginFailure.class, Duration.ofMinutes(5), 5L,
+            BuiltInActions.Login.class, Duration.ofMinutes(5), 5L,
             ControlActionType.REQUIRE_CAPTCHA, ControlActionType.RATE_LIMIT);
         return new AbstractDetectionRule<Auth01>(definition, "five or more login failures") {
             @Override
@@ -206,7 +206,7 @@ public final class DefaultRuleCatalog {
 
     private static DetectionRule<Auth02> authTwo() {
         final RuleDefinition<Auth02> definition = definition(Auth02.class, "AUTH-02", RiskLevel.HIGH,
-            BuiltInActions.LoginFailure.class, Duration.ofMinutes(10), 10L, ControlActionType.RATE_LIMIT);
+            BuiltInActions.Login.class, Duration.ofMinutes(10), 10L, ControlActionType.RATE_LIMIT);
         return new AbstractDetectionRule<Auth02>(definition, "one IP failed across accounts") {
             @Override
             public Optional<RuleMatch> evaluate(RuleEvaluationContext context) {

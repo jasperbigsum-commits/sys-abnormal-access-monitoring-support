@@ -68,7 +68,7 @@ public class MonitoringFixtureController {
      */
     @PostMapping("/login-failure")
     public Map<String, Object> loginFailure() {
-        return response(monitoringRecorder.record(BuiltInActions.LoginFailure.class, ActionOutcome.failure(
+        return response(monitoringRecorder.record(BuiltInActions.Login.class, ActionOutcome.failure(
             BuiltInReasonCodes.Authentication.INVALID_CREDENTIAL, FailureClass.AUTHORIZATION, 0L),
             ActionFacts.builder().build()));
     }

@@ -10,6 +10,8 @@ import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.api.error.MonitoringValidationException;
+import io.github.jasper.monitoring.api.error.MonitoringStateException;
+import io.github.jasper.monitoring.api.fact.FactDefinition;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -19,6 +21,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Optional;
 
 /**
  * 用于检测和审计的不可变服务端安全事件。
@@ -183,6 +186,27 @@ public final class SecurityEvent {
     public Map<String, String> getAttributes() { return attributes; }
     /** @return 与该事件关联的不可变事实快照列表 */
     public List<EventFact> getFacts() { return facts; }
+
+    /** Decodes a persisted fact through the authoritative typed definition. */
+    public <T> Optional<T> getFact(FactDefinition<T> definition) {
+        java.util.Objects.requireNonNull(definition, "definition");
+        for (EventFact fact : facts) {
+            if (!definition.getKey().equals(fact.getKey())) {
+                continue;
+            }
+            if (!definition.getValueType().getName().equals(fact.getValueType())) {
+                throw new MonitoringStateException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                    "Persisted fact type does not match definition: " + definition.getKey());
+            }
+            try {
+                return Optional.of(definition.decode(fact.getValueText()));
+            } catch (RuntimeException invalidValue) {
+                throw new MonitoringStateException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                    "Persisted fact value is invalid: " + definition.getKey(), invalidValue);
+            }
+        }
+        return Optional.empty();
+    }
     /**
      * @param key 已标准化的属性键
      * @return 对应属性值；不存在时为 {@code null}
