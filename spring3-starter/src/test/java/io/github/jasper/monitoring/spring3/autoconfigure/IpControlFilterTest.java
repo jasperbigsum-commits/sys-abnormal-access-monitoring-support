@@ -162,7 +162,7 @@ class IpControlFilterTest {
         }
 
         private void activate(ControlActionType action, String ip) {
-            handler.execute(new ControlCommand("control-" + action, "alert-1", "ip:" + ip, action,
+            handler.execute(new ControlCommand("test-system", "control-" + action, "alert-1", "ip:" + ip, action,
                 NOW.plusSeconds(60), "RULE-IP"));
         }
 

@@ -12,6 +12,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,6 +32,26 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.apache.ibatis.exceptions.PersistenceException;
 
 class ControlConcurrencyTest {
+    @Test void activeAuthenticationControlsAreSystemScopedSuccessfulAndUnexpired() throws Exception {
+        DataSource source = new UnpooledDataSource("org.h2.Driver",
+            "jdbc:h2:mem:active-auth-controls;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        schema(source);
+        MyBatisControlExecutionStore store = new MyBatisControlExecutionStore(factory(source));
+        Instant now = Instant.parse("2026-08-01T00:00:00Z");
+
+        store.reserve(command("system-a", "active", now.plusSeconds(60)), ControlStatus.SUCCEEDED, now);
+        store.reserve(command("system-b", "other-system", now.plusSeconds(60)), ControlStatus.SUCCEEDED, now);
+        store.reserve(command("system-a", "expired", now.minusSeconds(1)), ControlStatus.SUCCEEDED, now);
+        store.reserve(command("system-a", "failed", now.plusSeconds(60)), ControlStatus.FAILED, now);
+        store.reserve(command("system-a", "pending", now.plusSeconds(60)), ControlStatus.PENDING, now);
+
+        List<ControlCommand> active = store.findActive("system-a", "v1:subject", now);
+
+        assertEquals(1, active.size());
+        assertEquals("active", active.get(0).getIdempotencyKey());
+        assertEquals("system-a", active.get(0).getSystemId());
+    }
+
     @Test void concurrentExecutionReservesOnceBeforeHostSideEffect() throws Exception {
         DataSource dataSource = new UnpooledDataSource("org.h2.Driver", "jdbc:h2:mem:control-race;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         schema(dataSource); SqlSessionFactory factory = factory(dataSource);
@@ -46,7 +68,7 @@ class ControlConcurrencyTest {
         ControlCatalog<ControlHandler> catalog = ControlCatalog.<ControlHandler>builder().bind(ControlType.LOCK, handler).freeze();
         ControlExecutionService first = new ControlExecutionService(new MyBatisControlExecutionStore(factory), catalog, Clock.systemUTC());
         ControlExecutionService second = new ControlExecutionService(new MyBatisControlExecutionStore(factory), catalog, Clock.systemUTC());
-        ControlCommand command = new ControlCommand("race-key", "alert", "user", ControlActionType.LOCK, null, "rule");
+        ControlCommand command = new ControlCommand("test-system", "race-key", "alert", "user", ControlActionType.LOCK, null, "rule");
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
             Future<ControlExecution> one = pool.submit(() -> first.execute(command)); entered.await();
@@ -70,23 +92,23 @@ class ControlConcurrencyTest {
         ControlCatalog<ControlHandler> catalog = ControlCatalog.<ControlHandler>builder()
             .bind(ControlType.LOCK, handler).bind(ControlType.REQUIRE_APPROVAL, handler).freeze();
         ControlExecutionService service = new ControlExecutionService(new MyBatisControlExecutionStore(factory), catalog, Clock.systemUTC());
-        ControlCommand automatic = new ControlCommand("retry-db", "a", "s", ControlActionType.LOCK, null, "r");
+        ControlCommand automatic = new ControlCommand("test-system", "retry-db", "a", "s", ControlActionType.LOCK, null, "r");
         assertEquals(ControlStatus.FAILED, service.execute(automatic).getStatus());
         assertEquals(ControlStatus.FAILED, service.execute(automatic).getStatus());
         assertEquals(ControlStatus.SUCCEEDED, service.retry(automatic).getStatus());
         assertEquals(2, calls.get());
 
-        ControlCommand approval = new ControlCommand("approval-db", "a", "s", ControlActionType.REQUIRE_APPROVAL, null, "r");
+        ControlCommand approval = new ControlCommand("test-system", "approval-db", "a", "s", ControlActionType.REQUIRE_APPROVAL, null, "r");
         assertEquals(ControlStatus.AWAITING_APPROVAL, service.execute(approval).getStatus());
         assertEquals(ControlStatus.SUCCEEDED, service.approve(approval).getStatus());
-        ControlCommand rejection = new ControlCommand("reject-db", "a", "s", ControlActionType.REQUIRE_APPROVAL, null, "r");
+        ControlCommand rejection = new ControlCommand("test-system", "reject-db", "a", "s", ControlActionType.REQUIRE_APPROVAL, null, "r");
         service.execute(rejection); assertEquals(ControlStatus.REJECTED, service.reject("reject-db", "denied").getStatus());
         assertTrue(attemptCount(source, "retry-db") >= 4);
 
         DataSource broken = new UnpooledDataSource("org.h2.Driver", "jdbc:h2:mem:control-broken;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         ControlExecutionService brokenService = new ControlExecutionService(new MyBatisControlExecutionStore(factory(broken)), catalog, Clock.systemUTC());
         assertThrows(PersistenceException.class, () -> brokenService.execute(
-            new ControlCommand("db-failure", "a", "s", ControlActionType.LOCK, null, "r")));
+            new ControlCommand("test-system", "db-failure", "a", "s", ControlActionType.LOCK, null, "r")));
     }
 
     private static String status(DataSource source, String key) {
@@ -98,6 +120,10 @@ class ControlConcurrencyTest {
         try (java.sql.Connection c = source.getConnection(); java.sql.PreparedStatement s = c.prepareStatement("SELECT COUNT(*) FROM monitoring_control_action_attempt WHERE control_id=?")) {
             s.setString(1, controlId); try (java.sql.ResultSet r = s.executeQuery()) { r.next(); return r.getInt(1); }
         }
+    }
+    private static ControlCommand command(String systemId, String key, Instant expiresAt) {
+        return new ControlCommand(systemId, key, "alert", "v1:subject", ControlActionType.LOCK,
+            expiresAt, "AUTH-TEST");
     }
     private static SqlSessionFactory factory(DataSource source) { return new SqlSessionFactoryBuilder().build(new Configuration(new Environment("test", new JdbcTransactionFactory(), source))); }
     private void schema(DataSource source) throws Exception {

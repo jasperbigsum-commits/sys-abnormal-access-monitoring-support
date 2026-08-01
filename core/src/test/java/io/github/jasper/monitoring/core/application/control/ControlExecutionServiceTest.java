@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
             .bind(ControlType.LOCK, handler).freeze();
         ControlExecutionService service = new ControlExecutionService(store, catalog,
             Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
-        ControlExecution result = service.execute(new ControlCommand("k", "a", "s", ControlActionType.LOCK, null, "r"));
+        ControlExecution result = service.execute(new ControlCommand("test-system", "k", "a", "s", ControlActionType.LOCK, null, "r"));
         assertEquals(io.github.jasper.monitoring.api.ControlStatus.SUCCEEDED, result.getStatus());
         assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.SUCCEEDED, store.value.status());
     }
@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.*;
         ControlCatalog<ControlHandler> approvalCatalog = ControlCatalog.<ControlHandler>builder()
             .bind(ControlType.REQUIRE_APPROVAL, success).freeze();
         ControlExecutionService approvals = service(approvedStore, approvalCatalog);
-        ControlCommand approval = new ControlCommand("approval", "a", "s", ControlActionType.REQUIRE_APPROVAL, null, "r");
+        ControlCommand approval = new ControlCommand("test-system", "approval", "a", "s", ControlActionType.REQUIRE_APPROVAL, null, "r");
         assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.AWAITING_APPROVAL, approvals.execute(approval).getStatus());
         assertEquals(0, calls.get());
         assertThrows(IllegalStateException.class, () -> approvals.approve(approval, 9));
@@ -49,7 +49,7 @@ import static org.junit.jupiter.api.Assertions.*;
         assertEquals(1, calls.get());
 
         RecordingStore rejectedStore = new RecordingStore(); ControlExecutionService rejected = service(rejectedStore, approvalCatalog);
-        rejected.execute(new ControlCommand("rejected", "a", "s", ControlActionType.REQUIRE_APPROVAL, null, "r"));
+        rejected.execute(new ControlCommand("test-system", "rejected", "a", "s", ControlActionType.REQUIRE_APPROVAL, null, "r"));
         assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.REJECTED, rejected.reject("rejected", "operator rejected").getStatus());
 
         RecordingStore retryStore = new RecordingStore(); AtomicInteger attempts = new AtomicInteger();
@@ -57,7 +57,7 @@ import static org.junit.jupiter.api.Assertions.*;
             ? ControlExecution.failed(command.getIdempotencyKey(), "temporary") : ControlExecution.succeeded(command.getIdempotencyKey()));
         ControlCatalog<ControlHandler> lockCatalog = ControlCatalog.<ControlHandler>builder().bind(ControlType.LOCK, flaky).freeze();
         ControlExecutionService retries = service(retryStore, lockCatalog);
-        ControlCommand lock = new ControlCommand("retry", "a", "s", ControlActionType.LOCK, null, "r");
+        ControlCommand lock = new ControlCommand("test-system", "retry", "a", "s", ControlActionType.LOCK, null, "r");
         assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.FAILED, retries.execute(lock).getStatus());
         assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.SUCCEEDED, retries.retry(lock).getStatus());
     }
@@ -76,7 +76,7 @@ import static org.junit.jupiter.api.Assertions.*;
         RecordingStore store = new RecordingStore(); store.failTerminalOnce = true;
         ControlHandler handler = handler(command -> ControlExecution.succeeded(command.getIdempotencyKey()));
         ControlExecutionService service = service(store, ControlCatalog.<ControlHandler>builder().bind(ControlType.LOCK, handler).freeze());
-        ControlCommand command = new ControlCommand("pending-recovery", "a", "s", ControlActionType.LOCK, null, "r");
+        ControlCommand command = new ControlCommand("test-system", "pending-recovery", "a", "s", ControlActionType.LOCK, null, "r");
         assertThrows(IllegalStateException.class, () -> service.execute(command));
         assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.PENDING, store.value.status());
         assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.SUCCEEDED, service.recover(command).getStatus());

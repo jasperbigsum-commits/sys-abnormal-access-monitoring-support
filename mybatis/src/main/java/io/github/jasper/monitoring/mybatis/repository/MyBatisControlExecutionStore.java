@@ -5,6 +5,7 @@ import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
 import io.github.jasper.monitoring.core.domain.control.StoredControl;
 import io.github.jasper.monitoring.core.port.ControlExecutionStore;
+import io.github.jasper.monitoring.core.port.AuthenticationControlRepository;
 import io.github.jasper.monitoring.mybatis.MyBatisMonitoringStoreRegistrar;
 import io.github.jasper.monitoring.mybatis.mapper.ControlMapper;
 import io.github.jasper.monitoring.mybatis.po.ControlActionPo;
@@ -12,12 +13,14 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.ibatis.exceptions.PersistenceException;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionManager;
 
 /** MyBatis control state store with unique-key reservation and optimistic transitions. */
-public final class MyBatisControlExecutionStore implements ControlExecutionStore {
+public final class MyBatisControlExecutionStore implements ControlExecutionStore, AuthenticationControlRepository {
     private final SqlSessionManager sessions;
     public MyBatisControlExecutionStore(SqlSessionFactory factory) {
         MyBatisMonitoringStoreRegistrar.register(Objects.requireNonNull(factory, "factory"));
@@ -35,8 +38,9 @@ public final class MyBatisControlExecutionStore implements ControlExecutionStore
         sessions.startManagedSession(false);
         try {
             ControlMapper mapper = mapper();
-            mapper.reserve(command.getIdempotencyKey(), command.getIdempotencyKey(), command.getAlertId(),
-                command.getRuleId(), command.getSubject(), command.getAction().name(), at);
+            mapper.reserve(command.getIdempotencyKey(), command.getIdempotencyKey(), command.getSystemId(),
+                command.getAlertId(), command.getRuleId(), command.getSubject(), command.getAction().name(),
+                command.getExpiresAt(), at);
             if (initial != ControlStatus.PENDING && mapper.transition(command.getIdempotencyKey(), 0,
                 ControlStatus.PENDING.name(), initial.name(), null, at) != 1)
                 throw new IllegalStateException("Could not establish initial control state: " + command.getIdempotencyKey());
@@ -48,6 +52,17 @@ public final class MyBatisControlExecutionStore implements ControlExecutionStore
             throw exception;
         } catch (RuntimeException exception) { sessions.rollback(); throw exception; }
         finally { sessions.close(); }
+    }
+
+    @Override public List<ControlCommand> findActive(String systemId, String subject, Instant at) {
+        sessions.startManagedSession(true);
+        try {
+            List<ControlCommand> result = new ArrayList<ControlCommand>();
+            for (ControlActionPo row : mapper().findActive(systemId, subject, at)) {
+                result.add(toCommand(row));
+            }
+            return result;
+        } finally { sessions.close(); }
     }
 
     @Override public StoredControl transition(String key, long version, ControlStatus expected,
@@ -70,6 +85,10 @@ public final class MyBatisControlExecutionStore implements ControlExecutionStore
         if (row == null) return null;
         return new StoredControl(ControlExecution.restored(row.getControlId(), row.getIdempotencyKey(),
             row.getStatus(), row.getFailureReason()), row.getVersion());
+    }
+    private static ControlCommand toCommand(ControlActionPo row) {
+        return new ControlCommand(row.getSystemId(), row.getIdempotencyKey(), row.getAlertId(), row.getSubject(),
+            row.getAction(), row.getExpiresAt(), row.getRuleId());
     }
     private static boolean isUniqueViolation(Throwable failure) {
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {

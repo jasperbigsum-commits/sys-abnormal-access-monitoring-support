@@ -76,8 +76,8 @@ class ControlHandlerRegistryTest {
     void fallsBackToTheDefaultTriggerForAnUnimplementedAction() {
         ControlHandlerRegistry registry = new ControlHandlerRegistry(Collections.<ControlHandler>emptyList(),
             DefaultControlActionTrigger.defaults());
-        ControlCommand command = new ControlCommand("alert-1:RATE_LIMIT", "alert-1", "ip:203.0.113.8",
-            ControlActionType.RATE_LIMIT, Instant.parse("2026-07-24T00:00:00Z"));
+        ControlCommand command = new ControlCommand("test-system", "alert-1:RATE_LIMIT", "alert-1",
+            "ip:203.0.113.8", ControlActionType.RATE_LIMIT, Instant.parse("2026-07-24T00:00:00Z"), null);
 
         ControlExecution execution = registry.find(ControlActionType.RATE_LIMIT).get().execute(command);
 

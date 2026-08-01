@@ -141,8 +141,8 @@ public final class MyBatisManagementRepository implements ManagementQueryReposit
     }
     @Override public Optional<ControlCommand> findControlCommand(String scope,String id) {
         return read(session -> {ControlActionPo row=session.getMapper(ManagementQueryMapper.class).controlCommand(scope,id);
-            return row==null?Optional.<ControlCommand>empty():Optional.of(new ControlCommand(row.getIdempotencyKey(),
-                row.getAlertId(),row.getSubject(),row.getAction(),row.getExpiresAt(),row.getRuleId()));});
+            return row==null?Optional.<ControlCommand>empty():Optional.of(new ControlCommand(row.getSystemId(),
+                row.getIdempotencyKey(),row.getAlertId(),row.getSubject(),row.getAction(),row.getExpiresAt(),row.getRuleId()));});
     }
     @Override public boolean transitionControl(String scope,String id,long version,String expected,String target,String reason) {
         return write(session -> session.getMapper(ManagementQueryMapper.class).transitionControl(scope,id,version,expected,target,reason)==1);

@@ -72,7 +72,7 @@ public final class DefaultControlManagementService extends AbstractManagementSer
         Objects.requireNonNull(command, "command");
         final String id = command.getIdempotencyKey();
         access.require(actor, ManagementOperation.CONTROL_EXECUTE, "control", id);
-        final ControlExecution execution = executions.execute(new ControlCommand(id, "manual-management",
+        final ControlExecution execution = executions.execute(new ControlCommand(actor.getSystemScope(), id, "manual-management",
             command.getSubject(), command.getAction(), command.getExpiresAt(), "MANUAL-CONTROL"));
         return transaction.required(() -> {
             success(actor, ManagementOperation.CONTROL_EXECUTE, "control", id);

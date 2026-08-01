@@ -80,16 +80,16 @@ public interface ManagementQueryMapper {
                             @Param("status") String status, @Param("actorId") String actorId,
                             @Param("reason") String reason);
 
-    @Select("SELECT c.control_id AS id, c.status, c.version FROM monitoring_control_action c WHERE c.executed_at BETWEEN #{from} AND #{to} AND EXISTS (SELECT 1 FROM monitoring_alert_event_link l JOIN monitoring_security_event e ON e.event_id=l.event_id WHERE l.alert_id=c.alert_id AND e.system_id=#{scope}) ORDER BY c.executed_at DESC, c.control_id ASC LIMIT #{limit} OFFSET #{offset}")
+    @Select("SELECT c.control_id AS id, c.status, c.version FROM monitoring_control_action c WHERE c.system_id=#{scope} AND c.executed_at BETWEEN #{from} AND #{to} ORDER BY c.executed_at DESC, c.control_id ASC LIMIT #{limit} OFFSET #{offset}")
     List<ManagementRowPo> controls(@Param("scope") String scope, @Param("from") Instant from, @Param("to") Instant to,
                                    @Param("limit") int limit, @Param("offset") long offset);
-    @Select("SELECT COUNT(*) FROM monitoring_control_action c WHERE c.executed_at BETWEEN #{from} AND #{to} AND EXISTS (SELECT 1 FROM monitoring_alert_event_link l JOIN monitoring_security_event e ON e.event_id=l.event_id WHERE l.alert_id=c.alert_id AND e.system_id=#{scope})")
+    @Select("SELECT COUNT(*) FROM monitoring_control_action c WHERE c.system_id=#{scope} AND c.executed_at BETWEEN #{from} AND #{to}")
     long countControls(@Param("scope") String scope, @Param("from") Instant from, @Param("to") Instant to);
-    @Select("SELECT c.control_id AS id, c.status, c.version FROM monitoring_control_action c WHERE c.control_id=#{id} AND EXISTS (SELECT 1 FROM monitoring_alert_event_link l JOIN monitoring_security_event e ON e.event_id=l.event_id WHERE l.alert_id=c.alert_id AND e.system_id=#{scope})")
+    @Select("SELECT c.control_id AS id, c.status, c.version FROM monitoring_control_action c WHERE c.system_id=#{scope} AND c.control_id=#{id}")
     ManagementRowPo control(@Param("scope") String scope, @Param("id") String id);
-    @Select("SELECT c.control_id AS controlId,c.idempotency_key AS idempotencyKey,c.alert_id AS alertId,c.rule_id AS ruleId,c.subject,c.action_type AS action,c.expires_at AS expiresAt,c.status,c.failure_reason AS failureReason,c.executed_at AS executedAt,c.version FROM monitoring_control_action c WHERE c.control_id=#{id} AND EXISTS (SELECT 1 FROM monitoring_alert_event_link l JOIN monitoring_security_event e ON e.event_id=l.event_id WHERE l.alert_id=c.alert_id AND e.system_id=#{scope})")
+    @Select("SELECT c.control_id AS controlId,c.system_id AS systemId,c.idempotency_key AS idempotencyKey,c.alert_id AS alertId,c.rule_id AS ruleId,c.subject,c.action_type AS action,c.expires_at AS expiresAt,c.status,c.failure_reason AS failureReason,c.executed_at AS executedAt,c.version FROM monitoring_control_action c WHERE c.system_id=#{scope} AND c.control_id=#{id}")
     ControlActionPo controlCommand(@Param("scope") String scope,@Param("id") String id);
-    @Update("UPDATE monitoring_control_action SET status=#{target}, failure_reason=#{reason}, version=version+1 WHERE control_id=#{id} AND version=#{version} AND status=#{expected} AND EXISTS (SELECT 1 FROM monitoring_alert_event_link l JOIN monitoring_security_event e ON e.event_id=l.event_id WHERE l.alert_id=monitoring_control_action.alert_id AND e.system_id=#{scope})")
+    @Update("UPDATE monitoring_control_action SET status=#{target}, failure_reason=#{reason}, version=version+1 WHERE system_id=#{scope} AND control_id=#{id} AND version=#{version} AND status=#{expected}")
     int transitionControl(@Param("scope") String scope, @Param("id") String id, @Param("version") long version,
                           @Param("expected") String expected, @Param("target") String target,
                           @Param("reason") String reason);

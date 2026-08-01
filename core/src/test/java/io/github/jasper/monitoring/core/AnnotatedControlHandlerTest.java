@@ -131,7 +131,8 @@ class AnnotatedControlHandlerTest {
     }
 
     private static ControlCommand command(ControlActionType action) {
-        return new ControlCommand("key-1", "alert-1", "alice", action, Instant.parse("2026-07-22T01:00:00Z"));
+        return new ControlCommand("test-system", "key-1", "alert-1", "alice", action,
+            Instant.parse("2026-07-22T01:00:00Z"), null);
     }
 
     public static final class VoidTarget {

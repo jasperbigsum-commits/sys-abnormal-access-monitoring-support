@@ -169,7 +169,7 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
                 controlAlerts.add(alert);
             }
         }
-        return new EvaluationResult(controlMatches, controlAlerts, raised);
+        return new EvaluationResult(event.getSystemId(), controlMatches, controlAlerts, raised);
     }
 
     private static List<SecurityEvent> canonicalHistory(SecurityEvent current, List<SecurityEvent> persisted) {
@@ -222,12 +222,12 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
                 if (action == ControlActionType.RECORD) {
                     continue;
                 }
-                controls.execute(new ControlCommand(alert.getAlertId() + ":" + action, alert.getAlertId(),
+                controls.execute(new ControlCommand(result.systemId, alert.getAlertId() + ":" + action, alert.getAlertId(),
                     match.getSubject(), action, Instant.now(clock).plus(match.getControlTtl()), match.getRuleId()));
             }
             for (ActionRequirement requirement : match.getRequirements()) {
                 ControlActionType workflow = workflowControl(requirement);
-                controls.execute(new ControlCommand(alert.getAlertId() + ":" + workflow, alert.getAlertId(),
+                controls.execute(new ControlCommand(result.systemId, alert.getAlertId() + ":" + workflow, alert.getAlertId(),
                     match.getSubject(), workflow, Instant.now(clock).plus(match.getControlTtl()), match.getRuleId()));
             }
         }
@@ -243,11 +243,13 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
     }
 
     private static final class EvaluationResult {
+        private final String systemId;
         private final List<RuleMatch> controlMatches;
         private final List<SecurityAlert> controlAlerts;
         private final List<SecurityAlert> alerts;
-        private EvaluationResult(List<RuleMatch> controlMatches, List<SecurityAlert> controlAlerts,
+        private EvaluationResult(String systemId, List<RuleMatch> controlMatches, List<SecurityAlert> controlAlerts,
                 List<SecurityAlert> alerts) {
+            this.systemId = systemId;
             this.controlMatches = controlMatches;
             this.controlAlerts = controlAlerts;
             this.alerts = alerts;

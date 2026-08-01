@@ -161,7 +161,7 @@ class GenericIpControlHandlerTest {
 
     private static ControlCommand command(String ruleId, String subject, ControlActionType action,
                                           Instant expiresAt) {
-        return new ControlCommand("control-key", "alert-id", subject, action, expiresAt, ruleId);
+        return new ControlCommand("test-system", "control-key", "alert-id", subject, action, expiresAt, ruleId);
     }
 
     private static void assertSkipped(ControlExecution execution, String reason) {

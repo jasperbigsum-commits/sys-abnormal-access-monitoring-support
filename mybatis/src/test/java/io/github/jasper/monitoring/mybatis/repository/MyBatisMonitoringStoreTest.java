@@ -84,7 +84,7 @@ class MyBatisMonitoringStoreTest {
         store.linkEvent("alert-ports", "event-ports");
         store.appendDisposition(new AlertDisposition("disposition-ports", "alert-ports",
             DispositionType.ACKNOWLEDGED, "operator-1", "Investigating", null, at));
-        ControlCommand command = new ControlCommand("control-ports", "alert-ports", "alice",
+        ControlCommand command = new ControlCommand("orders", "control-ports", "alert-ports", "alice",
             ControlActionType.REQUIRE_MFA, at.plusSeconds(300), "AUTH-01");
         store.save(new ControlRecord(command, ControlExecution.succeeded("control-ports"), at));
         store.add(new WhitelistEntry("AUTH-01", "alice", at.plusSeconds(300)));

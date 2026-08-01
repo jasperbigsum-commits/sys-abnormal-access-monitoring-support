@@ -10,6 +10,8 @@ import lombok.Setter;
 @Getter
 @Setter
 public final class ControlActionPo {
+    /** Owning monitoring system. */
+    private String systemId;
     /** 控制执行记录唯一标识。 */
     private String controlId;
     /** 用于防止重复执行的幂等键。 */

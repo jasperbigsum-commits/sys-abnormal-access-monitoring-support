@@ -11,6 +11,7 @@ import java.time.Instant;
  * 用户、会话或 IP 作用域。</p>
  */
 public final class ControlCommand {
+    private final String systemId;
     private final String idempotencyKey;
     private final String alertId;
     private final String subject;
@@ -26,22 +27,12 @@ public final class ControlCommand {
      * @param action 宿主处理器应执行的控制动作
      * @param expiresAt 临时控制动作的失效时间
      */
-    public ControlCommand(String idempotencyKey, String alertId, String subject, ControlActionType action, Instant expiresAt) {
-        this(idempotencyKey, alertId, subject, action, expiresAt, null);
-    }
-
-    /**
-     * 创建一条保留来源规则标识的宿主控制指令。
-     *
-     * @param idempotencyKey 用于防止重复执行的稳定幂等键
-     * @param alertId 请求该动作的来源告警标识
-     * @param subject 规则选定的用户、会话或 IP 作用域
-     * @param action 宿主处理器应执行的控制动作
-     * @param expiresAt 临时控制动作的失效时间
-     * @param ruleId 产生控制动作的稳定规则标识；旧调用方可为空
-     */
-    public ControlCommand(String idempotencyKey, String alertId, String subject, ControlActionType action,
+    public ControlCommand(String systemId, String idempotencyKey, String alertId, String subject, ControlActionType action,
                           Instant expiresAt, String ruleId) {
+        if (systemId == null || systemId.trim().isEmpty()) {
+            throw new IllegalArgumentException("systemId is required");
+        }
+        this.systemId = systemId.trim();
         this.idempotencyKey = idempotencyKey;
         this.alertId = alertId;
         this.subject = subject;
@@ -49,6 +40,8 @@ public final class ControlCommand {
         this.expiresAt = expiresAt;
         this.ruleId = ruleId;
     }
+    /** @return owning monitoring system identifier */
+    public String getSystemId() { return systemId; }
     /** @return 用于幂等去重的稳定键 */
     public String getIdempotencyKey() { return idempotencyKey; }
     /** @return 请求控制动作的告警标识 */

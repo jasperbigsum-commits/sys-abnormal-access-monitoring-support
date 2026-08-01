@@ -55,6 +55,9 @@ CREATE TABLE monitoring_security_event_fact (
     CONSTRAINT fk_event_fact_event FOREIGN KEY (event_id) REFERENCES monitoring_security_event (event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全事件规范化事实值';
 
+CREATE INDEX idx_monitoring_event_fact_lookup
+    ON monitoring_security_event_fact (fact_key, value_text, event_id);
+
 CREATE TABLE monitoring_security_event_role (
     event_id VARCHAR(128) NOT NULL COMMENT '事件唯一标识',
     role_id VARCHAR(128) NOT NULL COMMENT '角色标识',
@@ -124,6 +127,7 @@ CREATE TABLE monitoring_alert_event_link (
 
 CREATE TABLE monitoring_control_action (
     control_id VARCHAR(128) NOT NULL COMMENT '控制执行唯一标识',
+    system_id VARCHAR(128) NOT NULL COMMENT '控制动作所属监测系统',
     idempotency_key VARCHAR(256) NOT NULL COMMENT '幂等键',
     alert_id VARCHAR(128) COMMENT '关联告警标识',
     rule_id VARCHAR(128) COMMENT '产生控制动作的规则标识',
@@ -137,6 +141,9 @@ CREATE TABLE monitoring_control_action (
     PRIMARY KEY (control_id),
     UNIQUE (idempotency_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='控制动作执行记录表';
+
+CREATE INDEX idx_control_authentication_lookup
+    ON monitoring_control_action (system_id, subject, status, expires_at, action_type);
 
 CREATE TABLE monitoring_alert_disposition (
     disposition_id VARCHAR(128) NOT NULL COMMENT '处置记录唯一标识',
