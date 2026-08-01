@@ -13,6 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.SecurityEventResult;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
+import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.core.domain.EventFact;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -27,7 +30,7 @@ class DefaultRuleCatalogAuthenticationTest {
     private static final String SOURCE_IP = "203.0.113.8";
 
     @Test
-    void authOneDoesNotAggregateAnonymousFailuresForDifferentAttemptedAccounts() {
+    void authOneDoesNotAggregateAnonymousFailuresForDifferentLoginSubjects() {
         List<SecurityEvent> history = new ArrayList<SecurityEvent>();
         for (int index = 0; index < 5; index++) {
             history.add(loginFailure("account-hash-" + index));
@@ -37,7 +40,7 @@ class DefaultRuleCatalogAuthenticationTest {
     }
 
     @Test
-    void authOneAggregatesAnonymousFailuresForTheSameAttemptedAccount() {
+    void authOneAggregatesAnonymousFailuresForTheSameLoginSubject() {
         List<SecurityEvent> history = new ArrayList<SecurityEvent>();
         for (int index = 0; index < 5; index++) {
             history.add(loginFailure("account-hash"));
@@ -46,12 +49,12 @@ class DefaultRuleCatalogAuthenticationTest {
         Optional<RuleMatch> match = evaluate(rule("AUTH-01"), history.get(4), history);
 
         assertTrue(match.isPresent());
-        assertEquals("attempted:account-hash", match.get().getSubject());
+        assertEquals("account-hash", match.get().getSubject());
         assertEquals(Duration.ofMinutes(15), match.get().getControlTtl());
     }
 
     @Test
-    void authOneFallsBackToTheEventSubjectWhenTheAttemptedAccountHashIsMissing() {
+    void authOneDoesNotGuessASubjectWhenTheTypedFactIsMissing() {
         List<SecurityEvent> history = new ArrayList<SecurityEvent>();
         for (int index = 0; index < 5; index++) {
             history.add(loginFailure(null));
@@ -59,12 +62,11 @@ class DefaultRuleCatalogAuthenticationTest {
 
         Optional<RuleMatch> match = evaluate(rule("AUTH-01"), history.get(4), history);
 
-        assertTrue(match.isPresent());
-        assertEquals(SOURCE_IP, match.get().getSubject());
+        assertFalse(match.isPresent());
     }
 
     @Test
-    void authTwoMatchesTenDistinctAttemptedAccountsFromOneIp() {
+    void authTwoMatchesTenDistinctLoginSubjectsFromOneIp() {
         List<SecurityEvent> history = new ArrayList<SecurityEvent>();
         for (int index = 0; index < 10; index++) {
             history.add(loginFailure("account-hash-" + index));
@@ -137,13 +139,14 @@ class DefaultRuleCatalogAuthenticationTest {
         return event(SecurityEventType.LOGIN_SUCCESS, null);
     }
 
-    private static SecurityEvent event(SecurityEventType eventType, String attemptedAccountHash) {
+    private static SecurityEvent event(SecurityEventType eventType, String loginSubjectKey) {
         return SecurityEvent.builder()
             .eventType(eventType)
             .occurredAt(NOW)
             .sourceIp(SOURCE_IP)
-            .attributes(attemptedAccountHash == null ? Collections.<String, String>emptyMap()
-                : Collections.singletonMap("attempted_account_hash", attemptedAccountHash))
+            .facts(loginSubjectKey == null ? Collections.<EventFact>emptyList()
+                : Collections.singletonList(new EventFact(BuiltInFacts.LOGIN_SUBJECT_KEY.getKey(),
+                    String.class.getName(), loginSubjectKey, FactSource.FRAMEWORK_OUTCOME)))
             .build();
     }
 

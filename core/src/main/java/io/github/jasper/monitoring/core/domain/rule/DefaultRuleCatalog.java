@@ -8,6 +8,8 @@ import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.action.ActionDisposition;
 import io.github.jasper.monitoring.api.action.ActionRequirement;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.control.ControlType;
 import io.github.jasper.monitoring.api.rule.RuleCatalog;
 import io.github.jasper.monitoring.api.rule.RuleDefinition;
@@ -40,8 +42,7 @@ public final class DefaultRuleCatalog {
         rules.add(condition(definition(Auth03.class, "AUTH-03", RiskLevel.HIGH,
             BuiltInActions.Login.class, Duration.ZERO, 1L, ControlActionType.DENY),
             event -> event.getEventType() == SecurityEventType.LOGIN_FAILURE
-                && ("DISABLED".equalsIgnoreCase(event.getAttribute("account_status"))
-                    || "ACCOUNT_DISABLED".equalsIgnoreCase(event.getReasonCode())),
+                && BuiltInReasonCodes.Authentication.ACCOUNT_DISABLED.getCode().equals(event.getReasonCode()),
             "disabled account attempted login"));
         rules.add(condition(definition(Sess01.class, "SESS-01", RiskLevel.MEDIUM,
             BuiltInActions.SessionConcurrent.class, Duration.ZERO, 1L, ControlActionType.REQUIRE_MFA),
@@ -189,6 +190,7 @@ public final class DefaultRuleCatalog {
                 }
                 int failures = 0;
                 String subject = loginSubject(event);
+                if (subject == null) return Optional.empty();
                 Instant start = event.getOccurredAt().minus(definition.getHistoryWindow());
                 for (SecurityEvent candidate : context.getHistory()) {
                     if (!candidate.getOccurredAt().isBefore(start)
@@ -226,7 +228,8 @@ public final class DefaultRuleCatalog {
                     }
                     if (candidate.getEventType() == SecurityEventType.LOGIN_FAILURE) {
                         failures++;
-                        subjects.add(loginSubject(candidate));
+                        String subject = loginSubject(candidate);
+                        if (subject != null) subjects.add(subject);
                         attempts++;
                     }
                     if (candidate.getEventType() == SecurityEventType.LOGIN_SUCCESS) {
@@ -278,9 +281,7 @@ public final class DefaultRuleCatalog {
     }
 
     private static String loginSubject(SecurityEvent event) {
-        String attemptedAccountHash = event.getAttribute("attempted_account_hash");
-        return attemptedAccountHash != null && !attemptedAccountHash.isEmpty()
-            ? "attempted:" + attemptedAccountHash : event.subject();
+        return event.getFact(BuiltInFacts.LOGIN_SUBJECT_KEY).orElse(null);
     }
 
     private static boolean truthy(String value) {
