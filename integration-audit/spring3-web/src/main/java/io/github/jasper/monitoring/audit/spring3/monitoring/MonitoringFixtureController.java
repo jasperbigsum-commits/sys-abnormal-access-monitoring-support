@@ -187,7 +187,7 @@ public class MonitoringFixtureController {
 
     private static Map<String, Object> exportResponse(long rowCount) {
         Map<String, Object> body = new LinkedHashMap<String, Object>();
-        body.put("rowCount", Long.valueOf(rowCount));
+        body.put("rowCount", rowCount);
         return body;
     }
 

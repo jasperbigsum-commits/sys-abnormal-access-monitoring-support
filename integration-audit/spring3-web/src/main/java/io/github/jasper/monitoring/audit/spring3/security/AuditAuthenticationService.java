@@ -37,7 +37,7 @@ public final class AuditAuthenticationService {
         }
         if (preCheck.getRequirements().contains(ActionRequirement.CAPTCHA)) {
             if (captchaAccepted == null) return AuthenticationResult.challenge();
-            if (!captchaAccepted.booleanValue()) {
+            if (!captchaAccepted) {
                 monitoring.recordDenied(subject, AuthenticationStage.CAPTCHA,
                     BuiltInReasonCodes.Authentication.CAPTCHA_INVALID);
                 return AuthenticationResult.denied("CAPTCHA_INVALID");
@@ -67,7 +67,7 @@ public final class AuditAuthenticationService {
         String sessionId = UUID.randomUUID().toString();
         fixtures.createSession(sessionId, loginUser, clock.instant());
         monitoring.recordSuccess(subject, new IdentityContext(loginUser, AccountType.PERSON,
-            Collections.<String>emptySet(), null));
+            Collections.emptySet(), null));
         return AuthenticationResult.authenticated(sessionId);
     }
 
