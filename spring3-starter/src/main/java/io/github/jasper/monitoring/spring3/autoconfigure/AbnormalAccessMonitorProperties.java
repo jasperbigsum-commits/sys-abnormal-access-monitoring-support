@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.spring3.autoconfigure;
 
 import io.github.jasper.monitoring.api.MonitoringMode;
+import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -172,5 +173,19 @@ public class AbnormalAccessMonitorProperties {
         public void setScanIntervalMs(long scanIntervalMs) { this.scanIntervalMs = scanIntervalMs; }
         public int getBatchSize() { return batchSize; }
         public void setBatchSize(int batchSize) { this.batchSize = batchSize; }
+    }
+
+    /** Authentication facade configuration with its own stable external prefix. */
+    @ConfigurationProperties("monitoring.authentication")
+    public static class Authentication {
+        private boolean enabled;
+        private String subjectKey;
+        private ActionFailurePolicy controlFailurePolicy = ActionFailurePolicy.OBSERVE_ONLY;
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public String getSubjectKey() { return subjectKey; }
+        public void setSubjectKey(String subjectKey) { this.subjectKey = subjectKey; }
+        public ActionFailurePolicy getControlFailurePolicy() { return controlFailurePolicy; }
+        public void setControlFailurePolicy(ActionFailurePolicy policy) { this.controlFailurePolicy = policy; }
     }
 }

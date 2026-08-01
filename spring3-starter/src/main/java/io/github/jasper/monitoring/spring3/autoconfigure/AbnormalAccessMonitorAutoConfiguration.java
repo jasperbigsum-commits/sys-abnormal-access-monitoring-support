@@ -13,6 +13,8 @@ import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.authentication.AuthenticationMonitor;
+import io.github.jasper.monitoring.api.authentication.LoginSubjectCanonicalizer;
 import io.github.jasper.monitoring.api.control.ControlCatalog;
 import io.github.jasper.monitoring.api.control.ControlType;
 import io.github.jasper.monitoring.api.management.AlertManagementService;
@@ -33,6 +35,8 @@ import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.application.TypedRuleEvaluationService;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
+import io.github.jasper.monitoring.core.application.authentication.DefaultAuthenticationMonitor;
+import io.github.jasper.monitoring.core.application.authentication.LoginSubjectKeyFactory;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
 import io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger;
 import io.github.jasper.monitoring.core.port.ControlHandler;
@@ -60,6 +64,8 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Base64;
+import java.util.Locale;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -86,8 +92,31 @@ import org.springframework.scheduling.annotation.Scheduled;
 @AutoConfiguration(afterName = "org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration")
 @ConditionalOnProperty(prefix = "abnormal.access.monitor", name = "enabled",
     havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties(AbnormalAccessMonitorProperties.class)
+@EnableConfigurationProperties({AbnormalAccessMonitorProperties.class,
+    AbnormalAccessMonitorProperties.Authentication.class})
 public class AbnormalAccessMonitorAutoConfiguration {
+    @Bean
+    @ConditionalOnMissingBean(LoginSubjectCanonicalizer.class)
+    @ConditionalOnProperty(prefix = "monitoring.authentication", name = "enabled", havingValue = "true")
+    public LoginSubjectCanonicalizer abnormalAccessLoginSubjectCanonicalizer() {
+        return subject -> subject.getLoginUser().trim().toLowerCase(Locale.ROOT);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(LoginSubjectKeyFactory.class)
+    @ConditionalOnProperty(prefix = "monitoring.authentication", name = "enabled", havingValue = "true")
+    public LoginSubjectKeyFactory abnormalAccessLoginSubjectKeyFactory(
+            AbnormalAccessMonitorProperties.Authentication properties,
+            LoginSubjectCanonicalizer canonicalizer) {
+        try {
+            String configured = properties.getSubjectKey();
+            if (configured == null || configured.trim().isEmpty()) throw new IllegalArgumentException("missing key");
+            return new LoginSubjectKeyFactory(Base64.getDecoder().decode(configured.trim()), canonicalizer);
+        } catch (IllegalArgumentException failure) {
+            throw new MonitoringConfigurationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "monitoring.authentication.subject-key must be Base64 encoding of at least 32 bytes");
+        }
+    }
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(SqlSessionFactory.class)
@@ -463,6 +492,17 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnClass(name = "org.springframework.web.servlet.HandlerInterceptor")
     static class ServletMvcConfiguration {
+        @Bean
+        @ConditionalOnMissingBean(AuthenticationMonitor.class)
+        @ConditionalOnProperty(prefix = "monitoring.authentication", name = "enabled", havingValue = "true")
+        AuthenticationMonitor abnormalAccessAuthenticationMonitor(AbnormalAccessMonitorProperties properties,
+                AbnormalAccessMonitorProperties.Authentication authentication,
+                LoginSubjectKeyFactory keys, MyBatisControlExecutionStore controls,
+                MonitoringService monitoring, MonitoringContextAccessor context) {
+            return new DefaultAuthenticationMonitor(properties.getSystemId(), keys, controls, monitoring,
+                context, Clock.systemUTC(), authentication.getControlFailurePolicy());
+        }
+
         @Bean
         @ConditionalOnMissingBean(MonitoringContextAccessor.class)
         ServletMonitoringContextAccessor abnormalAccessMonitoringContextAccessor() {

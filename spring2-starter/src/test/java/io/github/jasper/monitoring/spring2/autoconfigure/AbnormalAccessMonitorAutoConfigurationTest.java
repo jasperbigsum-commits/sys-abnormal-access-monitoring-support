@@ -5,6 +5,7 @@ import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
 import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+import io.github.jasper.monitoring.api.authentication.AuthenticationMonitor;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.core.application.MonitoringService;
@@ -66,6 +67,23 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     @Test
     void providesAConciseRecorderInServletApplications() {
         webContextRunner.run(context -> assertThat(context).hasSingleBean(MonitoringRecorder.class));
+    }
+
+    @Test
+    void authenticationFacadeIsOptInAndRequiresAStrongBase64Key() {
+        webContextRunner.run(context -> assertThat(context).doesNotHaveBean(AuthenticationMonitor.class));
+        webContextRunner.withPropertyValues(
+                "monitoring.authentication.enabled=true",
+                "monitoring.authentication.subject-key=MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
+            .run(context -> assertThat(context).hasSingleBean(AuthenticationMonitor.class));
+        webContextRunner.withPropertyValues(
+                "monitoring.authentication.enabled=true",
+                "monitoring.authentication.subject-key=c2hvcnQ=")
+            .run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(findCause(context.getStartupFailure()).getErrorCode())
+                    .isEqualTo(MonitoringErrorCode.INVALID_FIELD_VALUE);
+            });
     }
 
     @Test
