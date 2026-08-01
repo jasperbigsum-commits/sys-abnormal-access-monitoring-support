@@ -9,6 +9,9 @@ import io.github.jasper.monitoring.api.action.ActionDisposition;
 import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.action.ActionType;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+import io.github.jasper.monitoring.api.code.StableCodeCatalog;
+import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.api.fact.FactType;
 import io.github.jasper.monitoring.api.rule.RuleType;
@@ -34,6 +37,34 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class MonitoringServiceTest {
+    @Test
+    void rejectsReasonThatDoesNotApplyToTheAction() {
+        RecordingEventRepository repository = new RecordingEventRepository();
+        ActionDefinition action = ActionDefinition.builder("demo:query")
+            .eventType(SecurityEventType.QUERY).resourceType("report")
+            .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
+        ActionCatalog catalog = new ActionCatalog();
+        catalog.register(QueryAction.class, action);
+        catalog.freeze();
+        StableCodeCatalog codes = new StableCodeCatalog("");
+        BuiltInReasonCodes.registerInto(codes);
+        codes.freeze();
+        MonitoringService service = new MonitoringService(repository,
+            new SecurityEventAssembler("demo", Clock.systemUTC()),
+            new MonitoringRuntimePort() {
+                public ActionDefinition resolve(Class<? extends ActionType> type) { return catalog.require(type); }
+                public MonitoringRuntimePort.FactCollection collect(ActionExecution execution,
+                        ActionDefinition definition) {
+                    return MonitoringRuntimePort.FactCollection.empty();
+                }
+            }, (type, definition, event, facts, sources, ineligible, issues) -> { }, codes);
+
+        assertThrows(MonitoringConfigurationException.class, () -> service.monitor(
+            ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(),
+                ActionOutcome.denied(BuiltInReasonCodes.Authentication.INVALID_CREDENTIAL, 1L))));
+        assertTrue(repository.events.isEmpty());
+    }
+
     @Test
     void decidesFromCompletedFactsWithoutPersistingACandidateEvent() {
         RecordingEventRepository repository = new RecordingEventRepository();
@@ -63,7 +94,7 @@ class MonitoringServiceTest {
                         java.util.List<io.github.jasper.monitoring.api.event.ObservationIssue> issues) {
                     return ActionDecision.blocked("TEST-01");
                 }
-            });
+            }, codes());
 
         ActionDecision decision = service.decide(ActionExecution.of(QueryAction.class, request(),
             IdentityContext.anonymous(), ActionOutcome.success(0L)));
@@ -89,7 +120,7 @@ class MonitoringServiceTest {
                 }
             },
             (type, definition, event, facts, sources, ineligible, issues) ->
-                persisted.set(!repository.findSince("demo", Instant.EPOCH).isEmpty()));
+                persisted.set(!repository.findSince("demo", Instant.EPOCH).isEmpty()), codes());
         service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(1L)));
         assertTrue(persisted.get());
     }
@@ -105,7 +136,7 @@ class MonitoringServiceTest {
                 public MonitoringRuntimePort.FactCollection collect(ActionExecution execution, ActionDefinition definition) {
                     return MonitoringRuntimePort.FactCollection.empty();
                 }
-            }, (type, definition, event, facts, sources, ineligible, issues) -> { });
+            }, (type, definition, event, facts, sources, ineligible, issues) -> { }, codes());
         assertThrows(RuntimeException.class, () -> service.monitor(
             ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(1L))));
     }
@@ -134,7 +165,7 @@ class MonitoringServiceTest {
             (type, definition, event, evaluatedFacts, sources, skipped, issues) -> {
                 seen[0] = evaluatedFacts;
                 ineligible[0] = skipped;
-            });
+            }, codes());
         service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(), ActionOutcome.success(1L)));
         assertSame(facts, seen[0]);
         assertTrue(ineligible[0].contains(QueryRule.class));
@@ -143,6 +174,13 @@ class MonitoringServiceTest {
     private static MonitoringRequestContext request() {
         return MonitoringRequestContext.builder().method("GET").path("/reports").sourceIp("127.0.0.1")
             .requestId("req-1").build();
+    }
+
+    private static StableCodeCatalog codes() {
+        StableCodeCatalog catalog = new StableCodeCatalog("");
+        BuiltInReasonCodes.registerInto(catalog);
+        catalog.freeze();
+        return catalog;
     }
     static final class QueryAction implements ActionType { }
     static final class RequiredFact implements FactType<String> { }

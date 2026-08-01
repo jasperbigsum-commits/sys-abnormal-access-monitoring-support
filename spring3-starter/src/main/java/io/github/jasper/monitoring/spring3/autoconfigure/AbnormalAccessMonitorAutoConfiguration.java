@@ -7,6 +7,7 @@ import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.MonitoringMode;
 import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+import io.github.jasper.monitoring.api.code.StableCodeCatalog;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
@@ -107,6 +108,15 @@ public class AbnormalAccessMonitorAutoConfiguration {
     public ActionCatalog abnormalAccessActionCatalog() {
         ActionCatalog catalog = new ActionCatalog();
         BuiltInActions.registerInto(catalog);
+        catalog.freeze();
+        return catalog;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public StableCodeCatalog abnormalAccessStableCodeCatalog() {
+        StableCodeCatalog catalog = new StableCodeCatalog("");
+        BuiltInReasonCodes.registerInto(catalog);
         catalog.freeze();
         return catalog;
     }
@@ -264,9 +274,9 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnMissingBean
     public MonitoringService abnormalAccessMonitoringService(AbnormalAccessMonitorProperties properties,
             MyBatisMonitoringStore store, MonitoringRuntimePort runtime,
-            MonitoringService.RuleEvaluationPort evaluator) {
+            MonitoringService.RuleEvaluationPort evaluator, StableCodeCatalog codes) {
         return new MonitoringService(store, new SecurityEventAssembler(properties.getSystemId(), Clock.systemUTC()),
-            runtime, evaluator);
+            runtime, evaluator, codes);
     }
 
     @Bean

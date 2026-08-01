@@ -2,6 +2,7 @@ package io.github.jasper.monitoring.core.application;
 
 import io.github.jasper.monitoring.api.action.ActionDefinition;
 import io.github.jasper.monitoring.api.action.ActionDecision;
+import io.github.jasper.monitoring.api.code.StableCodeCatalog;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
@@ -16,18 +17,23 @@ public final class MonitoringService {
     private final SecurityEventAssembler assembler;
     private final MonitoringRuntimePort runtime;
     private final RuleEvaluationPort evaluator;
+    private final StableCodeCatalog codes;
 
     public MonitoringService(EventRepository repository, SecurityEventAssembler assembler,
-                             MonitoringRuntimePort runtime, RuleEvaluationPort evaluator) {
+                             MonitoringRuntimePort runtime, RuleEvaluationPort evaluator,
+                             StableCodeCatalog codes) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.assembler = Objects.requireNonNull(assembler, "assembler");
         this.runtime = Objects.requireNonNull(runtime, "runtime");
         this.evaluator = Objects.requireNonNull(evaluator, "evaluator");
+        this.codes = Objects.requireNonNull(codes, "codes");
+        if (!codes.isFrozen()) throw new IllegalArgumentException("codes must be frozen");
     }
 
     public SecurityEventAssembler.AssemblyResult monitor(ActionExecution execution) {
         Objects.requireNonNull(execution, "execution");
         ActionDefinition action = runtime.resolve(execution.getActionType());
+        validateReason(execution);
         MonitoringRuntimePort.FactCollection collected = runtime.collect(execution, action);
         ActionFacts facts = collected.getFacts();
         SecurityEventAssembler.AssemblyResult result = assembler.assemble(execution.getActionType(), action, execution,
@@ -42,11 +48,19 @@ public final class MonitoringService {
     public ActionDecision decide(ActionExecution execution) {
         Objects.requireNonNull(execution, "execution");
         ActionDefinition action = runtime.resolve(execution.getActionType());
+        validateReason(execution);
         MonitoringRuntimePort.FactCollection collected = runtime.collect(execution, action);
         SecurityEventAssembler.AssemblyResult result = assembler.assemble(execution.getActionType(), action,
             execution, collected.getFacts(), collected.getPersistedFacts());
         return evaluator.decide(execution.getActionType(), action, result.getEvent(), result.getFacts(),
             collected.getSources(), result.getIneligibleRuleTypes(), result.getIssues());
+    }
+
+    private void validateReason(ActionExecution execution) {
+        if (execution.getOutcome().getReason() != null) {
+            codes.validateReason(execution.getOutcome().getReason(), execution.getActionType(),
+                execution.getOutcome().getResult());
+        }
     }
 
     @FunctionalInterface

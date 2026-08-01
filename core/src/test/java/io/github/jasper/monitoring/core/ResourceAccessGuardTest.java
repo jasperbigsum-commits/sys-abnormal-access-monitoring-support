@@ -78,7 +78,7 @@ class ResourceAccessGuardTest {
         MonitoringService monitoring = new MonitoringService(events,
             new SecurityEventAssembler("orders", clock),
             new DefaultMonitoringRuntime(catalog, builtInFacts(), Collections.emptyList()),
-            (type, action, event, facts, sources, ineligible, issues) -> { });
+            (type, action, event, facts, sources, ineligible, issues) -> { }, stableCodes());
         return new ResourceAccessGuard(authorizer, monitoring);
     }
 
@@ -86,6 +86,14 @@ class ResourceAccessGuardTest {
         io.github.jasper.monitoring.api.fact.FactCatalog catalog =
             new io.github.jasper.monitoring.api.fact.FactCatalog();
         io.github.jasper.monitoring.api.fact.BuiltInFacts.registerInto(catalog);
+        catalog.freeze();
+        return catalog;
+    }
+
+    private static io.github.jasper.monitoring.api.code.StableCodeCatalog stableCodes() {
+        io.github.jasper.monitoring.api.code.StableCodeCatalog catalog =
+            new io.github.jasper.monitoring.api.code.StableCodeCatalog("");
+        io.github.jasper.monitoring.api.code.BuiltInReasonCodes.registerInto(catalog);
         catalog.freeze();
         return catalog;
     }

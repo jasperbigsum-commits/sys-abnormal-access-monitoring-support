@@ -12,6 +12,8 @@ import io.github.jasper.monitoring.api.action.ActionDisposition;
 import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
 import io.github.jasper.monitoring.api.action.ActionRequirement;
 import io.github.jasper.monitoring.api.action.ActionType;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+import io.github.jasper.monitoring.api.code.StableCodeCatalog;
 import io.github.jasper.monitoring.api.control.ControlCatalog;
 import io.github.jasper.monitoring.api.control.ControlStatus;
 import io.github.jasper.monitoring.api.event.ActionExecution;
@@ -80,7 +82,7 @@ class TypedRuleEvaluationServiceTest {
             .eventType(SecurityEventType.QUERY).resourceType("report")
             .failurePolicy(ActionFailurePolicy.FAIL_CLOSED).build();
         MonitoringService service = new MonitoringService(store, new SecurityEventAssembler("demo", clock),
-            new FixedRuntime(action), evaluator);
+            new FixedRuntime(action), evaluator, codes());
 
         ActionDecision decision = service.decide(ActionExecution.of(QueryAction.class, request(),
             IdentityContext.anonymous(), ActionOutcome.success(0L)));
@@ -178,7 +180,7 @@ class TypedRuleEvaluationServiceTest {
         ActionDefinition action = ActionDefinition.builder("data:query").eventType(SecurityEventType.QUERY)
             .resourceType("report").failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
         MonitoringService service = new MonitoringService(store, new SecurityEventAssembler("demo", clock),
-            new FixedRuntime(action), evaluator);
+            new FixedRuntime(action), evaluator, codes());
 
         service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(),
             ActionOutcome.success(1L)));
@@ -236,7 +238,7 @@ class TypedRuleEvaluationServiceTest {
             .require(ClientFact.class, FactSource.CLIENT_SUPPLEMENTAL)
             .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
         MonitoringService service = new MonitoringService(store,
-            new SecurityEventAssembler("demo", clock), new FixedRuntime(action), evaluator);
+            new SecurityEventAssembler("demo", clock), new FixedRuntime(action), evaluator, codes());
 
         service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(),
             ActionOutcome.success(1L), ActionFacts.builder().put(ClientFact.class, "observed").build(),
@@ -253,7 +255,7 @@ class TypedRuleEvaluationServiceTest {
         ActionDefinition action = ActionDefinition.builder("data:query").eventType(SecurityEventType.QUERY)
             .resourceType("report").failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
         MonitoringService service = new MonitoringService(store,
-            new SecurityEventAssembler("demo", clock), new FixedRuntime(action), evaluator);
+            new SecurityEventAssembler("demo", clock), new FixedRuntime(action), evaluator, codes());
 
         service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(),
             ActionOutcome.success(1L)));
@@ -279,7 +281,7 @@ class TypedRuleEvaluationServiceTest {
         ActionDefinition action = ActionDefinition.builder("data:query").eventType(SecurityEventType.QUERY)
             .resourceType("report").failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
         MonitoringService service = new MonitoringService(store, new SecurityEventAssembler("demo", clock),
-            new FixedRuntime(action), evaluator);
+            new FixedRuntime(action), evaluator, codes());
         service.monitor(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(),
             ActionOutcome.success(1L)));
     }
@@ -361,7 +363,7 @@ class TypedRuleEvaluationServiceTest {
                 .eventType(SecurityEventType.QUERY).resourceType("report")
                 .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
             service = new MonitoringService(store, new SecurityEventAssembler("demo", clock),
-                new FixedRuntime(action), evaluator);
+                new FixedRuntime(action), evaluator, codes());
         }
 
         void monitor() {
@@ -466,6 +468,13 @@ class TypedRuleEvaluationServiceTest {
                 ControlStatus target, String reason, Instant at) {
             throw new AssertionError("approval controls do not transition during evaluation");
         }
+    }
+
+    private static StableCodeCatalog codes() {
+        StableCodeCatalog catalog = new StableCodeCatalog("");
+        BuiltInReasonCodes.registerInto(catalog);
+        catalog.freeze();
+        return catalog;
     }
 
     static final class FixedRuntime implements io.github.jasper.monitoring.core.application.MonitoringRuntimePort {

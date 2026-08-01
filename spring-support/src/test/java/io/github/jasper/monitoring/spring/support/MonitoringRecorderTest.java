@@ -8,6 +8,8 @@ import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.action.ActionDefinition;
 import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
 import io.github.jasper.monitoring.api.action.ActionType;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+import io.github.jasper.monitoring.api.code.StableCodeCatalog;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
@@ -45,7 +47,7 @@ class MonitoringRecorderTest {
         CapturingRuntime runtime = new CapturingRuntime();
         MonitoringService service = new MonitoringService(repository,
             new SecurityEventAssembler("test-system", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)),
-            runtime, (type, definition, event, facts, sources, ineligible, issues) -> { });
+            runtime, (type, definition, event, facts, sources, ineligible, issues) -> { }, stableCodes());
         MonitoringContextAccessor contexts = new MonitoringContextAccessor() {
             @Override public MonitoringRequestContext requestContext() { return request; }
             @Override public IdentityContext identityContext() { return identity; }
@@ -67,6 +69,13 @@ class MonitoringRecorderTest {
 
     static final class QueryAction implements ActionType { }
     static final class ResourceFact implements FactType<String> { }
+
+    private static StableCodeCatalog stableCodes() {
+        StableCodeCatalog catalog = new StableCodeCatalog("");
+        BuiltInReasonCodes.registerInto(catalog);
+        catalog.freeze();
+        return catalog;
+    }
 
     private static final class CapturingRuntime implements MonitoringRuntimePort {
         private final ActionDefinition action = ActionDefinition.builder("data:test-query")

@@ -10,6 +10,8 @@ import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+import io.github.jasper.monitoring.api.code.StableCodeCatalog;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactCatalog;
 import io.github.jasper.monitoring.api.fact.FactSource;
@@ -95,7 +97,7 @@ class TypedMonitorActionAspectTest {
             MonitoringRuntimePort runtime = new DefaultMonitoringRuntime(actions, facts, Collections.emptyList());
             MonitoringService monitoring = new MonitoringService(events,
                 new SecurityEventAssembler("test", Clock.fixed(Instant.parse("2026-07-26T00:00:00Z"), ZoneOffset.UTC)),
-                runtime, (a, d, e, f, s, i, o) -> { });
+                runtime, (a, d, e, f, s, i, o) -> { }, stableCodes());
             MonitoringContextAccessor context = new MonitoringContextAccessor() {
                 @Override public MonitoringRequestContext requestContext() {
                     return MonitoringRequestContext.builder().method("GET").path("/test")
@@ -133,5 +135,6 @@ class TypedMonitorActionAspectTest {
     }
 
     private static ActionCatalog actions() { ActionCatalog c = new ActionCatalog(); BuiltInActions.registerInto(c); c.freeze(); return c; }
+    private static StableCodeCatalog stableCodes() { StableCodeCatalog c = new StableCodeCatalog(""); BuiltInReasonCodes.registerInto(c); c.freeze(); return c; }
     private static FactCatalog facts() { FactCatalog c = new FactCatalog(); BuiltInFacts.registerInto(c); c.freeze(); return c; }
 }

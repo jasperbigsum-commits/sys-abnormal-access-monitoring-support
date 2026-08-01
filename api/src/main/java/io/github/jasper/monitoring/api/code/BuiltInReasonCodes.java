@@ -71,14 +71,11 @@ public final class BuiltInReasonCodes {
                 BuiltInActions.AccessDenied.class);
         }
         outcomes(catalog, Action.BLOCKED, SecurityEventResult.DENIED,
-            BuiltInActions.Query.class, BuiltInActions.ReportExport.class,
-            BuiltInActions.SensitiveView.class);
+            ActionType.class);
         outcomes(catalog, Action.INVOCATION_FAILED, SecurityEventResult.FAILURE,
-            BuiltInActions.Query.class, BuiltInActions.ReportExport.class,
-            BuiltInActions.SensitiveView.class);
+            ActionType.class);
         outcomes(catalog, Action.REQUEST_FAILED, SecurityEventResult.FAILURE,
-            BuiltInActions.Query.class, BuiltInActions.ReportExport.class,
-            BuiltInActions.SensitiveView.class);
+            ActionType.class);
         outcomes(catalog, Privilege.SELF_ESCALATION, SecurityEventResult.DENIED,
             BuiltInActions.PrivilegeChange.class);
     }

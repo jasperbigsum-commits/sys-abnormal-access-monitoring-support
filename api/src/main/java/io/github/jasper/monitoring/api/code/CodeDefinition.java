@@ -60,8 +60,10 @@ public final class CodeDefinition {
     }
 
     public boolean appliesTo(Class<? extends ActionType> actionType) {
-        if (actionTypes.contains(actionType)) {
-            return true;
+        for (Class<? extends ActionType> type : actionTypes) {
+            if (type.isAssignableFrom(actionType)) {
+                return true;
+            }
         }
         for (Class<? extends ActionContract> contract : contracts) {
             if (contract.isAssignableFrom(actionType)) {
