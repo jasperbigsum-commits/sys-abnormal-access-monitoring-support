@@ -41,9 +41,11 @@ class Spring3ManagementWorkflowAcceptanceTest {
     void tc12_whitelistSuppressesRuleOnlyWhileActiveAndUnexpired() {
         jdbc.update("INSERT INTO audit_account(user_id,organization_id,status) VALUES(?,?,?)",
             "tc12-whitelist", "org-a", "ACTIVE");
+        assertEquals(HttpStatus.OK, post("/audit/login-failure", "tc12-whitelist").getStatusCode());
+        String subjectKey = latestLoginSubjectKey();
         jdbc.update("INSERT INTO monitoring_security_whitelist(whitelist_id,system_id,rule_id,subject,reason,"
                 + "approved_by,expires_at,created_at,status,version) VALUES(?,?,?,?,?,?,?,?,?,?)",
-            "tc12", "audit-spring3-web", "AUTH-01", "tc12-whitelist", "predeclared", "fixture",
+            "tc12", "audit-spring3-web", "AUTH-01", subjectKey, "predeclared", "fixture",
             java.sql.Timestamp.from(Instant.now().plusSeconds(3600)), java.sql.Timestamp.from(Instant.now()),
             "REVOKED", Long.valueOf(1L));
 
@@ -51,17 +53,17 @@ class Spring3ManagementWorkflowAcceptanceTest {
             versioned(1L, "approved for maintenance"));
         assertEquals(HttpStatus.OK, granted.getStatusCode());
         assertTrue(granted.getBody().contains("\"status\":\"ACTIVE\""));
-        for (int attempt = 0; attempt < 5; attempt++) {
+        for (int attempt = 1; attempt < 5; attempt++) {
             assertEquals(HttpStatus.OK, post("/audit/login-failure", "tc12-whitelist").getStatusCode());
         }
-        assertEquals(0L, count("SELECT COUNT(*) FROM monitoring_security_alert WHERE rule_id='AUTH-01' "
-            + "AND subject='tc12-whitelist'"));
+        assertEquals(0L, jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
+            + "WHERE rule_id='AUTH-01' AND subject=?", Long.class, subjectKey).longValue());
 
         jdbc.update("UPDATE monitoring_security_whitelist SET expires_at=? WHERE whitelist_id='tc12'",
             java.sql.Timestamp.from(Instant.now().minusSeconds(1)));
         assertEquals(HttpStatus.OK, post("/audit/login-failure", "tc12-whitelist").getStatusCode());
-        assertEquals(1L, count("SELECT COUNT(*) FROM monitoring_security_alert WHERE rule_id='AUTH-01' "
-            + "AND subject='tc12-whitelist'"));
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
+            + "WHERE rule_id='AUTH-01' AND subject=?", Long.class, subjectKey).longValue());
         assertTrue(count("SELECT COUNT(*) FROM monitoring_management_audit WHERE target_id='tc12' "
             + "AND action='WHITELIST_GRANT' AND outcome='SUCCEEDED'") >= 1L);
     }
@@ -104,8 +106,9 @@ class Spring3ManagementWorkflowAcceptanceTest {
         for (int attempt = 0; attempt < 5; attempt++) {
             post("/audit/login-failure", "tc18-alert");
         }
+        String subjectKey = latestLoginSubjectKey();
         String alertId = jdbc.queryForObject("SELECT alert_id FROM monitoring_security_alert WHERE rule_id='AUTH-01' "
-            + "AND subject='tc18-alert'", String.class);
+            + "AND subject=?", String.class, subjectKey);
         long version = jdbc.queryForObject("SELECT version FROM monitoring_security_alert WHERE alert_id=?", Long.class,
             alertId).longValue();
         assertEquals(HttpStatus.OK, postJson("/audit/management/alerts/" + alertId + "/acknowledge",
@@ -161,6 +164,12 @@ class Spring3ManagementWorkflowAcceptanceTest {
     }
     private String url(String path) { return "http://localhost:" + port + path; }
     private long count(String sql) { return jdbc.queryForObject(sql, Long.class).longValue(); }
+    private String latestLoginSubjectKey() {
+        return jdbc.queryForObject("SELECT f.value_text FROM monitoring_security_event_fact f "
+            + "JOIN monitoring_security_event e ON e.event_id=f.event_id "
+            + "WHERE f.fact_key='login_subject_key' AND e.event_type='LOGIN_FAILURE' "
+            + "AND e.reason_code='MON.AUTH.INVALID_CREDENTIAL' ORDER BY e.occurred_at DESC LIMIT 1", String.class);
+    }
     private static Map<String, Object> versioned(long version, String reason) {
         Map<String, Object> body = new LinkedHashMap<String, Object>();
         body.put("expectedVersion", Long.valueOf(version)); body.put("reason", reason); return body;

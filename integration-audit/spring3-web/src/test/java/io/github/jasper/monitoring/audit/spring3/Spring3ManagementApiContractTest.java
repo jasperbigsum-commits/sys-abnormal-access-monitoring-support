@@ -71,7 +71,8 @@ class Spring3ManagementApiContractTest {
     void falsePositivePathUsesJeecgEnvelope() {
         jdbc.update("INSERT INTO audit_account(user_id,organization_id,status) VALUES(?,?,?)", "api-alert", "org-a", "ACTIVE");
         for (int attempt = 0; attempt < 5; attempt++) exchange(HttpMethod.POST, "/audit/login-failure", "api-alert", null);
-        String alertId = jdbc.queryForObject("SELECT alert_id FROM monitoring_security_alert WHERE subject=?", String.class, "api-alert");
+        String alertId = jdbc.queryForObject("SELECT alert_id FROM monitoring_security_alert "
+            + "WHERE rule_id='AUTH-01' AND subject LIKE 'v1:%'", String.class);
         long version = jdbc.queryForObject("SELECT version FROM monitoring_security_alert WHERE alert_id=?", Long.class, alertId).longValue();
         Map<String, Object> request = new LinkedHashMap<String, Object>();
         request.put("expectedVersion", Long.valueOf(version));

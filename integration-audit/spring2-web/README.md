@@ -63,6 +63,12 @@ abnormal:
       instrumentation:
         enabled: true
       trusted-proxies: [127.0.0.1/32, "::1/128"]
+
+monitoring:
+  authentication:
+    enabled: true
+    subject-key: ${MONITORING_AUTH_SUBJECT_KEY}
+    control-failure-policy: OBSERVE_ONLY
 ```
 
 配置含义与生产替换要求：
@@ -74,6 +80,7 @@ abnormal:
 | `frontend.enabled: false` | 本夹具不接收浏览器补充信号 | 前端信号仅可作为补充事实，不能替代身份、授权或控制依据 |
 | `instrumentation.enabled: true` | 采集 MVC 上的 `@MonitorAction` | 仅覆盖已声明注解的方法；Service、任务和消息消费者仍需程序化埋点 |
 | `trusted-proxies` | 将本地测试调用视为可信转发 | 只配置受控网关的固定地址/CIDR；不得信任全网或由客户端决定 IP |
+| `monitoring.authentication.*` | 注册认证门面并生成稳定的 opaque subject | 从密钥管理设施注入至少 32 字节随机密钥的 Base64 编码；所有实例保持一致，宿主只传 `login_user` 和 realm |
 
 `Spring2AuditApplication` 启动时依次运行组件的 `db/monitoring-schema.sql` 和夹具的 `db/audit-fixture-schema.sql`，并构造 MyBatis `SqlSessionFactory`。此做法仅便于演示；生产必须把监测 Schema 纳入 Flyway、Liquibase 或既有变更流程，不应在应用启动时重复执行 DDL。
 

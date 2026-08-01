@@ -19,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,8 +47,8 @@ public class MonitoringFixtureController {
     }
 
     @PostMapping("/login-failure")
-    public Map<String, Object> loginFailure() {
-        authenticationMonitor.recordDenied(new LoginSubjectInput("fixture-login", "audit"),
+    public Map<String, Object> loginFailure(@RequestHeader("X-Audit-Principal") String loginUser) {
+        authenticationMonitor.recordDenied(new LoginSubjectInput(loginUser, "audit"),
             AuthenticationStage.CREDENTIAL, BuiltInReasonCodes.Authentication.INVALID_CREDENTIAL);
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("action", "auth:login");

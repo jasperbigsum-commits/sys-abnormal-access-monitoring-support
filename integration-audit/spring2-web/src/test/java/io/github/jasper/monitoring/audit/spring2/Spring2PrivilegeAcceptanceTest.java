@@ -57,7 +57,7 @@ class Spring2PrivilegeAcceptanceTest {
             .reduce((first, second) -> second)
             .orElseThrow(() -> new AssertionError("Missing typed privilege change event"));
         assertEquals("true", event.getAttribute("privilege_increase"));
-        assertEquals("SELF_PRIVILEGE_ESCALATION", event.getReasonCode());
+        assertEquals("MON.PRIVILEGE.SELF_ESCALATION", event.getReasonCode());
         SecurityAlert alert = monitoring.findOpen("PRIV-01|" + ACTOR + "|monitoring:")
             .orElseThrow(() -> new AssertionError("Missing PRIV-01 alert"));
         assertTrue(monitoring.findControl(alert.getAlertId() + ":" + ControlActionType.DENY).isPresent());

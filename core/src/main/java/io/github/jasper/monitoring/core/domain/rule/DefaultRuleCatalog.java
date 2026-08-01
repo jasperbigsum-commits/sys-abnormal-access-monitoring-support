@@ -39,7 +39,7 @@ public final class DefaultRuleCatalog {
         List<DetectionRule<? extends RuleType>> rules = new ArrayList<DetectionRule<? extends RuleType>>();
         rules.add(authOne());
         rules.add(authTwo());
-        rules.add(condition(definition(Auth03.class, "AUTH-03", RiskLevel.HIGH,
+        rules.add(authenticationCondition(definition(Auth03.class, "AUTH-03", RiskLevel.HIGH,
             BuiltInActions.Login.class, Duration.ZERO, 1L, ControlActionType.DENY),
             event -> event.getEventType() == SecurityEventType.LOGIN_FAILURE
                 && BuiltInReasonCodes.Authentication.ACCOUNT_DISABLED.getCode().equals(event.getReasonCode()),
@@ -282,6 +282,19 @@ public final class DefaultRuleCatalog {
 
     private static String loginSubject(SecurityEvent event) {
         return event.getFact(BuiltInFacts.LOGIN_SUBJECT_KEY).orElse(null);
+    }
+
+    private static <R extends RuleType> DetectionRule<R> authenticationCondition(
+            RuleDefinition<R> definition, java.util.function.Predicate<SecurityEvent> condition,
+            String reason) {
+        return new AbstractDetectionRule<R>(definition, reason) {
+            @Override public Optional<RuleMatch> evaluate(RuleEvaluationContext context) {
+                if (!condition.test(context.getEvent())) return Optional.empty();
+                String subject = loginSubject(context.getEvent());
+                return subject == null ? Optional.<RuleMatch>empty()
+                    : match(context.getEvent(), subject, Duration.ofMinutes(15));
+            }
+        };
     }
 
     private static boolean truthy(String value) {

@@ -202,7 +202,7 @@ class Spring2AuditWebAcceptanceTest {
     }
 
     @Test
-    @DisplayName("TC-01 fifth failure activates challenge and controls the next login")
+    @DisplayName("TC-01 fifth failure activates protected controls and rate limits the next login")
     void tc01_fifthFailureActivatesChallengeAndControlsNextLogin() {
         for (int attempt = 0; attempt < 5; attempt++) {
             assertEquals(HttpStatus.FORBIDDEN,
@@ -211,11 +211,13 @@ class Spring2AuditWebAcceptanceTest {
         ResponseEntity<String> challenged =
             postJson("/audit/authentication/login", null, login("tc01-user", true));
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, challenged.getStatusCode());
-        assertTrue(challenged.getBody().contains("CHALLENGE_REQUIRED"));
+        assertTrue(challenged.getBody().contains("RATE_LIMITED"));
         assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM audit_control_state "
-            + "WHERE subject='tc01-user' AND control_type='REQUIRE_CAPTCHA'", Long.class).longValue());
+            + "WHERE subject LIKE 'v1:%' AND control_type='REQUIRE_CAPTCHA'", Long.class).longValue());
         assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM audit_control_state "
-            + "WHERE subject='tc01-user' AND control_type='RATE_LIMIT'", Long.class).longValue());
+            + "WHERE subject LIKE 'v1:%' AND control_type='RATE_LIMIT'", Long.class).longValue());
+        assertEquals(0L, jdbc.queryForObject("SELECT COUNT(*) FROM audit_control_state "
+            + "WHERE subject='tc01-user'", Long.class).longValue());
     }
 
     @Test
@@ -227,7 +229,10 @@ class Spring2AuditWebAcceptanceTest {
         assertTrue(response.getBody().contains("ACCOUNT_DISABLED"));
         assertEquals(0L, fixtures.countActiveSessions("audit-disabled"));
         assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
-            + "WHERE rule_id='AUTH-03' AND subject='audit-disabled'", Long.class).longValue());
+            + "WHERE rule_id='AUTH-03' AND subject LIKE 'v1:%'", Long.class).longValue());
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_event "
+            + "WHERE event_type='LOGIN_FAILURE' AND user_id IS NULL "
+            + "AND reason_code='MON.AUTH.ACCOUNT_DISABLED'", Long.class).longValue());
     }
 
     @Test

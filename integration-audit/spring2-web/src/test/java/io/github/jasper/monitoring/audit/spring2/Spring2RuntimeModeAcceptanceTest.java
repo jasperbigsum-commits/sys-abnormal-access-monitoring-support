@@ -53,6 +53,8 @@ class Spring2RuntimeModeAcceptanceTest {
             }
             assertEquals(HttpStatus.TOO_MANY_REQUESTS, login(http, base, "tc01-user").getStatusCode());
             assertEquals(2L, count(enforce.getBean(JdbcTemplate.class),
+                "SELECT COUNT(*) FROM audit_control_state WHERE subject LIKE 'v1:%'"));
+            assertEquals(0L, count(enforce.getBean(JdbcTemplate.class),
                 "SELECT COUNT(*) FROM audit_control_state WHERE subject='tc01-user'"));
         }
     }

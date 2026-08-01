@@ -19,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -62,17 +63,17 @@ public class MonitoringFixtureController {
      * 显式提交一次登录失败事件。
      *
      * <p>这个方法用于说明认证失败不能只依赖请求上下文自动产生。认证 Service 已经知道失败原因后，
-     * 可通过 {@code MonitoringRecorder} 明确传入 Action 和失败结果；Recorder 自动使用当前可信
-     * 请求与身份上下文。登录失败内置 Action 当前没有强制 Fact。</p>
+     * 只向 {@code AuthenticationMonitor} 提交登录用户、认证阶段和规范原因码；门面自动使用当前可信
+     * 请求上下文，并生成受保护的登录主体 Fact。</p>
      *
-     * <p>验收观察点：响应返回事件 ID；后续 AUTH-01、AUTH-02、AUTH-03 规则可以使用该事件；
+     * <p>验收观察点：响应确认记录状态；后续 AUTH-01、AUTH-02、AUTH-03 规则可以使用该事件；
      * 事件中的失败原因来自服务端认证分支，而不是请求体字段。</p>
      *
-     * @return 新建事件的 ID 和 Action 编码
+     * @return 已记录状态和 Action 编码
      */
     @PostMapping("/login-failure")
-    public Map<String, Object> loginFailure() {
-        authenticationMonitor.recordDenied(new LoginSubjectInput("fixture-login", "audit"),
+    public Map<String, Object> loginFailure(@RequestHeader("X-Audit-Principal") String loginUser) {
+        authenticationMonitor.recordDenied(new LoginSubjectInput(loginUser, "audit"),
             AuthenticationStage.CREDENTIAL, BuiltInReasonCodes.Authentication.INVALID_CREDENTIAL);
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("action", "auth:login");

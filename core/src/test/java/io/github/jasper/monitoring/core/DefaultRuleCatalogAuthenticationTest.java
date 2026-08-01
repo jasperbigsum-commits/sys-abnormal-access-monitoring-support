@@ -15,6 +15,7 @@ import io.github.jasper.monitoring.api.SecurityEventType;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.core.domain.EventFact;
 import java.time.Duration;
 import java.time.Instant;
@@ -89,6 +90,24 @@ class DefaultRuleCatalogAuthenticationTest {
         }
 
         assertFalse(evaluate(rule("AUTH-02"), history.get(9), history).isPresent());
+    }
+
+    @Test
+    void authThreeUsesTheProtectedLoginSubject() {
+        SecurityEvent disabled = SecurityEvent.builder()
+            .eventType(SecurityEventType.LOGIN_FAILURE)
+            .occurredAt(NOW)
+            .sourceIp(SOURCE_IP)
+            .reasonCode(BuiltInReasonCodes.Authentication.ACCOUNT_DISABLED.getCode())
+            .facts(Collections.singletonList(new EventFact(BuiltInFacts.LOGIN_SUBJECT_KEY.getKey(),
+                String.class.getName(), "v1:disabled-account", FactSource.FRAMEWORK_OUTCOME)))
+            .build();
+
+        Optional<RuleMatch> match = evaluate(rule("AUTH-03"), disabled,
+            Collections.singletonList(disabled));
+
+        assertTrue(match.isPresent());
+        assertEquals("v1:disabled-account", match.get().getSubject());
     }
 
     @Test
