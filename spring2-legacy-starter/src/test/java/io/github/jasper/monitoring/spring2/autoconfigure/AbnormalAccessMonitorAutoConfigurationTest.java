@@ -85,7 +85,8 @@ class AbnormalAccessMonitorAutoConfigurationTest {
             AuthorizationDecision decision = context.getBean(ResourceAccessGuard.class).authorize(
                 IdentityContext.anonymous(), new ResourceScopeRequest(request, "order", "o-1", "org-a"));
             assertThat(decision.isAllowed()).isFalse();
-            assertThat(decision.getReasonCode()).isEqualTo("RESOURCE_SCOPE_AUTHORIZER_NOT_CONFIGURED");
+            assertThat(decision.getReason()).isEqualTo(
+                io.github.jasper.monitoring.api.code.BuiltInReasonCodes.Authorization.AUTHORIZER_NOT_CONFIGURED);
         });
     }
 

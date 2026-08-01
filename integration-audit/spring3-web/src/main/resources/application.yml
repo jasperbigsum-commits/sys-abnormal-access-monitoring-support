@@ -45,3 +45,9 @@ abnormal:
       instrumentation:
         enabled: true # 自动拦截 MVC 方法上的 @MonitorAction
       trusted-proxies: [127.0.0.1/32, "::1/128"] # 验收宿主把本地测试客户端视为显式可信代理
+
+monitoring:
+  authentication:
+    enabled: true
+    subject-key: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
+    control-failure-policy: OBSERVE_ONLY

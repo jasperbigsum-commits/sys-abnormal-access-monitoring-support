@@ -3,9 +3,11 @@ package io.github.jasper.monitoring.audit.spring3.monitoring;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+import io.github.jasper.monitoring.api.authentication.AuthenticationMonitor;
+import io.github.jasper.monitoring.api.authentication.AuthenticationStage;
+import io.github.jasper.monitoring.api.authentication.LoginSubjectInput;
 import io.github.jasper.monitoring.api.action.MonitorAction;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
-import io.github.jasper.monitoring.api.event.FailureClass;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
@@ -46,12 +48,14 @@ public class MonitoringFixtureController {
     private final MonitoringRecorder monitoringRecorder;
     private final MonitoringContextAccessor contexts;
     private final AnnotatedMonitoringService annotatedMonitoring;
+    private final AuthenticationMonitor authenticationMonitor;
 
     public MonitoringFixtureController(MonitoringRecorder monitoringRecorder, MonitoringContextAccessor contexts,
-            AnnotatedMonitoringService annotatedMonitoring) {
+            AnnotatedMonitoringService annotatedMonitoring, AuthenticationMonitor authenticationMonitor) {
         this.monitoringRecorder = monitoringRecorder;
         this.contexts = contexts;
         this.annotatedMonitoring = annotatedMonitoring;
+        this.authenticationMonitor = authenticationMonitor;
     }
 
     /**
@@ -68,9 +72,12 @@ public class MonitoringFixtureController {
      */
     @PostMapping("/login-failure")
     public Map<String, Object> loginFailure() {
-        return response(monitoringRecorder.record(BuiltInActions.Login.class, ActionOutcome.failure(
-            BuiltInReasonCodes.Authentication.INVALID_CREDENTIAL, FailureClass.AUTHORIZATION, 0L),
-            ActionFacts.builder().build()));
+        authenticationMonitor.recordDenied(new LoginSubjectInput("fixture-login", "audit"),
+            AuthenticationStage.CREDENTIAL, BuiltInReasonCodes.Authentication.INVALID_CREDENTIAL);
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
+        result.put("action", "auth:login");
+        result.put("status", "recorded");
+        return result;
     }
 
     /**

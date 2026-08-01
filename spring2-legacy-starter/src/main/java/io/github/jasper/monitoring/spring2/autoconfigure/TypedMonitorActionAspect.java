@@ -4,6 +4,8 @@ import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.action.MonitorAction;
 import io.github.jasper.monitoring.api.event.ActionExecution;
 import io.github.jasper.monitoring.api.event.ActionOutcome;
+import io.github.jasper.monitoring.api.event.FailureClass;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.api.fact.FactType;
@@ -57,8 +59,8 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
             } catch (Throwable failure) {
                 try {
                     monitor(binding, suppliedFacts, scope.snapshot(),
-                        ActionOutcome.failure("ACTION_INVOCATION_FAILED",
-                            ActionOutcome.ExceptionClassification.UNKNOWN, elapsed(startedAt)));
+                        ActionOutcome.failure(BuiltInReasonCodes.Action.INVOCATION_FAILED,
+                            FailureClass.UNKNOWN, elapsed(startedAt)));
                 } catch (RuntimeException monitoringFailure) {
                     failure.addSuppressed(monitoringFailure);
                 }
@@ -75,11 +77,11 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
         if (value instanceof ResponseEntity) {
             int status = ((ResponseEntity<?>) value).getStatusCode().value();
             if (status == 401 || status == 403) {
-                return ActionOutcome.denied("HTTP_ACCESS_DENIED", elapsed);
+                return ActionOutcome.denied(BuiltInReasonCodes.Action.BLOCKED, elapsed);
             }
             if (status >= 400) {
-                return ActionOutcome.failure("HTTP_REQUEST_FAILED",
-                    ActionOutcome.ExceptionClassification.UNKNOWN, elapsed);
+                return ActionOutcome.failure(BuiltInReasonCodes.Action.REQUEST_FAILED,
+                    FailureClass.UNKNOWN, elapsed);
             }
         }
         return ActionOutcome.success(elapsed);

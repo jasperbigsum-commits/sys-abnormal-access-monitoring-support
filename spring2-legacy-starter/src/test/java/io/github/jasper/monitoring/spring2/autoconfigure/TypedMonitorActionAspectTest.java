@@ -8,6 +8,8 @@ import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
+import io.github.jasper.monitoring.api.code.StableCodeCatalog;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.action.MonitorAction;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
@@ -52,15 +54,15 @@ class TypedMonitorActionAspectTest {
         proxy.ok();
         fixture.assertOutcome(SecurityEventResult.SUCCESS, null);
         proxy.unauthorized();
-        fixture.assertOutcome(SecurityEventResult.DENIED, "HTTP_ACCESS_DENIED");
+        fixture.assertOutcome(SecurityEventResult.DENIED, "MON.ACTION.BLOCKED");
         proxy.forbidden();
-        fixture.assertOutcome(SecurityEventResult.DENIED, "HTTP_ACCESS_DENIED");
+        fixture.assertOutcome(SecurityEventResult.DENIED, "MON.ACTION.BLOCKED");
         proxy.badRequest();
-        fixture.assertOutcome(SecurityEventResult.FAILURE, "HTTP_REQUEST_FAILED");
+        fixture.assertOutcome(SecurityEventResult.FAILURE, "MON.ACTION.REQUEST_FAILED");
         proxy.serverError();
-        fixture.assertOutcome(SecurityEventResult.FAILURE, "HTTP_REQUEST_FAILED");
+        fixture.assertOutcome(SecurityEventResult.FAILURE, "MON.ACTION.REQUEST_FAILED");
         assertThrows(IllegalStateException.class, proxy::throwsFailure);
-        fixture.assertOutcome(SecurityEventResult.FAILURE, "ACTION_INVOCATION_FAILED");
+        fixture.assertOutcome(SecurityEventResult.FAILURE, "MON.ACTION.INVOCATION_FAILED");
     }
 
     interface MonitoredApi {
@@ -95,7 +97,7 @@ class TypedMonitorActionAspectTest {
             MonitoringRuntimePort runtime = new DefaultMonitoringRuntime(actions, facts, Collections.emptyList());
             MonitoringService monitoring = new MonitoringService(events,
                 new SecurityEventAssembler("test", Clock.fixed(Instant.parse("2026-07-26T00:00:00Z"), ZoneOffset.UTC)),
-                runtime, (a, d, e, f, s, i, o) -> { });
+                runtime, (a, d, e, f, s, i, o) -> { }, codes());
             MonitoringContextAccessor context = new MonitoringContextAccessor() {
                 @Override public MonitoringRequestContext requestContext() {
                     return MonitoringRequestContext.builder().method("GET").path("/test")
@@ -110,6 +112,13 @@ class TypedMonitorActionAspectTest {
             factory.setProxyTargetClass(true);
             factory.addAdvisor(aspect);
             return (MonitoredApi) factory.getProxy();
+        }
+
+        private static StableCodeCatalog codes() {
+            StableCodeCatalog catalog = new StableCodeCatalog("");
+            BuiltInReasonCodes.registerInto(catalog);
+            catalog.freeze();
+            return catalog;
         }
 
         void assertOutcome(SecurityEventResult result, String reason) {

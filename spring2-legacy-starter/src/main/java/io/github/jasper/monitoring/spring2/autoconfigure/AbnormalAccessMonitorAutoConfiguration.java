@@ -3,6 +3,8 @@ package io.github.jasper.monitoring.spring2.autoconfigure;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.IdentityContextProvider;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
+import io.github.jasper.monitoring.api.code.StableCodeCatalog;
+import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.MonitoringMode;
 import io.github.jasper.monitoring.api.AuthorizationDecision;
@@ -264,9 +266,18 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnMissingBean
     public MonitoringService abnormalAccessMonitoringService(AbnormalAccessMonitorProperties properties,
             MyBatisMonitoringStore store, MonitoringRuntimePort runtime,
-            MonitoringService.RuleEvaluationPort evaluator) {
+            MonitoringService.RuleEvaluationPort evaluator, StableCodeCatalog codes) {
         return new MonitoringService(store, new SecurityEventAssembler(properties.getSystemId(), Clock.systemUTC()),
-            runtime, evaluator);
+            runtime, evaluator, codes);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public StableCodeCatalog abnormalAccessStableCodeCatalog() {
+        StableCodeCatalog catalog = new StableCodeCatalog("");
+        BuiltInReasonCodes.registerInto(catalog);
+        catalog.freeze();
+        return catalog;
     }
 
     @Bean
@@ -323,7 +334,8 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ResourceScopeAuthorizer abnormalAccessResourceScopeAuthorizer() {
-        return (identity, request) -> AuthorizationDecision.denied("RESOURCE_SCOPE_AUTHORIZER_NOT_CONFIGURED");
+        return (identity, request) -> AuthorizationDecision.denied(
+            io.github.jasper.monitoring.api.code.BuiltInReasonCodes.Authorization.AUTHORIZER_NOT_CONFIGURED);
     }
 
     @Bean
