@@ -15,6 +15,7 @@ import io.github.jasper.monitoring.api.action.MonitorAction;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactCatalog;
 import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.api.fact.StaticActionFact;
 import io.github.jasper.monitoring.core.application.DefaultMonitoringRuntime;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
@@ -36,6 +37,25 @@ import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.http.ResponseEntity;
 
 class TypedMonitorActionAspectTest {
+    @Test
+    void includesStaticFactsWithoutCheckpoint() {
+        Fixture fixture = new Fixture();
+
+        fixture.proxy().staticFacts();
+
+        assertEquals("report-static", fixture.events.last.getResourceId());
+        assertEquals(12L, fixture.events.last.getDataCount());
+        assertEquals(FactSource.HOST_PROVIDER, fixture.fact("resource_id").getSource());
+        assertEquals(FactSource.HOST_PROVIDER, fixture.fact("data_count").getSource());
+    }
+
+    @Test
+    void validatesRequiredFactsWhenTheActionDoesNotCallCheckpoint() {
+        Fixture fixture = new Fixture();
+
+        assertThrows(IllegalStateException.class, fixture.proxy()::withoutRequiredFacts);
+    }
+
     @Test
     void capturesRuntimeFactFromAnOrdinaryServiceMethod() {
         Fixture fixture = new Fixture();
@@ -73,6 +93,8 @@ class TypedMonitorActionAspectTest {
         ResponseEntity<Void> serverError();
         String throwsFailure();
         String runtimeFact();
+        String withoutRequiredFacts();
+        String staticFacts();
     }
 
     static class MonitoredService implements MonitoredApi {
@@ -84,6 +106,16 @@ class TypedMonitorActionAspectTest {
         @Override @MonitorAction(BuiltInActions.Query.class) public String throwsFailure() { throw new IllegalStateException("failed"); }
         @Override @MonitorAction(BuiltInActions.SensitiveView.class) public String runtimeFact() {
             MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(37L));
+            return "ok";
+        }
+        @Override @MonitorAction(BuiltInActions.ReportExport.class)
+        public String withoutRequiredFacts() {
+            return "invalid";
+        }
+        @Override @MonitorAction(BuiltInActions.ReportExport.class)
+        @StaticActionFact(fact = BuiltInFacts.ResourceId.class, value = " report-static ")
+        @StaticActionFact(fact = BuiltInFacts.DataCount.class, value = "12")
+        public String staticFacts() {
             return "ok";
         }
     }

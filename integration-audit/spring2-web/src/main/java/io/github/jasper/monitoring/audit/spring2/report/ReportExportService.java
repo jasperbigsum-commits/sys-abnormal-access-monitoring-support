@@ -3,6 +3,7 @@ package io.github.jasper.monitoring.audit.spring2.report;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.fact.ActionFact;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.audit.spring2.persistence.AuditFixtureRepository;
 import io.github.jasper.monitoring.spring.support.MonitoringFacts;
@@ -52,7 +53,7 @@ public class ReportExportService {
             request.getSelectedIds());
         String userId = contexts.identityContext().getUserId();
         MonitoringFacts.put(BuiltInFacts.ResourceId.class, reportId);
-        MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(rows));
+        MonitoringFacts.put(BuiltInFacts.DataCount.class, rows);
         if (request.getFields() != null && request.getFields().contains("sensitiveValue")) {
             MonitoringFacts.put(BuiltInFacts.Sensitivity.class, BuiltInFacts.SensitivityLevel.HIGH);
         }

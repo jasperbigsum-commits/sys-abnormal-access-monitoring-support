@@ -81,7 +81,7 @@ class ControlHandlerRegistryTest {
 
         ControlExecution execution = registry.find(ControlActionType.RATE_LIMIT).get().execute(command);
 
-        assertEquals(ControlStatus.SKIPPED, execution.getStatus());
+        assertEquals(ControlStatus.UNDEFINED, execution.getStatus());
         assertEquals("DEFAULT_TRIGGER_REQUIRES_HOST_HANDLER:RATE_LIMIT", execution.getFailureReason());
     }
 

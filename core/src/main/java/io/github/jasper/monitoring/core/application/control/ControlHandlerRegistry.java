@@ -76,7 +76,7 @@ public final class ControlHandlerRegistry {
 
     /**
      * Resolves only host or explicitly configured generic handlers. Framework fallback handlers
-     * are intentionally excluded because they cannot satisfy strict enforcement.
+     * are intentionally excluded so callers can detect and warn about undefined enforcement actions.
      */
     public Optional<ControlHandler> findExecutable(ControlActionType action) {
         Optional<ControlHandler> host = find(hostHandlers, action);

@@ -84,8 +84,8 @@ class Spring2RuntimeBoundaryAcceptanceTest {
     }
 
     @Test
-    @DisplayName("IA-09 enforce mode rejects fallback or missing control handlers")
-    void ia09_enforceModeRejectsFallbackOrMissingControlHandlers() {
+    @DisplayName("IA-09 enforce mode warns and returns undefined for missing control handlers")
+    void ia09_enforceModeReturnsUndefinedForMissingControlHandlers() {
         io.github.jasper.monitoring.spring2.autoconfigure.AbnormalAccessMonitorProperties properties =
             new io.github.jasper.monitoring.spring2.autoconfigure.AbnormalAccessMonitorProperties();
         properties.setMode(io.github.jasper.monitoring.api.MonitoringMode.ENFORCE);
@@ -93,15 +93,21 @@ class Spring2RuntimeBoundaryAcceptanceTest {
             new io.github.jasper.monitoring.core.application.control.ControlHandlerRegistry(
                 java.util.Collections.<ControlHandler>emptyList(),
                 io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger.defaults());
-        assertThrows(MonitoringConfigurationException.class,
-            () -> new io.github.jasper.monitoring.spring2.autoconfigure.AbnormalAccessMonitorAutoConfiguration()
-                .abnormalAccessControlCatalog(fallbackOnly, properties, rules));
+        ControlCatalog<ControlHandler> fallbackControls =
+            new io.github.jasper.monitoring.spring2.autoconfigure.AbnormalAccessMonitorAutoConfiguration()
+                .abnormalAccessControlCatalog(fallbackOnly, properties, rules);
         Set<ControlType> required = rules.requiredControlTypes();
         assertFalse(required.isEmpty());
         for (ControlType type : required) {
+            ControlHandler fallback = fallbackControls.require(type);
+            ControlActionType action = ControlActionType.valueOf(type.name());
+            assertTrue(fallback.isFallback());
+            assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.UNDEFINED,
+                fallback.execute(new ControlCommand("test-system", "missing:" + type.name(), "alert", "subject",
+                    action, null, "rule")).getStatus());
             ControlHandler handler = controls.require(type);
             assertFalse(handler.isFallback());
-            assertTrue(handler.supports(ControlActionType.valueOf(type.name())));
+            assertTrue(handler.supports(action));
         }
     }
 

@@ -7,5 +7,7 @@ public enum ControlStatus {
     SUCCEEDED,
     FAILED,
     SKIPPED,
-    REJECTED
+    REJECTED,
+    /** No host trigger is defined for the requested control action. */
+    UNDEFINED
 }

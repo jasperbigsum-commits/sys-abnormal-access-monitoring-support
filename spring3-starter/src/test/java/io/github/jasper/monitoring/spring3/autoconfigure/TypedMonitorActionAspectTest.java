@@ -16,6 +16,7 @@ import io.github.jasper.monitoring.api.fact.ActionFact;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactCatalog;
 import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.api.fact.StaticActionFact;
 import io.github.jasper.monitoring.core.application.DefaultMonitoringRuntime;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
@@ -26,6 +27,7 @@ import io.github.jasper.monitoring.core.port.EventRepository;
 import io.github.jasper.monitoring.spring.support.ActionFactExtractor;
 import io.github.jasper.monitoring.spring.support.MonitorActionContractValidator;
 import io.github.jasper.monitoring.spring.support.MonitoringFacts;
+import io.github.jasper.monitoring.spring.support.MonitoringGate;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -38,6 +40,37 @@ import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.http.ResponseEntity;
 
 class TypedMonitorActionAspectTest {
+    @Test
+    void includesStaticFactsInCheckpointDecisionsAndEvents() {
+        Fixture fixture = new Fixture();
+
+        fixture.proxy().staticFactCheckpoint();
+
+        assertEquals("report-static", fixture.events.last.getResourceId());
+        assertEquals(FactSource.HOST_PROVIDER, fixture.fact("resource_id").getSource());
+    }
+
+    @Test
+    void checkpointRejectsMissingRequiredFacts() {
+        Fixture fixture = new Fixture();
+
+        assertThrows(IllegalStateException.class, fixture.proxy()::checkpointWithoutRequiredFacts);
+    }
+
+    @Test
+    void checkpointRejectsInvalidFacts() {
+        Fixture fixture = new Fixture();
+
+        assertThrows(IllegalArgumentException.class, fixture.proxy()::checkpointWithInvalidFact);
+    }
+
+    @Test
+    void validatesRequiredFactsWhenTheActionDoesNotCallCheckpoint() {
+        Fixture fixture = new Fixture();
+
+        assertThrows(IllegalStateException.class, fixture.proxy()::withoutCheckpointOrRequiredFacts);
+    }
+
     @Test
     void combinesParameterAndRuntimeFactsWithIndependentSources() {
         Fixture fixture = new Fixture();
@@ -118,6 +151,10 @@ class TypedMonitorActionAspectTest {
         String throwsAfterRuntimeFact();
         String outer();
         String inner();
+        String checkpointWithoutRequiredFacts();
+        String checkpointWithInvalidFact();
+        String withoutCheckpointOrRequiredFacts();
+        String staticFactCheckpoint();
     }
 
     static class MonitoredService implements MonitoredApi {
@@ -153,6 +190,29 @@ class TypedMonitorActionAspectTest {
         public String inner() {
             MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(22L));
             return "inner";
+        }
+        @Override @MonitorAction(BuiltInActions.ReportExport.class)
+        public String checkpointWithoutRequiredFacts() {
+            MonitoringGate.checkpoint();
+            return "unreachable";
+        }
+        @Override @MonitorAction(BuiltInActions.ReportExport.class)
+        public String checkpointWithInvalidFact() {
+            MonitoringFacts.put(BuiltInFacts.ResourceId.class, "report-1");
+            MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(-1L));
+            MonitoringGate.checkpoint();
+            return "unreachable";
+        }
+        @Override @MonitorAction(BuiltInActions.ReportExport.class)
+        public String withoutCheckpointOrRequiredFacts() {
+            return "invalid";
+        }
+        @Override @MonitorAction(BuiltInActions.ReportExport.class)
+        @StaticActionFact(fact = BuiltInFacts.ResourceId.class, value = " report-static ")
+        public String staticFactCheckpoint() {
+            MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(12L));
+            MonitoringGate.checkpoint();
+            return "ok";
         }
     }
 

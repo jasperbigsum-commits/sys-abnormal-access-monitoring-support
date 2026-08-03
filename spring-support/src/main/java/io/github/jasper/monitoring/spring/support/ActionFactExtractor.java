@@ -3,6 +3,7 @@ package io.github.jasper.monitoring.spring.support;
 import io.github.jasper.monitoring.api.fact.FactCatalog;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactDefinition;
+import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.api.fact.FactType;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
@@ -51,6 +52,38 @@ public final class ActionFactExtractor {
             if (value != null) put(result, fact.getFactType(), value);
         }
         return result.build();
+    }
+
+    /** Validates completeness, source ownership, and values for one action invocation. */
+    public ActionFacts validate(MonitorActionContractValidator.MethodBinding binding,
+            ActionFacts actionFacts, Map<Class<? extends FactType<?>>, FactSource> sources) {
+        Objects.requireNonNull(binding, "binding");
+        Objects.requireNonNull(actionFacts, "actionFacts");
+        Objects.requireNonNull(sources, "sources");
+        if (!actionFacts.asMap().keySet().equals(sources.keySet()) || sources.containsValue(null)) {
+            throw new IllegalStateException("Every action fact must have exactly one source");
+        }
+        for (Class<? extends FactType<?>> required : binding.getAction().getRequiredFacts()) {
+            if (!actionFacts.asMap().containsKey(required)) {
+                throw new IllegalStateException("Required action fact is missing: " + required.getName());
+            }
+        }
+        ActionFacts.Builder validated = ActionFacts.builder();
+        for (Map.Entry<Class<? extends FactType<?>>, Object> entry : actionFacts.asMap().entrySet()) {
+            Class<? extends FactType<?>> factType = entry.getKey();
+            if (!binding.getAction().getRequiredFacts().contains(factType)
+                    && !binding.getAction().getOptionalFacts().contains(factType)) {
+                throw new IllegalStateException("Fact is not declared by action: " + factType.getName());
+            }
+            FactSource source = sources.get(factType);
+            FactDefinition<?> definition = facts.require(factType);
+            if (!binding.getAction().getAllowedSources(factType).contains(source)
+                    || !definition.allows(source)) {
+                throw new IllegalStateException("Fact source is not approved: " + factType.getName());
+            }
+            put(validated, factType, definition.validateRaw(entry.getValue()));
+        }
+        return validated.build();
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

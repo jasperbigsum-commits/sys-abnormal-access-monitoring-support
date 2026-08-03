@@ -86,7 +86,7 @@ import org.springframework.scheduling.annotation.Scheduled;
  * 监测组件的 Spring Boot 3（{@code jakarta.servlet}）自动配置入口。
  *
  * <p>该配置要求存在 MyBatis 监测持久化，宿主提供的同类型 Bean 始终优先于默认实现。
- * 资源授权默认拒绝，{@code ENFORCE} 模式要求宿主为规则可能产生的控制动作提供处理器。</p>
+ * 资源授权默认拒绝；{@code ENFORCE} 模式缺少宿主控制处理器时记录警告并返回未定义结果。</p>
  *
  * <p>认证监测位于 {@code abnormal.access.monitor.authentication}，默认启用；启用时必须
  * 配置稳定且解码后不少于 32 字节的 Base64 {@code subject-key}。</p>
@@ -96,6 +96,8 @@ import org.springframework.scheduling.annotation.Scheduled;
     havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(AbnormalAccessMonitorProperties.class)
 public class AbnormalAccessMonitorAutoConfiguration {
+    private static final java.util.logging.Logger LOGGER = java.util.logging.Logger.getLogger(
+        AbnormalAccessMonitorAutoConfiguration.class.getName());
     /**
      * 提供默认登录主体规范化器，将登录标识去除首尾空白并转换为小写。
      *
@@ -213,18 +215,25 @@ public class AbnormalAccessMonitorAutoConfiguration {
         Set<ControlType> required = rules.requiredControlTypes();
         Set<ControlType> missing = new HashSet<ControlType>(required);
         for (ControlType type : ControlType.values()) {
+            ControlActionType action = ControlActionType.valueOf(type.name());
+            java.util.Optional<ControlHandler> executable = handlers.findExecutable(action);
             java.util.Optional<ControlHandler> handler = properties.getMode() == MonitoringMode.ENFORCE
-                ? handlers.findExecutable(ControlActionType.valueOf(type.name()))
-                : handlers.find(ControlActionType.valueOf(type.name()));
+                ? executable : handlers.find(action);
+            if (properties.getMode() == MonitoringMode.ENFORCE && !handler.isPresent()
+                && required.contains(type)) {
+                handler = java.util.Optional.<ControlHandler>of(DefaultControlActionTrigger.forAction(action));
+            }
             if (handler.isPresent()) {
                 catalog.bind(type, handler.get());
-                missing.remove(type);
+                if (properties.getMode() != MonitoringMode.ENFORCE || executable.isPresent()) {
+                    missing.remove(type);
+                }
             }
         }
         if (properties.getMode() == MonitoringMode.ENFORCE) {
             if (!missing.isEmpty()) {
-                throw new MonitoringConfigurationException(MonitoringErrorCode.ENFORCEMENT_HANDLER_REQUIRED,
-                    "ENFORCE mode requires handlers for built-in rule controls: " + missing);
+                LOGGER.warning("ENFORCE mode has no ControlTrigger for built-in rule controls; "
+                    + "undefined results will be returned: " + missing);
             }
             catalog.enforce(required);
         }

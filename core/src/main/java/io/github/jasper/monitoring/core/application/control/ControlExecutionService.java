@@ -90,9 +90,10 @@ public final class ControlExecutionService {
             if (!store.reserve(command, ControlStatus.PENDING, now()))
                 return store.find(command.getIdempotencyKey()).get().execution().replay();
             pending = store.find(command.getIdempotencyKey()).get();
-        } else if (retry && existing.get().status() == ControlStatus.FAILED) {
+        } else if (retry && (existing.get().status() == ControlStatus.FAILED
+            || existing.get().status() == ControlStatus.UNDEFINED)) {
             requireVersion(existing.get(), expectedVersion);
-            pending = store.transition(command.getIdempotencyKey(), existing.get().version(), ControlStatus.FAILED,
+            pending = store.transition(command.getIdempotencyKey(), existing.get().version(), existing.get().status(),
                 ControlStatus.PENDING, null, now());
         } else {
             return existing.get().execution().replay();
@@ -109,7 +110,7 @@ public final class ControlExecutionService {
             result = ControlExecution.failed(command.getIdempotencyKey(), "CONTROL_HANDLER_FAILED");
         }
         if (result.getStatus() != ControlStatus.SUCCEEDED && result.getStatus() != ControlStatus.FAILED
-            && result.getStatus() != ControlStatus.SKIPPED)
+            && result.getStatus() != ControlStatus.SKIPPED && result.getStatus() != ControlStatus.UNDEFINED)
             result = ControlExecution.failed(command.getIdempotencyKey(), "INVALID_HANDLER_STATUS");
         return store.transition(command.getIdempotencyKey(), pending.version(), ControlStatus.PENDING,
             result.getStatus(), result.getFailureReason(), now()).execution();

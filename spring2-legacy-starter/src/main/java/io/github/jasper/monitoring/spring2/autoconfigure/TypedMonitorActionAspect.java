@@ -92,10 +92,12 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
         ActionFacts.Builder merged = ActionFacts.builder();
         Map<Class<? extends FactType<?>>, FactSource> sources =
             new LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
+        addFacts(merged, sources, binding.getStaticFacts(), FactSource.HOST_PROVIDER);
         addFacts(merged, sources, parameterFacts, FactSource.METHOD_PARAMETER);
         addFacts(merged, sources, runtimeFacts, FactSource.HOST_PROVIDER);
+        ActionFacts validated = facts.validate(binding, merged.build(), sources);
         monitoring.monitor(ActionExecution.of(binding.getActionType(), context.requestContext(),
-            context.identityContext(), outcome, merged.build(), sources));
+            context.identityContext(), outcome, validated, sources));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

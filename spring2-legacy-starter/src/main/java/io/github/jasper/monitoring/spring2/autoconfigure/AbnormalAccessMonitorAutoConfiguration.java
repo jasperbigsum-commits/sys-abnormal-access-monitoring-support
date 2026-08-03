@@ -80,8 +80,8 @@ import org.springframework.scheduling.annotation.Scheduled;
  * Spring Boot 2 ({@code javax.servlet}) auto-configuration for the monitoring component.
  *
  * <p>The configuration requires MyBatis-backed monitoring persistence. Host beans always take
- * precedence over defaults. Resource authorization defaults to deny and {@code ENFORCE} requires
- * at least one host {@link ControlHandler}.</p>
+ * precedence over defaults. Resource authorization defaults to deny. Missing host controls in
+ * {@code ENFORCE} mode produce warnings and undefined execution results.</p>
  */
 @Configuration
 @AutoConfigureAfter(name = "org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration")
@@ -89,6 +89,8 @@ import org.springframework.scheduling.annotation.Scheduled;
     havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(AbnormalAccessMonitorProperties.class)
 public class AbnormalAccessMonitorAutoConfiguration {
+    private static final java.util.logging.Logger LOGGER = java.util.logging.Logger.getLogger(
+        AbnormalAccessMonitorAutoConfiguration.class.getName());
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(SqlSessionFactory.class)
@@ -160,18 +162,25 @@ public class AbnormalAccessMonitorAutoConfiguration {
         Set<ControlType> required = rules.requiredControlTypes();
         Set<ControlType> missing = new HashSet<ControlType>(required);
         for (ControlType type : ControlType.values()) {
+            ControlActionType action = ControlActionType.valueOf(type.name());
+            java.util.Optional<ControlHandler> executable = handlers.findExecutable(action);
             java.util.Optional<ControlHandler> handler = properties.getMode() == MonitoringMode.ENFORCE
-                ? handlers.findExecutable(ControlActionType.valueOf(type.name()))
-                : handlers.find(ControlActionType.valueOf(type.name()));
+                ? executable : handlers.find(action);
+            if (properties.getMode() == MonitoringMode.ENFORCE && !handler.isPresent()
+                && required.contains(type)) {
+                handler = java.util.Optional.<ControlHandler>of(DefaultControlActionTrigger.forAction(action));
+            }
             if (handler.isPresent()) {
                 catalog.bind(type, handler.get());
-                missing.remove(type);
+                if (properties.getMode() != MonitoringMode.ENFORCE || executable.isPresent()) {
+                    missing.remove(type);
+                }
             }
         }
         if (properties.getMode() == MonitoringMode.ENFORCE) {
             if (!missing.isEmpty()) {
-                throw new MonitoringConfigurationException(MonitoringErrorCode.ENFORCEMENT_HANDLER_REQUIRED,
-                    "ENFORCE mode requires handlers for built-in rule controls: " + missing);
+                LOGGER.warning("ENFORCE mode has no ControlTrigger for built-in rule controls; "
+                    + "undefined results will be returned: " + missing);
             }
             catalog.enforce(required);
         }

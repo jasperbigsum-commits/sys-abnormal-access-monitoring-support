@@ -53,18 +53,23 @@ public final class ControlExecution {
     public static ControlExecution awaitingApproval(String key) { return new ControlExecution(key, key, ControlStatus.AWAITING_APPROVAL, null, false); }
     public static ControlExecution rejected(String key, String reason) { return new ControlExecution(key, key, ControlStatus.REJECTED, reason, false); }
     /**
-     * 创建由框架默认触发器返回的可重试跳过结果。
+     * 创建由框架默认触发器返回的可重试未定义结果。
      *
      * <p>该结果使用独立且可持久化识别的控制记录标识，以区分宿主主动返回的
      * {@link #skipped(String, String)}。当宿主后续接入同一动作时，控制服务可安全地重试它。</p>
      *
      * @param key 本次控制动作的幂等键
      * @param action 缺少宿主实现的控制动作
-     * @return 默认回退产生的跳过结果
+     * @return 默认回退产生的未定义结果
      */
-    public static ControlExecution fallbackSkipped(String key, ControlActionType action) {
-        return new ControlExecution(defaultFallbackControlId(key), key, ControlStatus.SKIPPED,
+    public static ControlExecution fallbackUndefined(String key, ControlActionType action) {
+        return new ControlExecution(defaultFallbackControlId(key), key, ControlStatus.UNDEFINED,
             "DEFAULT_TRIGGER_REQUIRES_HOST_HANDLER:" + action, false);
+    }
+    /** @deprecated use {@link #fallbackUndefined(String, ControlActionType)}. */
+    @Deprecated
+    public static ControlExecution fallbackSkipped(String key, ControlActionType action) {
+        return fallbackUndefined(key, action);
     }
     /**
      * 从持久化记录恢复一次控制执行。
@@ -74,7 +79,7 @@ public final class ControlExecution {
      * @param controlId 持久化的控制记录标识
      * @param key 持久化的幂等键
      * @param status 持久化的执行状态
-     * @param reason 持久化的失败或跳过原因
+     * @param reason 持久化的失败、跳过或未定义原因
      * @return 未标记重放的恢复结果
      */
     public static ControlExecution restored(String controlId, String key, ControlStatus status, String reason) {
@@ -88,7 +93,7 @@ public final class ControlExecution {
     public String getIdempotencyKey() { return idempotencyKey; }
     /** @return 宿主处理器报告的执行状态 */
     public ControlStatus getStatus() { return status; }
-    /** @return 不包含敏感信息的失败或跳过原因；成功时通常为 {@code null} */
+    /** @return 不包含敏感信息的失败、跳过或未定义原因；成功时通常为 {@code null} */
     public String getFailureReason() { return failureReason; }
     /** @return 是否从已有幂等记录返回，而非再次调用宿主处理器 */
     public boolean isIdempotentReplay() { return idempotentReplay; }
@@ -97,7 +102,7 @@ public final class ControlExecution {
 
     /** @return 当前结果是否来自框架默认回退触发器 */
     public boolean isDefaultFallback() {
-        return status == ControlStatus.SKIPPED && controlId != null && idempotencyKey != null
+        return status == ControlStatus.UNDEFINED && controlId != null && idempotencyKey != null
             && controlId.equals(defaultFallbackControlId(idempotencyKey));
     }
 

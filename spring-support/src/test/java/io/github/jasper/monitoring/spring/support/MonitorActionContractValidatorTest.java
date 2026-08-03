@@ -13,6 +13,7 @@ import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.fact.FactBinding;
 import io.github.jasper.monitoring.api.fact.FactCatalog;
 import io.github.jasper.monitoring.api.fact.FactSource;
+import io.github.jasper.monitoring.api.fact.StaticActionFact;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,43 @@ class MonitorActionContractValidatorTest {
         assertThrows(MonitoringConfigurationException.class, () -> validator.validate(method));
     }
 
+    @Test
+    void compilesNormalizedStaticFactsIntoTheMethodBinding() throws Exception {
+        MonitorActionContractValidator.MethodBinding binding =
+            validator(Collections.<FactBinding>emptyList()).validate(
+                Fixture.class.getMethod("staticExport"));
+
+        assertEquals("report-7", binding.getStaticFacts().get(BuiltInFacts.ResourceId.class));
+    }
+
+    @Test
+    void rejectsInvalidStaticFactDeclarations() throws Exception {
+        MonitorActionContractValidator validator = validator(Collections.<FactBinding>emptyList());
+
+        assertThrows(MonitoringConfigurationException.class, () -> validator.validate(
+            Fixture.class.getMethod("invalidStaticValue")));
+        assertThrows(MonitoringConfigurationException.class, () -> validator.validate(
+            Fixture.class.getMethod("undeclaredStaticFact")));
+        assertThrows(MonitoringConfigurationException.class, () -> validator.validate(
+            Fixture.class.getMethod("invalidStaticSource")));
+        assertThrows(MonitoringConfigurationException.class, () -> validator.validate(
+            Fixture.class.getMethod("duplicateStaticFact")));
+        assertThrows(MonitoringConfigurationException.class, () -> validator.validate(
+            Fixture.class.getMethod("staticAndParameterDuplicate", String.class)));
+    }
+
+    @Test
+    void rejectsDuplicateProviderAndStaticFactProducer() throws Exception {
+        FactBinding provider = FactBinding.forAction(BuiltInActions.ReportExport.class,
+            FactSource.HOST_PROVIDER, execution -> ActionFacts.builder()
+                .put(BuiltInFacts.ResourceId.class, "provider-report").build(),
+            BuiltInFacts.ResourceId.class);
+
+        assertThrows(MonitoringConfigurationException.class, () ->
+            validator(Collections.singletonList(provider)).validate(
+                Fixture.class.getMethod("staticExport")));
+    }
+
     private static MonitorActionContractValidator validator(java.util.List<FactBinding> bindings) {
         ActionCatalog actions = new ActionCatalog();
         BuiltInActions.registerInto(actions);
@@ -70,5 +108,31 @@ class MonitorActionContractValidatorTest {
         @MonitorAction(BuiltInActions.ReportExport.class)
         public void duplicate(@ActionFact(BuiltInFacts.DataCount.class) Long first,
                 @ActionFact(BuiltInFacts.DataCount.class) Long second) { }
+
+        @MonitorAction(BuiltInActions.ReportExport.class)
+        @StaticActionFact(fact = BuiltInFacts.ResourceId.class, value = " report-7 ")
+        public void staticExport() { }
+
+        @MonitorAction(BuiltInActions.ReportExport.class)
+        @StaticActionFact(fact = BuiltInFacts.DataCount.class, value = "-1")
+        public void invalidStaticValue() { }
+
+        @MonitorAction(BuiltInActions.Query.class)
+        @StaticActionFact(fact = BuiltInFacts.TargetUserId.class, value = "user-1")
+        public void undeclaredStaticFact() { }
+
+        @MonitorAction(BuiltInActions.Login.class)
+        @StaticActionFact(fact = BuiltInFacts.LoginSubjectKey.class, value = "subject-1")
+        public void invalidStaticSource() { }
+
+        @MonitorAction(BuiltInActions.ReportExport.class)
+        @StaticActionFact(fact = BuiltInFacts.ResourceId.class, value = "report-1")
+        @StaticActionFact(fact = BuiltInFacts.ResourceId.class, value = "report-2")
+        public void duplicateStaticFact() { }
+
+        @MonitorAction(BuiltInActions.ReportExport.class)
+        @StaticActionFact(fact = BuiltInFacts.ResourceId.class, value = "report-1")
+        public void staticAndParameterDuplicate(
+                @ActionFact(BuiltInFacts.ResourceId.class) String resourceId) { }
     }
 }

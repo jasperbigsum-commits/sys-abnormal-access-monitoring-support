@@ -5,6 +5,7 @@ import io.github.jasper.monitoring.api.control.ControlCatalog;
 import io.github.jasper.monitoring.api.control.ControlStatus;
 import io.github.jasper.monitoring.api.control.ControlType;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
+import io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
 import io.github.jasper.monitoring.core.port.ControlHandler;
@@ -77,6 +78,25 @@ class ControlConcurrencyTest {
             release.countDown(); assertEquals(ControlStatus.SUCCEEDED, one.get().getStatus());
             assertEquals(1, effects.get());
         } finally { release.countDown(); pool.shutdownNow(); }
+    }
+
+    @Test void persistsUndefinedResultWhenTheHostTriggerIsMissing() throws Exception {
+        DataSource source = new UnpooledDataSource("org.h2.Driver",
+            "jdbc:h2:mem:undefined-control;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        schema(source);
+        ControlCatalog<ControlHandler> catalog = ControlCatalog.<ControlHandler>builder()
+            .bind(ControlType.RATE_LIMIT, DefaultControlActionTrigger.forAction(ControlActionType.RATE_LIMIT))
+            .freeze();
+        ControlExecutionService service = new ControlExecutionService(
+            new MyBatisControlExecutionStore(factory(source)), catalog, Clock.systemUTC());
+        ControlCommand command = new ControlCommand("test-system", "undefined-db", "alert", "v1:subject",
+            ControlActionType.RATE_LIMIT, null, "AUTH-TEST");
+
+        ControlExecution result = service.execute(command);
+
+        assertEquals(ControlStatus.UNDEFINED, result.getStatus());
+        assertEquals("UNDEFINED", status(source, command.getIdempotencyKey()));
+        assertEquals(ControlStatus.UNDEFINED, service.execute(command).getStatus());
     }
 
     @Test void persistsReplayRetryApprovalRejectAndPropagatesDatabaseFailure() throws Exception {

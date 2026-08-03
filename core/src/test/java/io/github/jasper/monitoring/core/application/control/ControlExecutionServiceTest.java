@@ -62,6 +62,21 @@ import static org.junit.jupiter.api.Assertions.*;
         assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.SUCCEEDED, retries.retry(lock).getStatus());
     }
 
+    @Test void preservesUndefinedStatusWhenTheHostTriggerIsMissing() {
+        RecordingStore store = new RecordingStore();
+        ControlCatalog<ControlHandler> catalog = ControlCatalog.<ControlHandler>builder()
+            .bind(ControlType.RATE_LIMIT, DefaultControlActionTrigger.forAction(ControlActionType.RATE_LIMIT))
+            .freeze();
+        ControlExecutionService service = service(store, catalog);
+
+        ControlExecution execution = service.execute(new ControlCommand("test-system", "undefined", "a", "s",
+            ControlActionType.RATE_LIMIT, null, "r"));
+
+        assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.UNDEFINED, execution.getStatus());
+        assertEquals(io.github.jasper.monitoring.api.control.ControlStatus.UNDEFINED, store.value.status());
+        assertEquals("DEFAULT_TRIGGER_REQUIRES_HOST_HANDLER:RATE_LIMIT", execution.getFailureReason());
+    }
+
     private static ControlExecutionService service(RecordingStore store, ControlCatalog<ControlHandler> catalog) {
         return new ControlExecutionService(store, catalog, Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
     }
@@ -103,6 +118,7 @@ import static org.junit.jupiter.api.Assertions.*;
                 case AWAITING_APPROVAL: return ControlExecution.awaitingApproval(key);
                 case SUCCEEDED: return ControlExecution.succeeded(key);
                 case FAILED: return ControlExecution.failed(key, reason);
+                case UNDEFINED: return ControlExecution.restored(key, key, status, reason);
                 case REJECTED: return ControlExecution.rejected(key, reason);
                 default: return ControlExecution.skipped(key, reason);
             }

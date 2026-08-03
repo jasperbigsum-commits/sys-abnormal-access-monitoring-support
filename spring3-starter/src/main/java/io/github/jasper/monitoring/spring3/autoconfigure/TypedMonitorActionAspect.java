@@ -57,8 +57,8 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
         long startedAt = System.nanoTime();
         MonitoringFactScope scope = MonitoringFactScope.open(binding.getActionType(), new MonitoringCheckpoint() {
             @Override public ActionDecision decide(ActionFacts runtimeFacts) {
+                MergedFacts merged = validatedFacts(binding, suppliedFacts, runtimeFacts);
                 try {
-                    MergedFacts merged = mergedFacts(suppliedFacts, runtimeFacts);
                     return monitoring.decide(ActionExecution.of(binding.getActionType(),
                         context.requestContext(), context.identityContext(), ActionOutcome.success(0L),
                         merged.facts, merged.sources));
@@ -120,15 +120,23 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
 
     private void monitor(MonitorActionContractValidator.MethodBinding binding,
             ActionFacts parameterFacts, ActionFacts runtimeFacts, ActionOutcome outcome) {
-        MergedFacts merged = mergedFacts(parameterFacts, runtimeFacts);
+        MergedFacts merged = validatedFacts(binding, parameterFacts, runtimeFacts);
         monitoring.monitor(ActionExecution.of(binding.getActionType(), context.requestContext(),
             context.identityContext(), outcome, merged.facts, merged.sources));
     }
 
-    private static MergedFacts mergedFacts(ActionFacts parameterFacts, ActionFacts runtimeFacts) {
+    private MergedFacts validatedFacts(MonitorActionContractValidator.MethodBinding binding,
+            ActionFacts parameterFacts, ActionFacts runtimeFacts) {
+        MergedFacts merged = mergedFacts(binding.getStaticFacts(), parameterFacts, runtimeFacts);
+        return new MergedFacts(facts.validate(binding, merged.facts, merged.sources), merged.sources);
+    }
+
+    private static MergedFacts mergedFacts(ActionFacts staticFacts,
+            ActionFacts parameterFacts, ActionFacts runtimeFacts) {
         ActionFacts.Builder merged = ActionFacts.builder();
         Map<Class<? extends FactType<?>>, FactSource> sources =
             new LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
+        addFacts(merged, sources, staticFacts, FactSource.HOST_PROVIDER);
         addFacts(merged, sources, parameterFacts, FactSource.METHOD_PARAMETER);
         addFacts(merged, sources, runtimeFacts, FactSource.HOST_PROVIDER);
         return new MergedFacts(merged.build(), sources);

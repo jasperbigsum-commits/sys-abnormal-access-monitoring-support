@@ -100,12 +100,11 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     }
 
     @Test
-    void refusesEnforceModeWithoutExecutableControlHandler() {
+    void warnsAndStartsEnforceModeWithoutExecutableControlHandler() {
         contextRunner.withPropertyValues("abnormal.access.monitor.mode=ENFORCE")
             .run(context -> {
-                assertThat(context).hasFailed();
-                assertThat(findCause(context.getStartupFailure()).getErrorCode())
-                    .isEqualTo(MonitoringErrorCode.ENFORCEMENT_HANDLER_REQUIRED);
+                assertThat(context).hasNotFailed();
+                assertThat(context).hasSingleBean(io.github.jasper.monitoring.api.control.ControlCatalog.class);
             });
     }
 

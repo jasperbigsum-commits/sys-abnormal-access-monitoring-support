@@ -7,11 +7,13 @@ import io.github.jasper.monitoring.api.action.MonitorAction;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.api.fact.ActionFact;
+import io.github.jasper.monitoring.api.fact.ActionFacts;
 import io.github.jasper.monitoring.api.fact.FactBinding;
 import io.github.jasper.monitoring.api.fact.FactCatalog;
 import io.github.jasper.monitoring.api.fact.FactDefinition;
 import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.api.fact.FactType;
+import io.github.jasper.monitoring.api.fact.StaticActionFact;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -60,6 +62,28 @@ public final class MonitorActionContractValidator {
         List<ParameterFact> result = new ArrayList<ParameterFact>();
         Set<Class<? extends FactType<?>>> ownership =
             new LinkedHashSet<Class<? extends FactType<?>>>();
+        ActionFacts.Builder staticFacts = ActionFacts.builder();
+        for (StaticActionFact staticFact : method.getAnnotationsByType(StaticActionFact.class)) {
+            Class<? extends FactType<?>> factType = staticFact.fact();
+            FactDefinition<?> definition = facts.require(factType);
+            if (!action.getRequiredFacts().contains(factType)
+                    && !action.getOptionalFacts().contains(factType)) {
+                throw configuration("StaticActionFact is not declared by the monitored action");
+            }
+            if (!action.getAllowedSources(factType).contains(FactSource.HOST_PROVIDER)
+                    || !definition.allows(FactSource.HOST_PROVIDER)) {
+                throw configuration("StaticActionFact does not allow HOST_PROVIDER source");
+            }
+            if (!ownership.add(factType)) {
+                throw configuration("Multiple declarations produce the same action fact");
+            }
+            rejectProviderConflict(actionType, factType);
+            try {
+                putRaw(staticFacts, factType, definition.decode(staticFact.value()));
+            } catch (RuntimeException invalid) {
+                throw configuration("StaticActionFact value failed validation");
+            }
+        }
         Annotation[][] annotations = method.getParameterAnnotations();
         for (int index = 0; index < annotations.length; index++) {
             for (Annotation annotation : annotations[index]) {
@@ -76,14 +100,14 @@ public final class MonitorActionContractValidator {
                     throw configuration("ActionFact does not allow METHOD_PARAMETER source");
                 }
                 if (!ownership.add(factType)) {
-                    throw configuration("Multiple method parameters produce the same ActionFact");
+                    throw configuration("Multiple declarations produce the same action fact");
                 }
                 rejectProviderConflict(actionType, factType);
                 ActionFactExtractor.validatePath(fact.path());
                 result.add(new ParameterFact(index, factType, fact.path()));
             }
         }
-        return new MethodBinding(actionType, action, result);
+        return new MethodBinding(actionType, action, result, staticFacts.build());
     }
 
     private void rejectProviderConflict(Class<? extends ActionType> actionType,
@@ -105,17 +129,20 @@ public final class MonitorActionContractValidator {
         private final Class<? extends ActionType> actionType;
         private final ActionDefinition action;
         private final List<ParameterFact> facts;
+        private final ActionFacts staticFacts;
 
         private MethodBinding(Class<? extends ActionType> actionType, ActionDefinition action,
-                List<ParameterFact> facts) {
+                List<ParameterFact> facts, ActionFacts staticFacts) {
             this.actionType = actionType;
             this.action = action;
             this.facts = Collections.unmodifiableList(new ArrayList<ParameterFact>(facts));
+            this.staticFacts = staticFacts;
         }
 
         public Class<? extends ActionType> getActionType() { return actionType; }
         public ActionDefinition getAction() { return action; }
         public List<ParameterFact> getFacts() { return facts; }
+        public ActionFacts getStaticFacts() { return staticFacts; }
     }
 
     /** One fact owned by one zero-based method parameter. */
@@ -133,5 +160,11 @@ public final class MonitorActionContractValidator {
         public int getParameterIndex() { return parameterIndex; }
         public Class<? extends FactType<?>> getFactType() { return factType; }
         public String getPath() { return path; }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void putRaw(ActionFacts.Builder builder,
+            Class<? extends FactType<?>> factType, Object value) {
+        builder.put((Class) factType, value);
     }
 }

@@ -15,7 +15,7 @@ import java.util.Objects;
  * 由 {@link ControlActionType} 驱动的安全默认触发器。
  *
  * <p>每个非 {@link ControlActionType#RECORD} 动作都有一个对应实例。它不会尝试猜测宿主的
- * 限流、会话、授权或审批语义，而是返回可审计的 {@code SKIPPED} 结果。注册表始终优先解析
+ * 限流、会话、授权或审批语义，而是返回可审计的 {@code UNDEFINED} 结果。注册表始终优先解析
  * 宿主处理器，因此宿主 {@link ControlHandler} 或 {@code @ControlTrigger} 绑定可直接覆盖同一动作。
  * 回退触发器本身不满足 {@code ENFORCE} 的宿主控制能力要求。</p>
  */
@@ -36,7 +36,7 @@ public final class DefaultControlActionTrigger implements ControlHandler {
      * 返回指定动作的默认回退触发器。
      *
      * @param action 非 {@link ControlActionType#RECORD} 的控制动作
-     * @return 仅记录跳过结果的默认触发器
+     * @return 仅记录未定义结果的默认触发器
      */
     public static DefaultControlActionTrigger forAction(ControlActionType action) {
         return new DefaultControlActionTrigger(action);
@@ -68,7 +68,7 @@ public final class DefaultControlActionTrigger implements ControlHandler {
             return ControlExecution.failed(command.getIdempotencyKey(),
                 "DEFAULT_TRIGGER_UNSUPPORTED_ACTION:" + command.getAction());
         }
-        return ControlExecution.fallbackSkipped(command.getIdempotencyKey(), action);
+        return ControlExecution.fallbackUndefined(command.getIdempotencyKey(), action);
     }
 
     private static List<ControlHandler> createDefaults() {
