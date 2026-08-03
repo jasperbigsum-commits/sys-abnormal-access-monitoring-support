@@ -41,6 +41,7 @@ public final class SecurityEvent {
     private final String sourceIp;
     private final String deviceIdHash;
     private final String sessionIdHash;
+    private final String attemptedAccountHash;
     private final String requestId;
     private final String traceId;
     private final String action;
@@ -70,6 +71,7 @@ public final class SecurityEvent {
         this.sourceIp = builder.sourceIp;
         this.deviceIdHash = builder.deviceIdHash;
         this.sessionIdHash = builder.sessionIdHash;
+        this.attemptedAccountHash = builder.attemptedAccountHash;
         this.requestId = builder.requestId;
         this.traceId = builder.traceId;
         this.action = builder.action;
@@ -122,6 +124,7 @@ public final class SecurityEvent {
             .occurredAt(draft.getOccurredAt()).receivedAt(receivedAt)
             .userId(draft.getUserId()).accountType(draft.getAccountType()).roleIds(draft.getRoleIds())
             .sourceIp(draft.getSourceIp()).deviceIdHash(draft.getDeviceIdHash()).sessionIdHash(draft.getSessionIdHash())
+            .attemptedAccountHash(draft.getAttemptedAccountHash())
             .requestId(draft.getRequestId()).traceId(draft.getTraceId()).action(draft.getAction()).result(draft.getResult())
             .reasonCode(draft.getReasonCode()).resourceType(draft.getResourceType()).resourceId(draft.getResourceId())
             .orgScope(draft.getOrgScope()).dataCount(draft.getDataCount()).dataCountKnown(draft.hasDataCount())
@@ -154,6 +157,8 @@ public final class SecurityEvent {
     public String getDeviceIdHash() { return deviceIdHash; }
     /** @return 已哈希的会话标识；不可保存会话原文 */
     public String getSessionIdHash() { return sessionIdHash; }
+    /** @return 本次登录尝试账号的不可逆关联值；非认证事件可为 {@code null} */
+    public String getAttemptedAccountHash() { return attemptedAccountHash; }
     /** @return 宿主请求标识；未提供时可为 {@code null} */
     public String getRequestId() { return requestId; }
     /** @return 与宿主日志链路关联的追踪标识；未提供时可为 {@code null} */
@@ -231,6 +236,7 @@ public final class SecurityEvent {
         private String sourceIp;
         private String deviceIdHash;
         private String sessionIdHash;
+        private String attemptedAccountHash;
         private String requestId;
         private String traceId;
         private String action;
@@ -269,6 +275,8 @@ public final class SecurityEvent {
         public Builder deviceIdHash(String value) { deviceIdHash = value; return this; }
         /** @param value 已哈希的会话标识 @return 当前构建器 */
         public Builder sessionIdHash(String value) { sessionIdHash = value; return this; }
+        /** @param value 已验证的、不透明登录主体哈希 @return 当前构建器 */
+        public Builder attemptedAccountHash(String value) { attemptedAccountHash = value; return this; }
         /** @param value 宿主请求标识 @return 当前构建器 */
         public Builder requestId(String value) { requestId = value; return this; }
         /** @param value 宿主日志链路追踪标识 @return 当前构建器 */

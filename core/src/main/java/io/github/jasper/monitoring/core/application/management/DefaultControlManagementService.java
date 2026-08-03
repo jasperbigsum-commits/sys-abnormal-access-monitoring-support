@@ -18,17 +18,32 @@ import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.ControlExecution;
 import io.github.jasper.monitoring.core.port.ManagementQueryRepository;
 import io.github.jasper.monitoring.core.port.MonitoringTransaction;
+import io.github.jasper.monitoring.core.port.WhitelistRepository;
+import io.github.jasper.monitoring.core.domain.WhitelistEntry;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.UUID;
 import java.util.Objects;
 
 /** Authorized control lifecycle operations. Host execution remains owned by the durable control worker. */
 public final class DefaultControlManagementService extends AbstractManagementService
         implements ControlManagementService {
     private final ControlExecutionService executions;
+    private final WhitelistRepository whitelists;
+    private final Clock clock;
 
     public DefaultControlManagementService(ManagementAccessGuard access, ManagementQueryRepository queries,
                                            MonitoringTransaction transaction, ControlExecutionService executions) {
+        this(access, queries, transaction, executions, null, Clock.systemUTC());
+    }
+
+    public DefaultControlManagementService(ManagementAccessGuard access, ManagementQueryRepository queries,
+                                           MonitoringTransaction transaction, ControlExecutionService executions,
+                                           WhitelistRepository whitelists, Clock clock) {
         super(access, queries, transaction);
         this.executions = Objects.requireNonNull(executions, "executions");
+        this.whitelists = whitelists;
+        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     @Override
@@ -95,6 +110,7 @@ public final class DefaultControlManagementService extends AbstractManagementSer
         });
         if (action == 0) {
             executions.approve(control, command.getExpectedVersion());
+            issuePassIfRequested(actor, control, (ControlApprovalCommand) command);
         } else if (action == 1) {
             executions.reject(control.getIdempotencyKey(), command.getReason(), command.getExpectedVersion());
         } else {
@@ -105,5 +121,18 @@ public final class DefaultControlManagementService extends AbstractManagementSer
             success(actor, operation, "control", id);
             return view;
         });
+    }
+
+    private void issuePassIfRequested(ManagementActor actor, ControlCommand control,
+                                      ControlApprovalCommand approval) {
+        Instant expiresAt = approval.getPassExpiresAt();
+        if (expiresAt == null) return;
+        if (whitelists == null) throw new IllegalStateException("Temporary passes are not configured");
+        if (!expiresAt.isAfter(Instant.now(clock))) throw new IllegalArgumentException("passExpiresAt must be in the future");
+        if (control.getRuleId() == null || control.getRuleId().trim().isEmpty()) {
+            throw new IllegalStateException("Control has no rule scope for a temporary pass");
+        }
+        whitelists.add(WhitelistEntry.issued(UUID.randomUUID().toString(), control.getSystemId(),
+            control.getRuleId(), control.getSubject(), expiresAt));
     }
 }

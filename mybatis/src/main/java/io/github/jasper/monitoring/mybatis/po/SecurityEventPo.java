@@ -32,6 +32,8 @@ public final class SecurityEventPo {
     private String deviceIdHash;
     /** 会话标识的哈希值。 */
     private String sessionIdHash;
+    /** 本次登录尝试账号的不可逆关联值。 */
+    private String attemptedAccountHash;
     /** 请求关联标识。 */
     private String requestId;
     /** 分布式链路追踪标识。 */

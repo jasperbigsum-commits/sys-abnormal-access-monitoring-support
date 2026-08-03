@@ -304,7 +304,7 @@ class Spring3AuditWebAcceptanceTest {
     }
 
     @Test
-    @DisplayName("TC-08 high-risk export is stopped before XLSX generation")
+    @DisplayName("TC-08 high-risk export is stopped and audited outside the host transaction")
     void tc08_highRiskExportIsStoppedBeforeXlsxGeneration() throws Exception {
         ResponseEntity<byte[]> allowed=export("audit-exporter",exportBody(1L,4999L,
             java.util.Arrays.asList("rowId","displayValue","amount")));
@@ -319,8 +319,15 @@ class Spring3AuditWebAcceptanceTest {
             java.util.Arrays.asList("rowId","displayValue","amount")));
         assertEquals(HttpStatus.ACCEPTED,blocked.getStatusCode());
         assertEquals(generated,policyExports.getWorkbookInvocationCount());
+        assertEquals(0L,jdbc.queryForObject("SELECT COUNT(*) FROM audit_export_ledger "
+            + "WHERE user_id='audit-exporter' AND row_count=5000",Long.class).longValue());
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_event "
+            + "WHERE action='report:export' AND user_id='audit-exporter' AND result='DENIED'",Long.class).longValue());
         assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_security_alert "
             + "WHERE rule_id='EXPT-01' AND subject='audit-exporter'",Long.class).longValue());
+        assertEquals(1L,jdbc.queryForObject("SELECT COUNT(*) FROM monitoring_control_action c JOIN monitoring_security_alert a "
+            + "ON a.alert_id=c.alert_id WHERE a.subject='audit-exporter' "
+            + "AND c.action_type='REQUIRE_APPROVAL' AND c.status='AWAITING_APPROVAL'",Long.class).longValue());
 
         jdbc.update("INSERT INTO audit_account(user_id,organization_id,status) VALUES(?,?,?)",
             "audit-export-sensitive", "org-a", "ACTIVE");

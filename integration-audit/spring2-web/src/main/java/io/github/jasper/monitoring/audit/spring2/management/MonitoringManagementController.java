@@ -144,7 +144,11 @@ public class MonitoringManagementController {
 
     @PostMapping("/controls/{id}/approve")
     public ManagementResult<ControlView> approve(@PathVariable("id") String id, @RequestBody VersionedReasonRequest request) {
-        return ManagementResult.ok(controls.approve(actor(), ControlApprovalCommand.of(id, request.getExpectedVersion(), request.getReason())));
+        ControlApprovalCommand command = request.getPassExpiresAt() == null
+            ? ControlApprovalCommand.of(id, request.getExpectedVersion(), request.getReason())
+            : ControlApprovalCommand.withPassUntil(id, request.getExpectedVersion(), request.getReason(),
+                request.getPassExpiresAt());
+        return ManagementResult.ok(controls.approve(actor(), command));
     }
 
     @PostMapping("/controls/{id}/reject")
@@ -205,11 +209,13 @@ public class MonitoringManagementController {
     }
 
     public static final class VersionedReasonRequest {
-        private long expectedVersion; private String reason;
+        private long expectedVersion; private String reason; private java.time.Instant passExpiresAt;
         public long getExpectedVersion() { return expectedVersion; }
         public void setExpectedVersion(long value) { expectedVersion = value; }
         public String getReason() { return reason; }
         public void setReason(String value) { reason = value; }
+        public java.time.Instant getPassExpiresAt() { return passExpiresAt; }
+        public void setPassExpiresAt(java.time.Instant value) { passExpiresAt = value; }
     }
 
     public static final class ControlExecutionRequest {

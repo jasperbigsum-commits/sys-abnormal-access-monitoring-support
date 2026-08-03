@@ -233,6 +233,24 @@ class MyBatisMonitoringStoreTest {
         assertEquals(FactSource.HOST_PROVIDER, stored.getFacts().get(0).getSource());
     }
 
+    @Test
+    void roundTripsAttemptedAccountHashOnTheEventRow() throws Exception {
+        DataSource dataSource = dataSource("store-attempted-account-hash");
+        executeSchema(dataSource);
+        EventRepository events = new MyBatisMonitoringStore(factory(dataSource));
+        Instant at = Instant.parse("2026-08-03T00:00:00Z");
+        SecurityEvent source = SecurityEvent.builder().eventId("event-login-attempt").systemId("orders")
+            .eventType(SecurityEventType.LOGIN_FAILURE).occurredAt(at).receivedAt(at)
+            .sourceIp("203.0.113.1").requestId("request-login-attempt").action("LOGIN")
+            .result(SecurityEventResult.DENIED).attemptedAccountHash("v1:7H2c95hU0y8M3q5N6rT1sV4wX9zA")
+            .build();
+
+        events.save(source);
+
+        assertEquals("v1:7H2c95hU0y8M3q5N6rT1sV4wX9zA",
+            events.findEvent("event-login-attempt").get().getAttemptedAccountHash());
+    }
+
     private SecurityEvent event(String id, String system, Instant at) {
         return SecurityEvent.builder().eventId(id).systemId(system).eventType(SecurityEventType.EXPORT)
             .occurredAt(at).receivedAt(at).sourceIp("203.0.113.1").requestId(id + "-request")

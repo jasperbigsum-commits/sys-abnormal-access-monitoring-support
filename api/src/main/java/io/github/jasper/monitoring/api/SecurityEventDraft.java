@@ -30,6 +30,7 @@ public final class SecurityEventDraft {
     private final Set<String> roleIds;
     private final String sessionIdHash;
     private final String deviceIdHash;
+    private final String attemptedAccountHash;
     private final String resourceType;
     private final String resourceId;
     private final String orgScope;
@@ -53,6 +54,7 @@ public final class SecurityEventDraft {
         this.roleIds = immutableRoles(builder.roleIds);
         this.sessionIdHash = SecurityFieldSanitizer.text(builder.sessionIdHash, 256);
         this.deviceIdHash = SecurityFieldSanitizer.text(builder.deviceIdHash, 256);
+        this.attemptedAccountHash = opaqueLoginSubject(builder.attemptedAccountHash);
         this.resourceType = SecurityFieldSanitizer.text(builder.resourceType, 128);
         this.resourceId = SecurityFieldSanitizer.text(builder.resourceId, 256);
         this.orgScope = SecurityFieldSanitizer.text(builder.orgScope, 256);
@@ -79,6 +81,7 @@ public final class SecurityEventDraft {
         Builder builder = builder().eventType(eventType).action(action).result(result).sourceIp(sourceIp)
             .requestId(requestId).traceId(traceId).userId(userId).accountType(accountType).roleIds(roleIds)
             .sessionIdHash(sessionIdHash).deviceIdHash(deviceIdHash).resourceType(resourceType)
+            .attemptedAccountHash(attemptedAccountHash)
             .resourceId(resourceId).orgScope(orgScope).occurredAt(occurredAt).reasonCode(reasonCode)
             .attributes(attributes);
         if (dataCountKnown) {
@@ -112,6 +115,8 @@ public final class SecurityEventDraft {
     public String getSessionIdHash() { return sessionIdHash; }
     /** @return 单向散列后的设备标识；不可用时为 {@code null} */
     public String getDeviceIdHash() { return deviceIdHash; }
+    /** @return 本次登录尝试账号的不可逆关联值；不可用时为 {@code null} */
+    public String getAttemptedAccountHash() { return attemptedAccountHash; }
     /** @return 逻辑资源类别；不可用时为 {@code null} */
     public String getResourceType() { return resourceType; }
     /** @return 资源标识；不可用时为 {@code null} */
@@ -156,6 +161,18 @@ public final class SecurityEventDraft {
         if (sanitized == null || sanitized.isEmpty()) {
             throw new MonitoringValidationException(MonitoringErrorCode.REQUIRED_FIELD_MISSING,
                 name + " is required");
+        }
+        return sanitized;
+    }
+
+    private static String opaqueLoginSubject(String value) {
+        String sanitized = SecurityFieldSanitizer.text(value, 128);
+        if (sanitized == null) {
+            return null;
+        }
+        if (!sanitized.matches("v[1-9][0-9]*:[A-Za-z0-9_-]{16,}")) {
+            throw new MonitoringValidationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "attemptedAccountHash must be an opaque versioned hash");
         }
         return sanitized;
     }
@@ -213,6 +230,7 @@ public final class SecurityEventDraft {
         private Set<String> roleIds = new LinkedHashSet<String>();
         private String sessionIdHash;
         private String deviceIdHash;
+        private String attemptedAccountHash;
         private String resourceType;
         private String resourceId;
         private String orgScope;
@@ -306,6 +324,13 @@ public final class SecurityEventDraft {
          * @return 当前构建器
          */
         public Builder deviceIdHash(String value) { this.deviceIdHash = value; return this; }
+        /**
+         * 设置由认证模块生成的版本化、不透明登录账号关联值；不得传入登录名原文。
+         *
+         * @param value 登录主体的不可逆哈希
+         * @return 当前构建器
+         */
+        public Builder attemptedAccountHash(String value) { this.attemptedAccountHash = value; return this; }
         /**
          * 设置逻辑资源类别。
          *

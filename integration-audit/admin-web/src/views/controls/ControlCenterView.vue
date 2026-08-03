@@ -33,7 +33,10 @@ async function submit(values: Record<string, unknown>): Promise<void> {
             currentRecord.value = await repository.executeControl({ subject: String(values.subject), action: String(values.action), ttlMinutes: Number(values.ttlMinutes), reason: String(values.reason), idempotencyKey: `manual-${String(values.subject)}-${Date.now()}` });
             detailOpen.value = true;
         } else if (currentRecord.value) {
-            currentRecord.value = await repository.transitionControl({ id: currentRecord.value.id, action: currentAction.value, expectedVersion: currentRecord.value.version, reason: String(values.reason) });
+            const passTtlMinutes = Number(values.passTtlMinutes);
+            currentRecord.value = await repository.transitionControl({ id: currentRecord.value.id, action: currentAction.value, expectedVersion: currentRecord.value.version, reason: String(values.reason),
+                passExpiresAt: currentAction.value === 'APPROVE' && Number.isFinite(passTtlMinutes) && passTtlMinutes > 0
+                    ? new Date(Date.now() + passTtlMinutes * 60_000).toISOString() : undefined });
         }
         modalOpen.value = false;
         await table.reload();

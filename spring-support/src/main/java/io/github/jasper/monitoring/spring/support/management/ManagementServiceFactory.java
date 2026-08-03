@@ -10,6 +10,7 @@ import io.github.jasper.monitoring.core.application.management.ManagementAccessG
 import io.github.jasper.monitoring.core.port.ManagementAuditRepository;
 import io.github.jasper.monitoring.core.port.ManagementQueryRepository;
 import io.github.jasper.monitoring.core.port.MonitoringTransaction;
+import io.github.jasper.monitoring.core.port.WhitelistRepository;
 import java.time.Clock;
 import java.util.Objects;
 import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
@@ -23,9 +24,13 @@ public final class ManagementServiceFactory {
         Objects.requireNonNull(authorizer,"authorizer"); Objects.requireNonNull(queries,"queries");
         Objects.requireNonNull(audits,"audits"); Objects.requireNonNull(transaction,"transaction");
         Objects.requireNonNull(controls,"controls"); Objects.requireNonNull(clock,"clock");
+        if (!(queries instanceof WhitelistRepository)) {
+            throw new IllegalArgumentException("management queries must also provide temporary-pass persistence");
+        }
         ManagementAccessGuard guard=new ManagementAccessGuard(authorizer,audits,clock);
         return new ManagementServices(new DefaultSecurityEventQueryService(guard,queries,transaction),
             new DefaultAlertManagementService(guard,queries,transaction),new DefaultRuleCatalogService(guard,queries,transaction),
-            new DefaultWhitelistManagementService(guard,queries,transaction),new DefaultControlManagementService(guard,queries,transaction,controls));
+            new DefaultWhitelistManagementService(guard,queries,transaction),new DefaultControlManagementService(guard,queries,transaction,
+                controls,(WhitelistRepository) queries,clock));
     }
 }

@@ -63,9 +63,11 @@ public final class SecurityEventAssembler {
             .occurredAt(Instant.now(clock)).reasonCode(outcome.getReason() == null ? null : outcome.getReason().getCode())
             .latencyMs(outcome.getLatencyMs());
         String resourceId = facts.get(BuiltInFacts.ResourceId.class);
+        String attemptedAccountHash = facts.get(BuiltInFacts.LoginSubjectKey.class);
         Long dataCount = facts.get(BuiltInFacts.DataCount.class);
         BuiltInFacts.SensitivityLevel sensitivity = facts.get(BuiltInFacts.Sensitivity.class);
         if (resourceId != null) draft.resourceId(resourceId);
+        if (attemptedAccountHash != null) draft.attemptedAccountHash(attemptedAccountHash);
         if (dataCount != null) draft.dataCount(dataCount.longValue());
         putAttribute(draft, BuiltInFacts.SENSITIVITY, sensitivity);
         putAttribute(draft, BuiltInFacts.DIFFERENT_NETWORKS, facts.get(BuiltInFacts.DifferentNetworks.class));
@@ -106,7 +108,8 @@ public final class SecurityEventAssembler {
             .eventType(event.getEventType()).occurredAt(event.getOccurredAt()).receivedAt(event.getReceivedAt())
             .userId(event.getUserId()).accountType(event.getAccountType()).roleIds(event.getRoleIds())
             .sourceIp(event.getSourceIp()).deviceIdHash(event.getDeviceIdHash())
-            .sessionIdHash(event.getSessionIdHash()).requestId(event.getRequestId()).traceId(event.getTraceId())
+            .sessionIdHash(event.getSessionIdHash()).attemptedAccountHash(event.getAttemptedAccountHash())
+            .requestId(event.getRequestId()).traceId(event.getTraceId())
             .action(event.getAction()).result(event.getResult()).reasonCode(event.getReasonCode())
             .resourceType(event.getResourceType()).resourceId(event.getResourceId()).orgScope(event.getOrgScope())
             .dataCount(event.getDataCount()).dataCountKnown(event.hasDataCount())

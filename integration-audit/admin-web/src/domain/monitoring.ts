@@ -145,6 +145,7 @@ export interface ControlTransitionCommand {
     action: ControlAction;
     expectedVersion: number;
     reason: string;
+    passExpiresAt?: string;
 }
 
 export interface ExecuteControlCommand {

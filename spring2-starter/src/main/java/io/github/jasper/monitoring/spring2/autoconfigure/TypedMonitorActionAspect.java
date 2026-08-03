@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 import org.springframework.aop.support.StaticMethodMatcherPointcutAdvisor;
+import org.springframework.core.Ordered;
 import org.springframework.http.ResponseEntity;
 
 /** AOP entry point for the strict typed action annotation. */
@@ -42,6 +43,8 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
         this.context = Objects.requireNonNull(context, "context");
         this.facts = Objects.requireNonNull(facts, "facts");
         this.contracts = Objects.requireNonNull(contracts, "contracts");
+        // Wrap transaction advice declared on the same monitored method.
+        setOrder(Ordered.HIGHEST_PRECEDENCE);
         setAdvice(this);
     }
 

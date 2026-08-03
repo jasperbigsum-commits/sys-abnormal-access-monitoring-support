@@ -9,16 +9,19 @@ type ControlModalAction = ControlAction | 'EXECUTE';
 const props = withDefaults(defineProps<{ open: boolean; record?: ControlRecord; action?: ControlModalAction; loading?: boolean }>(), { record: undefined, action: undefined, loading: false });
 const emit = defineEmits<{ 'update:open': [value: boolean]; submit: [value: Record<string, unknown>] }>();
 const formRef = ref<{ validate: () => Promise<Record<string, unknown>>; resetFields: () => void }>();
-const model = reactive<Record<string, unknown>>({ subject: '', action: 'REVOKE_SESSION', ttlMinutes: 30, reason: '' });
+const model = reactive<Record<string, unknown>>({ subject: '', action: 'REVOKE_SESSION', ttlMinutes: 30, passTtlMinutes: undefined, reason: '' });
 const actionLabels: Record<ControlModalAction, string> = { APPROVE: '批准控制', REJECT: '驳回控制', RETRY: '重试执行', EXECUTE: '手工处置' };
 const schemas = computed<FormSchema[]>(() => props.action === 'EXECUTE' ? [
     { field: 'subject', label: '目标主体', component: 'Input', required: true, componentProps: { placeholder: '账户或会话主体' } },
     { field: 'action', label: '控制动作', component: 'Select', required: true, options: [{ label: '撤销会话', value: 'REVOKE_SESSION' }, { label: '增强认证', value: 'STEP_UP_AUTH' }] },
     { field: 'ttlMinutes', label: '有效分钟', component: 'InputNumber', required: true, componentProps: { min: 1, max: 1440 } },
     { field: 'reason', label: '操作原因', component: 'Textarea', required: true, colSpan: 24, componentProps: { rows: 4, maxlength: 500, showCount: true } }
-] : [{ field: 'reason', label: '审批原因', component: 'Textarea', required: true, colSpan: 24, componentProps: { rows: 4, maxlength: 500, showCount: true } }]);
+] : [
+    { field: 'passTtlMinutes', label: '通行证有效分钟', component: 'InputNumber', componentProps: { min: 1, max: 43200, placeholder: '留空仅审批本次' } },
+    { field: 'reason', label: '审批原因', component: 'Textarea', required: true, colSpan: 24, componentProps: { rows: 4, maxlength: 500, showCount: true } }
+]);
 
-watch(() => props.open, (open) => { if (open) { Object.assign(model, { subject: '', action: 'REVOKE_SESSION', ttlMinutes: 30, reason: '' }); formRef.value?.resetFields(); } });
+watch(() => props.open, (open) => { if (open) { Object.assign(model, { subject: '', action: 'REVOKE_SESSION', ttlMinutes: 30, passTtlMinutes: undefined, reason: '' }); formRef.value?.resetFields(); } });
 async function submit(): Promise<void> { const values = await formRef.value?.validate(); if (values) emit('submit', values); }
 </script>
 

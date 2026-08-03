@@ -69,6 +69,7 @@ class DefaultAuthenticationMonitorTest {
         assertEquals(AccountType.ANONYMOUS, event.getAccountType());
         assertEquals(AuthenticationStage.CAPTCHA, event.getFact(BuiltInFacts.AUTHENTICATION_STAGE).get());
         assertTrue(event.getFact(BuiltInFacts.LOGIN_SUBJECT_KEY).get().startsWith("v1:"));
+        assertEquals(event.getFact(BuiltInFacts.LOGIN_SUBJECT_KEY).get(), event.getAttemptedAccountHash());
     }
 
     @Test void successRequiresAuthenticatedIdentityAndEmitsSuccessEvent() {

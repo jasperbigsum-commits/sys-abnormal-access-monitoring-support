@@ -9,6 +9,7 @@ CREATE TABLE monitoring_security_event (
     source_ip VARCHAR(128) NOT NULL COMMENT '请求来源 IP 地址',
     device_id_hash VARCHAR(256) COMMENT '设备标识哈希值',
     session_id_hash VARCHAR(256) COMMENT '会话标识哈希值',
+    attempted_account_hash VARCHAR(128) COMMENT '登录尝试账号的版本化不可逆关联值',
     request_id VARCHAR(128) NOT NULL COMMENT '请求关联标识',
     trace_id VARCHAR(128) COMMENT '链路追踪标识',
     action VARCHAR(128) NOT NULL COMMENT '被监测操作',

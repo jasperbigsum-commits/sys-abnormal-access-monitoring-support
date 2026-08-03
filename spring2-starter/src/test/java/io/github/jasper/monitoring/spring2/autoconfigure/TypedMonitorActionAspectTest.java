@@ -35,9 +35,15 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.core.Ordered;
 import org.springframework.http.ResponseEntity;
 
 class TypedMonitorActionAspectTest {
+    @Test
+    void monitoringAdvisorRunsOutsideHostTransactions() {
+        assertEquals(Ordered.HIGHEST_PRECEDENCE, new Fixture().aspect().getOrder());
+    }
+
     @Test
     void includesStaticFactsInCheckpointDecisionsAndEvents() {
         Fixture fixture = new Fixture();
@@ -138,7 +144,7 @@ class TypedMonitorActionAspectTest {
         private final ActionCatalog actions = actions();
         private final FactCatalog facts = facts();
 
-        MonitoredApi proxy() {
+        TypedMonitorActionAspect aspect() {
             MonitoringRuntimePort runtime = new DefaultMonitoringRuntime(actions, facts, Collections.emptyList());
             MonitoringService monitoring = new MonitoringService(events,
                 new SecurityEventAssembler("test", Clock.fixed(Instant.parse("2026-07-26T00:00:00Z"), ZoneOffset.UTC)),
@@ -150,12 +156,15 @@ class TypedMonitorActionAspectTest {
                 }
                 @Override public IdentityContext identityContext() { return IdentityContext.anonymous(); }
             };
-            TypedMonitorActionAspect aspect = new TypedMonitorActionAspect(monitoring, context,
+            return new TypedMonitorActionAspect(monitoring, context,
                 new ActionFactExtractor(facts), new MonitorActionContractValidator(actions, facts,
                     Collections.emptyList()));
+        }
+
+        MonitoredApi proxy() {
             ProxyFactory factory = new ProxyFactory(new MonitoredService());
             factory.setProxyTargetClass(true);
-            factory.addAdvisor(aspect);
+            factory.addAdvisor(aspect());
             return (MonitoredApi) factory.getProxy();
         }
 
