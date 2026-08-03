@@ -27,10 +27,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AbnormalAccessMonitorAutoConfigurationTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
-        .withUserConfiguration(PersistenceConfiguration.class);
+        .withUserConfiguration(PersistenceConfiguration.class)
+        .withPropertyValues("abnormal.access.monitor.authentication.subject-key="
+            + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=");
     private final WebApplicationContextRunner webContextRunner = new WebApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
-        .withUserConfiguration(PersistenceConfiguration.class);
+        .withUserConfiguration(PersistenceConfiguration.class)
+        .withPropertyValues("abnormal.access.monitor.authentication.subject-key="
+            + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=");
 
     @Test
     void failsWhenSqlSessionFactoryIsUnavailable() {
@@ -70,15 +74,16 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     }
 
     @Test
-    void authenticationFacadeIsOptInAndRequiresAStrongBase64Key() {
-        webContextRunner.run(context -> assertThat(context).doesNotHaveBean(AuthenticationMonitor.class));
+    void authenticationFacadeUsesTheStarterPrefixAndIsEnabledByDefault() {
         webContextRunner.withPropertyValues(
-                "monitoring.authentication.enabled=true",
-                "monitoring.authentication.subject-key=MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
+                "abnormal.access.monitor.authentication.subject-key="
+                    + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
             .run(context -> assertThat(context).hasSingleBean(AuthenticationMonitor.class));
         webContextRunner.withPropertyValues(
-                "monitoring.authentication.enabled=true",
-                "monitoring.authentication.subject-key=c2hvcnQ=")
+                "abnormal.access.monitor.authentication.enabled=false")
+            .run(context -> assertThat(context).doesNotHaveBean(AuthenticationMonitor.class));
+        webContextRunner.withPropertyValues(
+                "abnormal.access.monitor.authentication.subject-key=c2hvcnQ=")
             .run(context -> {
                 assertThat(context).hasFailed();
                 assertThat(findCause(context.getStartupFailure()).getErrorCode())

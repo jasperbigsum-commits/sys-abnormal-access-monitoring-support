@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>本类故意提供六个路由：其中五个展示不同的业务采集或结果处理方式，另一个是“只有上下文、没有业务事件”的反例，方便集成者把示例和自己的业务代码逐一对照：</p>
  * <ol>
- *     <li>{@link #loginFailure()}：显式构造认证失败结果，不依赖 HTTP 响应状态推断业务含义；</li>
+ *     <li>{@link #loginFailure(String)}：显式构造认证失败结果，不依赖 HTTP 响应状态推断业务含义；</li>
  *     <li>{@link #export(AuditExportRequest)}：显式提交服务端选择的资源标识和数据量，
  *     客户端请求体只作为触发入口；</li>
  *     <li>{@link #annotatedQuery()}：只使用 {@code @MonitorAction}，验证无额外 Fact 的固定 MVC 动作；</li>
@@ -51,6 +51,14 @@ public class MonitoringFixtureController {
     private final AnnotatedMonitoringService annotatedMonitoring;
     private final AuthenticationMonitor authenticationMonitor;
 
+    /**
+     * 创建监测入口验收 Controller。
+     *
+     * @param monitoringRecorder 显式事件记录入口
+     * @param contexts 当前请求上下文访问器
+     * @param annotatedMonitoring 注解监测示例服务
+     * @param authenticationMonitor 认证监测门面
+     */
     public MonitoringFixtureController(MonitoringRecorder monitoringRecorder, MonitoringContextAccessor contexts,
             AnnotatedMonitoringService annotatedMonitoring, AuthenticationMonitor authenticationMonitor) {
         this.monitoringRecorder = monitoringRecorder;
@@ -69,6 +77,7 @@ public class MonitoringFixtureController {
      * <p>验收观察点：响应确认记录状态；后续 AUTH-01、AUTH-02、AUTH-03 规则可以使用该事件；
      * 事件中的失败原因来自服务端认证分支，而不是请求体字段。</p>
      *
+     * @param loginUser 验收夹具模拟的登录标识
      * @return 已记录状态和 Action 编码
      */
     @PostMapping("/login-failure")

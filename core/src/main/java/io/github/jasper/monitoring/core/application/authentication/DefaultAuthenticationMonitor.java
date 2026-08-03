@@ -35,7 +35,13 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** Default authentication facade; callers never handle derived monitoring subjects. */
+/**
+ * {@link AuthenticationMonitor} 的默认实现。
+ *
+ * <p>实现负责生成稳定的 opaque 登录主体、查询账号与来源 IP 上的活动控制，并把认证结果
+ * 转换为强类型登录事件。调用方不会接触派生主体或持久化结构。监测记录失败只写入脱敏诊断
+ * 信息，不覆盖宿主认证流程的最终业务结果；控制预检失败则按配置的失败策略决定放行或阻断。</p>
+ */
 public final class DefaultAuthenticationMonitor implements AuthenticationMonitor {
     private static final Logger LOGGER = Logger.getLogger(DefaultAuthenticationMonitor.class.getName());
     private final String systemId;
@@ -46,6 +52,19 @@ public final class DefaultAuthenticationMonitor implements AuthenticationMonitor
     private final Clock clock;
     private final ActionFailurePolicy controlFailurePolicy;
 
+    /**
+     * 创建默认认证监测门面。
+     *
+     * @param systemId 监测数据所属的稳定系统标识
+     * @param keys opaque 登录主体密钥工厂
+     * @param controls 活动认证控制查询仓储
+     * @param monitoring 强类型监测服务
+     * @param context 当前请求上下文访问器
+     * @param clock 计算控制有效期和事件时间使用的时钟
+     * @param controlFailurePolicy 控制仓储不可用时的失败策略
+     * @throws NullPointerException 任一必需协作者为空时抛出
+     * @throws IllegalArgumentException {@code systemId} 为空白时抛出
+     */
     public DefaultAuthenticationMonitor(String systemId, LoginSubjectKeyFactory keys,
             AuthenticationControlRepository controls, MonitoringService monitoring,
             MonitoringContextAccessor context, Clock clock, ActionFailurePolicy controlFailurePolicy) {
@@ -61,6 +80,7 @@ public final class DefaultAuthenticationMonitor implements AuthenticationMonitor
         this.controlFailurePolicy = Objects.requireNonNull(controlFailurePolicy, "controlFailurePolicy");
     }
 
+    /** {@inheritDoc} */
     @Override
     public ActionDecision preCheck(LoginSubjectInput subject) {
         String key = keys.generate(subject);
@@ -79,17 +99,20 @@ public final class DefaultAuthenticationMonitor implements AuthenticationMonitor
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void recordDenied(LoginSubjectInput subject, AuthenticationStage stage, ReasonCode reason) {
         record(subject, stage, IdentityContext.anonymous(), ActionOutcome.denied(reason, 0L));
     }
 
+    /** {@inheritDoc} */
     @Override
     public void recordFailure(LoginSubjectInput subject, AuthenticationStage stage,
             ReasonCode reason, FailureClass failureClass) {
         record(subject, stage, IdentityContext.anonymous(), ActionOutcome.failure(reason, failureClass, 0L));
     }
 
+    /** {@inheritDoc} */
     @Override
     public void recordSuccess(LoginSubjectInput subject, IdentityContext authenticatedIdentity) {
         Objects.requireNonNull(authenticatedIdentity, "authenticatedIdentity");

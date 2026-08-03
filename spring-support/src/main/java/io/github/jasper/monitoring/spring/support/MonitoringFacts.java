@@ -50,7 +50,7 @@ public final class MonitoringFacts {
     static ScopeState openScope(Class<? extends ActionType> actionType, MonitoringCheckpoint checkpoint) {
         Deque<ScopeState> scopes = SCOPES.get();
         if (scopes == null) {
-            scopes = new ArrayDeque<ScopeState>();
+            scopes = new ArrayDeque<>();
             SCOPES.set(scopes);
         }
         ScopeState state = new ScopeState(actionType == null ? null : ActionAttempt.start(actionType), checkpoint);

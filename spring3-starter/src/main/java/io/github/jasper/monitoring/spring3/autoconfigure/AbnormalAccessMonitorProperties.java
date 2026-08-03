@@ -21,6 +21,7 @@ public class AbnormalAccessMonitorProperties {
     private Frontend frontend = new Frontend();
     private Instrumentation instrumentation = new Instrumentation();
     private Mdc mdc = new Mdc();
+    private Authentication authentication = new Authentication();
     private IpControl ipControl = new IpControl();
     private Notification notification = new Notification();
     private List<String> trustedProxies = new ArrayList<String>();
@@ -59,6 +60,14 @@ public class AbnormalAccessMonitorProperties {
 
     /** @param mdc 可选日志 MDC 链路追踪配置；{@code null} 时恢复默认值 */
     public void setMdc(Mdc mdc) { this.mdc = mdc == null ? new Mdc() : mdc; }
+
+    /** @return 认证监测与主体密钥配置 */
+    public Authentication getAuthentication() { return authentication; }
+
+    /** @param authentication 认证监测与主体密钥配置；{@code null} 时恢复默认值 */
+    public void setAuthentication(Authentication authentication) {
+        this.authentication = authentication == null ? new Authentication() : authentication;
+    }
 
     /** @return 显式启用的通用 IP 控制配置 */
     public IpControl getIpControl() { return ipControl; }
@@ -175,17 +184,33 @@ public class AbnormalAccessMonitorProperties {
         public void setBatchSize(int batchSize) { this.batchSize = batchSize; }
     }
 
-    /** Authentication facade configuration with its own stable external prefix. */
-    @ConfigurationProperties("monitoring.authentication")
+    /**
+     * 认证监测门面配置，对应 {@code abnormal.access.monitor.authentication}。
+     *
+     * <p>认证监测默认启用。启用时 {@code subject-key} 必须是解码后至少 32 字节的
+     * Base64 密钥；不接入认证监测的宿主必须显式设置 {@code enabled=false}。</p>
+     */
     public static class Authentication {
-        private boolean enabled;
+        private boolean enabled = true;
         private String subjectKey;
         private ActionFailurePolicy controlFailurePolicy = ActionFailurePolicy.OBSERVE_ONLY;
+
+        /** @return 是否自动注册认证监测门面，缺省为 {@code true} */
         public boolean isEnabled() { return enabled; }
+
+        /** @param enabled 是否自动注册认证监测门面 */
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
+
+        /** @return 用于派生 opaque 登录主体的 Base64 HMAC 密钥 */
         public String getSubjectKey() { return subjectKey; }
+
+        /** @param subjectKey 用于派生 opaque 登录主体的 Base64 HMAC 密钥 */
         public void setSubjectKey(String subjectKey) { this.subjectKey = subjectKey; }
+
+        /** @return 认证控制仓储不可用时的预检失败策略 */
         public ActionFailurePolicy getControlFailurePolicy() { return controlFailurePolicy; }
+
+        /** @param policy 认证控制仓储不可用时的预检失败策略 */
         public void setControlFailurePolicy(ActionFailurePolicy policy) { this.controlFailurePolicy = policy; }
     }
 }

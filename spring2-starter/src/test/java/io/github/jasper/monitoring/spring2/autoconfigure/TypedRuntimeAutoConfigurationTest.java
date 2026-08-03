@@ -36,6 +36,8 @@ class TypedRuntimeAutoConfigurationTest {
         new WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
             .withUserConfiguration(PersistenceConfiguration.class)
+            .withPropertyValues("abnormal.access.monitor.authentication.subject-key="
+                + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
             .run(context -> {
                 assertThat(context).hasSingleBean(ActionCatalog.class);
                 assertThat(context).hasSingleBean(MonitoringRuntimePort.class);
@@ -59,6 +61,8 @@ class TypedRuntimeAutoConfigurationTest {
         new WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
             .withUserConfiguration(PersistenceConfiguration.class)
+            .withPropertyValues("abnormal.access.monitor.authentication.subject-key="
+                + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
             .withPropertyValues("abnormal.access.monitor.notification.retry-enabled=false")
             .run(context -> {
                 assertThat(context).hasSingleBean(NotificationDeliveryService.class);
@@ -72,6 +76,8 @@ class TypedRuntimeAutoConfigurationTest {
         new WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
             .withUserConfiguration(PersistenceConfiguration.class, EmptyRuleCatalogConfiguration.class)
+            .withPropertyValues("abnormal.access.monitor.authentication.subject-key="
+                + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
             .withPropertyValues("abnormal.access.monitor.mode=ENFORCE")
             .run(context -> assertThat(context).hasNotFailed());
     }
@@ -81,6 +87,8 @@ class TypedRuntimeAutoConfigurationTest {
         new WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
             .withUserConfiguration(PersistenceConfiguration.class, DuplicateControlConfiguration.class)
+            .withPropertyValues("abnormal.access.monitor.authentication.subject-key="
+                + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
             .run(context -> assertThat(context).hasFailed());
     }
 
@@ -89,6 +97,8 @@ class TypedRuntimeAutoConfigurationTest {
         new WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
             .withUserConfiguration(PersistenceConfiguration.class, InvalidActionFactConfiguration.class)
+            .withPropertyValues("abnormal.access.monitor.authentication.subject-key="
+                + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
             .run(context -> assertThat(context).hasFailed());
     }
 

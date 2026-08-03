@@ -44,10 +44,8 @@ abnormal:
         enabled: false # 不接收浏览器补充信号；服务端埋点仍生效
       instrumentation:
         enabled: true # 自动拦截 MVC 方法上的 @MonitorAction
+      authentication:
+        enabled: true
+        subject-key: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
+        control-failure-policy: OBSERVE_ONLY
       trusted-proxies: [127.0.0.1/32, "::1/128"] # 验收宿主把本地测试客户端视为显式可信代理
-
-monitoring:
-  authentication:
-    enabled: true
-    subject-key: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
-    control-failure-policy: OBSERVE_ONLY

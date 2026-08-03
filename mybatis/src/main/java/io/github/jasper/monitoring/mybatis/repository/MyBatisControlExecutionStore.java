@@ -19,21 +19,39 @@ import org.apache.ibatis.exceptions.PersistenceException;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionManager;
 
-/** MyBatis control state store with unique-key reservation and optimistic transitions. */
+/**
+ * 基于 MyBatis 的控制状态存储。
+ *
+ * <p>实现使用唯一键预留和乐观锁状态迁移保证控制执行幂等，同时实现
+ * {@link AuthenticationControlRepository}，为认证预检查询指定系统和主体上尚未过期的控制。</p>
+ */
 public final class MyBatisControlExecutionStore implements ControlExecutionStore, AuthenticationControlRepository {
     private final SqlSessionManager sessions;
+
+    /**
+     * 从 MyBatis 会话工厂创建控制状态存储并注册组件 Mapper。
+     *
+     * @param factory 宿主提供的 MyBatis 会话工厂
+     */
     public MyBatisControlExecutionStore(SqlSessionFactory factory) {
         MyBatisMonitoringStoreRegistrar.register(Objects.requireNonNull(factory, "factory"));
         this.sessions = SqlSessionManager.newInstance(factory);
     }
+    /**
+     * 从已配置的会话管理器创建控制状态存储。
+     *
+     * @param sessions MyBatis 会话管理器
+     */
     public MyBatisControlExecutionStore(SqlSessionManager sessions) { this.sessions = Objects.requireNonNull(sessions, "sessions"); }
 
+    /** {@inheritDoc} */
     @Override public Optional<StoredControl> find(String key) {
         sessions.startManagedSession(true);
         try { return Optional.ofNullable(toStored(mapper().find(key))); }
         finally { sessions.close(); }
     }
 
+    /** {@inheritDoc} */
     @Override public boolean reserve(ControlCommand command, ControlStatus initial, Instant at) {
         sessions.startManagedSession(false);
         try {
@@ -54,6 +72,7 @@ public final class MyBatisControlExecutionStore implements ControlExecutionStore
         finally { sessions.close(); }
     }
 
+    /** {@inheritDoc} */
     @Override public List<ControlCommand> findActive(String systemId, String subject, Instant at) {
         sessions.startManagedSession(true);
         try {
@@ -65,6 +84,7 @@ public final class MyBatisControlExecutionStore implements ControlExecutionStore
         } finally { sessions.close(); }
     }
 
+    /** {@inheritDoc} */
     @Override public StoredControl transition(String key, long version, ControlStatus expected,
                                                ControlStatus target, String reason, Instant at) {
         sessions.startManagedSession(false);

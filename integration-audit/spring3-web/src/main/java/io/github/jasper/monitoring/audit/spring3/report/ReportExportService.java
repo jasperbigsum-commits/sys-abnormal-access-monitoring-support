@@ -63,7 +63,7 @@ public class ReportExportService {
             request.getSelectedIds());
         String userId = contexts.identityContext().getUserId();
         MonitoringFacts.put(BuiltInFacts.ResourceId.class, reportId);
-        MonitoringFacts.put(BuiltInFacts.DataCount.class, Long.valueOf(rows));
+        MonitoringFacts.put(BuiltInFacts.DataCount.class, rows);
         if (request.getFields() != null && request.getFields().contains("sensitiveValue")) {
             MonitoringFacts.put(BuiltInFacts.Sensitivity.class, BuiltInFacts.SensitivityLevel.HIGH);
         }

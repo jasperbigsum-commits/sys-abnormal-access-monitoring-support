@@ -83,39 +83,55 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
 /**
- * Spring Boot 2 ({@code javax.servlet}) auto-configuration for the monitoring component.
+ * 监测组件的 Spring Boot 2（{@code javax.servlet}）自动配置入口。
  *
- * <p>The configuration requires MyBatis-backed monitoring persistence. Host beans always take
- * precedence over defaults. Resource authorization defaults to deny and {@code ENFORCE} requires
- * at least one host {@link ControlHandler}.</p>
+ * <p>该配置要求存在 MyBatis 监测持久化，宿主提供的同类型 Bean 始终优先于默认实现。
+ * 资源授权默认拒绝，{@code ENFORCE} 模式要求宿主为规则可能产生的控制动作提供处理器。</p>
+ *
+ * <p>认证监测位于 {@code abnormal.access.monitor.authentication}，默认启用；启用时必须
+ * 配置稳定且解码后不少于 32 字节的 Base64 {@code subject-key}。</p>
  */
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(name = "org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration")
 @ConditionalOnProperty(prefix = "abnormal.access.monitor", name = "enabled",
     havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties({AbnormalAccessMonitorProperties.class,
-    AbnormalAccessMonitorProperties.Authentication.class})
+@EnableConfigurationProperties(AbnormalAccessMonitorProperties.class)
 public class AbnormalAccessMonitorAutoConfiguration {
+    /**
+     * 提供默认登录主体规范化器，将登录标识去除首尾空白并转换为小写。
+     *
+     * @return 默认登录主体规范化器
+     */
     @Bean
     @ConditionalOnMissingBean(LoginSubjectCanonicalizer.class)
-    @ConditionalOnProperty(prefix = "monitoring.authentication", name = "enabled", havingValue = "true")
+    @ConditionalOnProperty(prefix = "abnormal.access.monitor.authentication", name = "enabled",
+        havingValue = "true", matchIfMissing = true)
     public LoginSubjectCanonicalizer abnormalAccessLoginSubjectCanonicalizer() {
         return subject -> subject.getLoginUser().trim().toLowerCase(Locale.ROOT);
     }
 
+    /**
+     * 使用认证配置中的稳定密钥创建 opaque 登录主体工厂。
+     *
+     * @param properties Starter 统一配置属性
+     * @param canonicalizer 登录主体规范化器
+     * @return 登录主体密钥工厂
+     * @throws MonitoringConfigurationException 密钥缺失、不是合法 Base64 或解码后不足 32 字节时抛出
+     */
     @Bean
     @ConditionalOnMissingBean(LoginSubjectKeyFactory.class)
-    @ConditionalOnProperty(prefix = "monitoring.authentication", name = "enabled", havingValue = "true")
+    @ConditionalOnProperty(prefix = "abnormal.access.monitor.authentication", name = "enabled",
+        havingValue = "true", matchIfMissing = true)
     public LoginSubjectKeyFactory abnormalAccessLoginSubjectKeyFactory(
-            AbnormalAccessMonitorProperties.Authentication properties,
+            AbnormalAccessMonitorProperties properties,
             LoginSubjectCanonicalizer canonicalizer) {
         try {
-            String configured = properties.getSubjectKey();
+            String configured = properties.getAuthentication().getSubjectKey();
             if (configured == null || configured.trim().isEmpty()) throw new IllegalArgumentException("missing key");
             return new LoginSubjectKeyFactory(Base64.getDecoder().decode(configured.trim()), canonicalizer);
         } catch (IllegalArgumentException failure) {
             throw new MonitoringConfigurationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
-                "monitoring.authentication.subject-key must be Base64 encoding of at least 32 bytes");
+                "abnormal.access.monitor.authentication.subject-key must be Base64 encoding of at least 32 bytes");
         }
     }
     @Bean
@@ -499,15 +515,25 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnClass(name = "org.springframework.web.servlet.HandlerInterceptor")
     static class MvcMonitoringConfiguration {
+        /**
+         * 创建 Servlet 应用使用的默认认证监测门面。
+         *
+         * @param properties Starter 统一配置属性
+         * @param keys opaque 登录主体密钥工厂
+         * @param controls MyBatis 控制执行存储
+         * @param monitoring 强类型监测服务
+         * @param context Servlet 请求上下文访问器
+         * @return 默认认证监测门面
+         */
         @Bean
         @ConditionalOnMissingBean(AuthenticationMonitor.class)
-        @ConditionalOnProperty(prefix = "monitoring.authentication", name = "enabled", havingValue = "true")
+        @ConditionalOnProperty(prefix = "abnormal.access.monitor.authentication", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
         AuthenticationMonitor abnormalAccessAuthenticationMonitor(AbnormalAccessMonitorProperties properties,
-                AbnormalAccessMonitorProperties.Authentication authentication,
                 LoginSubjectKeyFactory keys, MyBatisControlExecutionStore controls,
                 MonitoringService monitoring, MonitoringContextAccessor context) {
             return new DefaultAuthenticationMonitor(properties.getSystemId(), keys, controls, monitoring,
-                context, Clock.systemUTC(), authentication.getControlFailurePolicy());
+                context, Clock.systemUTC(), properties.getAuthentication().getControlFailurePolicy());
         }
 
         @Bean

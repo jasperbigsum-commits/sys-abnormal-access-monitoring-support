@@ -391,7 +391,7 @@ class Spring3AuditWebAcceptanceTest {
     private ResponseEntity<byte[]> export(String principal,Map<String,Object> body){
         HttpHeaders headers=headers(principal);headers.setContentType(MediaType.APPLICATION_JSON);
         return restTemplate.exchange(url("/audit/reports/report-a/exports"),org.springframework.http.HttpMethod.POST,
-            new HttpEntity<Map<String,Object>>(body,headers),byte[].class);
+                new HttpEntity<>(body, headers),byte[].class);
     }
 
     private static Map<String,Object> exportBody(long minId,long maxId,List<String> fields){

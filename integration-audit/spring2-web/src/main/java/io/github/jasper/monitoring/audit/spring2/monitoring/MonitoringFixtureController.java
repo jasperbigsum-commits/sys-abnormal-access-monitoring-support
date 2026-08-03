@@ -38,6 +38,14 @@ public class MonitoringFixtureController {
     private final AnnotatedMonitoringService annotatedMonitoring;
     private final AuthenticationMonitor authenticationMonitor;
 
+    /**
+     * 创建监测入口验收 Controller。
+     *
+     * @param monitoringRecorder 显式事件记录入口
+     * @param contexts 当前请求上下文访问器
+     * @param annotatedMonitoring 注解监测示例服务
+     * @param authenticationMonitor 认证监测门面
+     */
     public MonitoringFixtureController(MonitoringRecorder monitoringRecorder, MonitoringContextAccessor contexts,
             AnnotatedMonitoringService annotatedMonitoring, AuthenticationMonitor authenticationMonitor) {
         this.monitoringRecorder = monitoringRecorder;
@@ -46,6 +54,15 @@ public class MonitoringFixtureController {
         this.authenticationMonitor = authenticationMonitor;
     }
 
+    /**
+     * 显式提交一次登录失败事件。
+     *
+     * <p>认证 Service 在明确失败原因后只提交临时登录主体、认证阶段和稳定原因码；认证门面
+     * 自动使用可信请求上下文并生成受保护的登录主体 Fact，原始登录名不会写入监测存储。</p>
+     *
+     * @param loginUser 验收夹具模拟的登录标识
+     * @return 已记录状态和 Action 编码
+     */
     @PostMapping("/login-failure")
     public Map<String, Object> loginFailure(@RequestHeader("X-Audit-Principal") String loginUser) {
         authenticationMonitor.recordDenied(new LoginSubjectInput(loginUser, "audit"),

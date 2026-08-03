@@ -47,7 +47,7 @@
 
 ## 夹具配置
 
-src/main/resources/application.yml 使用 system-id=audit-spring3-web、mode=ENFORCE、frontend.enabled=false、instrumentation.enabled=true，并只信任本地测试代理地址。它还显式启用 `monitoring.authentication`；生产必须从密钥管理设施注入至少 32 字节随机密钥的 Base64 编码，集群实例保持一致，认证 Service 只向 `AuthenticationMonitor` 传入 `login_user` 和 realm。
+src/main/resources/application.yml 使用 system-id=audit-spring3-web、mode=ENFORCE、frontend.enabled=false、instrumentation.enabled=true，并只信任本地测试代理地址。`abnormal.access.monitor.authentication` 默认启用；生产必须从密钥管理设施注入至少 32 字节随机密钥的 Base64 编码，集群实例保持一致，认证 Service 只向 `AuthenticationMonitor` 传入 `login_user` 和 realm。
 
 Spring3AuditApplication 启动时执行组件 Schema 和 db/audit-fixture-schema.sql，然后构造 MyBatis SqlSessionFactory。这是测试初始化路径，不是 Jeecg-Boot 的数据库迁移方案。
 
