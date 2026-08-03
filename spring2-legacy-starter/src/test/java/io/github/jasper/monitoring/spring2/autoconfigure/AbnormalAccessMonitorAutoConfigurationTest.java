@@ -4,6 +4,7 @@ import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
+import io.github.jasper.monitoring.api.authentication.AuthenticationMonitor;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.core.application.MonitoringService;
@@ -25,10 +26,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AbnormalAccessMonitorAutoConfigurationTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
-        .withUserConfiguration(PersistenceConfiguration.class);
+        .withUserConfiguration(PersistenceConfiguration.class)
+        .withPropertyValues("abnormal.access.monitor.authentication.subject-key="
+            + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=");
     private final WebApplicationContextRunner webContextRunner = new WebApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
-        .withUserConfiguration(PersistenceConfiguration.class);
+        .withUserConfiguration(PersistenceConfiguration.class)
+        .withPropertyValues("abnormal.access.monitor.authentication.subject-key="
+            + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=");
 
     @Test
     void failsWhenSqlSessionFactoryIsUnavailable() {
@@ -65,6 +70,21 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     @Test
     void providesAConciseRecorderInServletApplications() {
         webContextRunner.run(context -> assertThat(context).hasSingleBean(MonitoringRecorder.class));
+    }
+
+    @Test
+    void authenticationFacadeUsesTheStarterPrefixAndIsEnabledByDefault() {
+        webContextRunner.run(context -> assertThat(context).hasSingleBean(AuthenticationMonitor.class));
+        webContextRunner.withPropertyValues(
+                "abnormal.access.monitor.authentication.enabled=false")
+            .run(context -> assertThat(context).doesNotHaveBean(AuthenticationMonitor.class));
+        webContextRunner.withPropertyValues(
+                "abnormal.access.monitor.authentication.subject-key=c2hvcnQ=")
+            .run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(findCause(context.getStartupFailure()).getErrorCode())
+                    .isEqualTo(MonitoringErrorCode.INVALID_FIELD_VALUE);
+            });
     }
 
     @Test

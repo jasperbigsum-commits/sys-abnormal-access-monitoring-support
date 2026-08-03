@@ -19,7 +19,9 @@ import org.springframework.context.annotation.Configuration;
 class ManagementAutoConfigurationTest {
     private final WebApplicationContextRunner runner=new WebApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(AbnormalAccessMonitorAutoConfiguration.class))
-        .withUserConfiguration(Persistence.class);
+        .withUserConfiguration(Persistence.class)
+        .withPropertyValues("abnormal.access.monitor.authentication.subject-key="
+            + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=");
     @Test void requiresAuthorizerBeforePublishingManagementServices(){runner.run(context->{
         assertThat(context).doesNotHaveBean(SecurityEventQueryService.class);
         assertThat(context).doesNotHaveBean(AlertManagementService.class);

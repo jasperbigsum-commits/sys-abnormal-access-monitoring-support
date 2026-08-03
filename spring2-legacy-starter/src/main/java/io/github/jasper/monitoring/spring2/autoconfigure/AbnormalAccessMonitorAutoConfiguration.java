@@ -13,6 +13,8 @@ import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.authentication.AuthenticationMonitor;
+import io.github.jasper.monitoring.api.authentication.LoginSubjectCanonicalizer;
 import io.github.jasper.monitoring.api.control.ControlCatalog;
 import io.github.jasper.monitoring.api.control.ControlType;
 import io.github.jasper.monitoring.api.management.AlertManagementService;
@@ -33,6 +35,8 @@ import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.application.TypedRuleEvaluationService;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
+import io.github.jasper.monitoring.core.application.authentication.DefaultAuthenticationMonitor;
+import io.github.jasper.monitoring.core.application.authentication.LoginSubjectKeyFactory;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
 import io.github.jasper.monitoring.core.application.control.DefaultControlActionTrigger;
 import io.github.jasper.monitoring.core.port.ControlHandler;
@@ -56,9 +60,11 @@ import io.github.jasper.monitoring.spring.support.management.ManagementServiceFa
 import io.github.jasper.monitoring.spring.support.management.ManagementServices;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
@@ -82,6 +88,9 @@ import org.springframework.scheduling.annotation.Scheduled;
  * <p>The configuration requires MyBatis-backed monitoring persistence. Host beans always take
  * precedence over defaults. Resource authorization defaults to deny. Missing host controls in
  * {@code ENFORCE} mode produce warnings and undefined execution results.</p>
+ *
+ * <p>认证监测位于 {@code abnormal.access.monitor.authentication}，默认启用；启用时必须
+ * 配置稳定且解码后不少于 32 字节的 Base64 {@code subject-key}。</p>
  */
 @Configuration
 @AutoConfigureAfter(name = "org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration")
@@ -91,6 +100,45 @@ import org.springframework.scheduling.annotation.Scheduled;
 public class AbnormalAccessMonitorAutoConfiguration {
     private static final java.util.logging.Logger LOGGER = java.util.logging.Logger.getLogger(
         AbnormalAccessMonitorAutoConfiguration.class.getName());
+
+    /**
+     * 提供默认登录主体规范化器，将登录标识去除首尾空白并转换为小写。
+     *
+     * @return 默认登录主体规范化器
+     */
+    @Bean
+    @ConditionalOnMissingBean(LoginSubjectCanonicalizer.class)
+    @ConditionalOnProperty(prefix = "abnormal.access.monitor.authentication", name = "enabled",
+        havingValue = "true", matchIfMissing = true)
+    public LoginSubjectCanonicalizer abnormalAccessLoginSubjectCanonicalizer() {
+        return subject -> subject.getLoginUser().trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 使用认证配置中的稳定密钥创建 opaque 登录主体工厂。
+     *
+     * @param properties Starter 统一配置属性
+     * @param canonicalizer 登录主体规范化器
+     * @return 登录主体密钥工厂
+     * @throws MonitoringConfigurationException 密钥缺失、不是合法 Base64 或解码后不足 32 字节时抛出
+     */
+    @Bean
+    @ConditionalOnMissingBean(LoginSubjectKeyFactory.class)
+    @ConditionalOnProperty(prefix = "abnormal.access.monitor.authentication", name = "enabled",
+        havingValue = "true", matchIfMissing = true)
+    public LoginSubjectKeyFactory abnormalAccessLoginSubjectKeyFactory(
+            AbnormalAccessMonitorProperties properties,
+            LoginSubjectCanonicalizer canonicalizer) {
+        try {
+            String configured = properties.getAuthentication().getSubjectKey();
+            if (configured == null || configured.trim().isEmpty()) throw new IllegalArgumentException("missing key");
+            return new LoginSubjectKeyFactory(Base64.getDecoder().decode(configured.trim()), canonicalizer);
+        } catch (IllegalArgumentException failure) {
+            throw new MonitoringConfigurationException(MonitoringErrorCode.INVALID_FIELD_VALUE,
+                "abnormal.access.monitor.authentication.subject-key must be Base64 encoding of at least 32 bytes");
+        }
+    }
+
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(SqlSessionFactory.class)
@@ -479,6 +527,27 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnClass(name = "org.springframework.web.servlet.HandlerInterceptor")
     static class MvcMonitoringConfiguration {
+        /**
+         * 创建 Servlet 应用使用的默认认证监测门面。
+         *
+         * @param properties Starter 统一配置属性
+         * @param keys opaque 登录主体密钥工厂
+         * @param controls MyBatis 控制执行存储
+         * @param monitoring 强类型监测服务
+         * @param context Servlet 请求上下文访问器
+         * @return 默认认证监测门面
+         */
+        @Bean
+        @ConditionalOnMissingBean(AuthenticationMonitor.class)
+        @ConditionalOnProperty(prefix = "abnormal.access.monitor.authentication", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+        AuthenticationMonitor abnormalAccessAuthenticationMonitor(AbnormalAccessMonitorProperties properties,
+                LoginSubjectKeyFactory keys, MyBatisControlExecutionStore controls,
+                MonitoringService monitoring, MonitoringContextAccessor context) {
+            return new DefaultAuthenticationMonitor(properties.getSystemId(), keys, controls, monitoring,
+                context, Clock.systemUTC(), properties.getAuthentication().getControlFailurePolicy());
+        }
+
         @Bean
         @ConditionalOnMissingBean(MonitoringContextAccessor.class)
         ServletMonitoringContextAccessor abnormalAccessMonitoringContextAccessor() {
