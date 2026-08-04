@@ -12,22 +12,37 @@ import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
 import io.github.jasper.monitoring.core.application.MonitoringService;
+import io.github.jasper.monitoring.core.port.WhitelistRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Objects;
 
 /**
  * 与框架无关的资源授权桥接器。
  *
- * <p>宿主 {@link ResourceScopeAuthorizer} 始终是授权结论的权威来源。本类只记录最终结论，
- * 绝不会把拒绝改为允许；授权器缺失、返回空值或异常时会按拒绝处理。</p>
+ * <p>宿主 {@link ResourceScopeAuthorizer} 是基础授权结论的权威来源。只有宿主显式提供可信的
+ * 通行证规则和主体范围，并且持久化通行证仍有效时，监测阻断结论才可改为允许。</p>
  */
 public final class ResourceAccessGuard {
     private final ResourceScopeAuthorizer authorizer;
     private final MonitoringService typedMonitoring;
+    private final String systemId;
+    private final WhitelistRepository passes;
+    private final Clock clock;
 
     /** Creates the strict typed authorization audit bridge. */
     public ResourceAccessGuard(ResourceScopeAuthorizer authorizer, MonitoringService monitoring) {
+        this(null, authorizer, null, monitoring, Clock.systemUTC());
+    }
+
+    /** Creates an authorization bridge that can honor explicitly scoped temporary passes. */
+    public ResourceAccessGuard(String systemId, ResourceScopeAuthorizer authorizer, WhitelistRepository passes,
+            MonitoringService monitoring, Clock clock) {
+        this.systemId = systemId;
         this.authorizer = Objects.requireNonNull(authorizer, "authorizer");
+        this.passes = passes;
         this.typedMonitoring = Objects.requireNonNull(monitoring, "monitoring");
+        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     /**
@@ -50,8 +65,31 @@ public final class ResourceAccessGuard {
         } catch (RuntimeException ignored) {
             decision = AuthorizationDecision.denied(BuiltInReasonCodes.Authorization.EVALUATION_ERROR);
         }
+        if (canBeOverridden(decision) && hasActivePass(resource)) {
+            decision = AuthorizationDecision.allowed();
+        }
         recordDecision(identity == null ? IdentityContext.anonymous() : identity, resource, decision);
         return decision;
+    }
+
+    private static boolean canBeOverridden(AuthorizationDecision decision) {
+        if (decision.isAllowed()) return false;
+        String reason = decision.getReason().getCode();
+        return !BuiltInReasonCodes.Authorization.EVALUATION_ERROR.getCode().equals(reason)
+            && !BuiltInReasonCodes.Authorization.NO_DECISION.getCode().equals(reason)
+            && !BuiltInReasonCodes.Authorization.AUTHORIZER_NOT_CONFIGURED.getCode().equals(reason);
+    }
+
+    private boolean hasActivePass(ResourceScopeRequest resource) {
+        if (passes == null || systemId == null || resource == null
+                || resource.getPassRuleId() == null || resource.getPassSubject() == null) {
+            return false;
+        }
+        try {
+            return passes.isActive(systemId, resource.getPassRuleId(), resource.getPassSubject(), Instant.now(clock));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     private void recordDecision(IdentityContext identity, ResourceScopeRequest resource, AuthorizationDecision decision) {

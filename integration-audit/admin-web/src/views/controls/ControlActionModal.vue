@@ -17,7 +17,7 @@ const schemas = computed<FormSchema[]>(() => props.action === 'EXECUTE' ? [
     { field: 'ttlMinutes', label: '有效分钟', component: 'InputNumber', required: true, componentProps: { min: 1, max: 1440 } },
     { field: 'reason', label: '操作原因', component: 'Textarea', required: true, colSpan: 24, componentProps: { rows: 4, maxlength: 500, showCount: true } }
 ] : [
-    { field: 'passTtlMinutes', label: '通行证有效分钟', component: 'InputNumber', componentProps: { min: 1, max: 43200, placeholder: '留空仅审批本次' } },
+    ...(props.action === 'APPROVE' ? [{ field: 'passTtlMinutes', label: '通行证有效分钟', component: 'InputNumber' as const, componentProps: { min: 1, max: 43200, placeholder: '留空仅审批本次' } }] : []),
     { field: 'reason', label: '审批原因', component: 'Textarea', required: true, colSpan: 24, componentProps: { rows: 4, maxlength: 500, showCount: true } }
 ]);
 

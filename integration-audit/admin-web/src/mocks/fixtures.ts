@@ -97,9 +97,9 @@ const RULES: RuleRecord[] = [
 ];
 
 const WHITELISTS: WhitelistRecord[] = [
-    { id: 'WL-20260730-001', subject: 'ops-demo-batch-01', scope: '夜间批处理演示窗口', ruleId: 'RULE-OFFHOURS-EXPORT', status: 'ACTIVE', expiresAt: '2026-07-31T02:00:00+08:00', approvedBy: 'risk-approver-01', reason: '月末演示批处理', version: 1 },
-    { id: 'WL-20260730-002', subject: 'ops-demo-maint-02', scope: '系统维护演示窗口', status: 'REVOKED', approvedBy: 'risk-approver-02', reason: '维护工作已结束', version: 2 },
-    { id: 'WL-20260730-003', subject: 'branch-demo-training', scope: '培训环境演示访问', ruleId: 'RULE-AUTH-FAILURE', status: 'ACTIVE', expiresAt: '2026-08-02T18:00:00+08:00', approvedBy: 'risk-approver-03', reason: '培训演练', version: 1 }
+    { id: 'WL-20260730-001', subject: 'ops-demo-batch-01', systemScope: 'integration-audit', ruleId: 'RULE-OFFHOURS-EXPORT', status: 'ACTIVE', expiresAt: '2026-07-31T02:00:00+08:00', approvedBy: 'risk-approver-01', reason: '月末演示批处理', version: 1 },
+    { id: 'WL-20260730-002', subject: 'ops-demo-maint-02', systemScope: 'integration-audit', status: 'REVOKED', approvedBy: 'risk-approver-02', reason: '维护工作已结束', version: 2 },
+    { id: 'WL-20260730-003', subject: 'branch-demo-training', systemScope: 'integration-audit', ruleId: 'RULE-AUTH-FAILURE', status: 'EXPIRED', expiresAt: '2026-08-02T18:00:00+08:00', approvedBy: 'risk-approver-03', reason: '培训演练', version: 1 }
 ];
 
 const AUDIT_RECORDS: ManagementAuditRecord[] = [

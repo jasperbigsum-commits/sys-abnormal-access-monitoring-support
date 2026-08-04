@@ -514,7 +514,7 @@ class TypedRuleEvaluationServiceTest {
         @Override public void appendDisposition(AlertDisposition disposition) { }
         @Override public List<AlertDisposition> findDispositions(String alertId) { return Collections.emptyList(); }
         @Override public void save(RuleObservation observation) { observations.add(observation); }
-        @Override public boolean isActive(String ruleId, String subject, Instant at) { return false; }
+        @Override public boolean isActive(String systemId, String ruleId, String subject, Instant at) { return false; }
         @Override public void add(WhitelistEntry entry) { }
         @Override public <T> T required(io.github.jasper.monitoring.core.port.TransactionWork<T> work) { return work.execute(); }
     }

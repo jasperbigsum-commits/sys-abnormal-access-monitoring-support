@@ -188,9 +188,9 @@ export interface RuleChangeCommand {
 export interface WhitelistRecord {
     id: string;
     subject: string;
-    scope: string;
+    systemScope: string;
     ruleId?: string;
-    status: 'ACTIVE' | 'REVOKED';
+    status: 'ACTIVE' | 'REVOKED' | 'EXPIRED';
     expiresAt?: string;
     approvedBy?: string;
     reason?: string;

@@ -13,6 +13,9 @@ import io.github.jasper.monitoring.api.management.ManagementPageRequest;
 import io.github.jasper.monitoring.api.management.command.AlertAcknowledgeCommand;
 import io.github.jasper.monitoring.api.management.command.AlertAssignmentCommand;
 import io.github.jasper.monitoring.api.management.command.RuleChangeCommand;
+import io.github.jasper.monitoring.api.management.command.ControlApprovalCommand;
+import io.github.jasper.monitoring.api.ControlActionType;
+import io.github.jasper.monitoring.api.control.ControlCatalog;
 import io.github.jasper.monitoring.api.rule.RuleMode;
 import io.github.jasper.monitoring.api.error.ManagementConflictException;
 import io.github.jasper.monitoring.api.management.model.AlertView;
@@ -31,6 +34,11 @@ import io.github.jasper.monitoring.core.domain.management.ManagementAuditRecord;
 import io.github.jasper.monitoring.core.port.ManagementAuditRepository;
 import io.github.jasper.monitoring.core.port.ManagementQueryRepository;
 import io.github.jasper.monitoring.core.port.MonitoringTransaction;
+import io.github.jasper.monitoring.core.port.ControlExecutionStore;
+import io.github.jasper.monitoring.core.port.WhitelistRepository;
+import io.github.jasper.monitoring.core.domain.ControlCommand;
+import io.github.jasper.monitoring.core.domain.WhitelistEntry;
+import io.github.jasper.monitoring.core.application.control.ControlExecutionService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -38,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class ManagementServiceAuthorizationTest {
@@ -164,6 +173,40 @@ class ManagementServiceAuthorizationTest {
         assertEquals(1, queries.assignmentWrites);
     }
 
+    @Test
+    void expiredPassIsRejectedBeforeTheControlExecutionStoreIsRead() {
+        AtomicInteger executionReads = new AtomicInteger();
+        ControlExecutionStore controlStore = new ControlExecutionStore() {
+            @Override public Optional<io.github.jasper.monitoring.core.domain.control.StoredControl> find(String key) {
+                executionReads.incrementAndGet();
+                return Optional.empty();
+            }
+            @Override public boolean reserve(ControlCommand command,
+                    io.github.jasper.monitoring.api.control.ControlStatus status, Instant at) { return false; }
+            @Override public io.github.jasper.monitoring.core.domain.control.StoredControl transition(String key,
+                    long version, io.github.jasper.monitoring.api.control.ControlStatus expected,
+                    io.github.jasper.monitoring.api.control.ControlStatus target, String reason, Instant at) {
+                throw new AssertionError("control must not execute");
+            }
+        };
+        WhitelistRepository passes = new WhitelistRepository() {
+            @Override public boolean isActive(String systemId, String ruleId, String subject, Instant at) {
+                return false;
+            }
+            @Override public void add(WhitelistEntry entry) { throw new AssertionError("pass must not persist"); }
+        };
+        DefaultControlManagementService service = new DefaultControlManagementService(
+            new ManagementAccessGuard((principal, operation, resource) -> { }, audits, clock), queries, transaction,
+            new ControlExecutionService(controlStore,
+                ControlCatalog.<io.github.jasper.monitoring.core.port.ControlHandler>builder().freeze(), clock),
+            passes, clock);
+
+        assertThrows(IllegalArgumentException.class, () -> service.approve(actor,
+            ControlApprovalCommand.withPassUntil("control-1", 1, "expired", Instant.now(clock))));
+
+        assertEquals(0, executionReads.get());
+    }
+
     private static final class RecordingAudits implements ManagementAuditRepository {
         private final List<ManagementAuditRecord> records = new ArrayList<ManagementAuditRecord>();
         @Override public void append(ManagementAuditRecord record) { records.add(record); }
@@ -216,8 +259,8 @@ class ManagementServiceAuthorizationTest {
         @Override public Optional<WhitelistView> findWhitelistView(String scope, String id) { reads++; return Optional.of(WhitelistView.of(id, scope)); }
         @Override public boolean transitionWhitelist(String scope, String id, long version, boolean active, String actorId, String reason) { transitions++; return true; }
         @Override public ManagementPage<ControlView> searchControls(String scope, ControlQuery query) { reads++; return page(); }
-        @Override public Optional<ControlView> findControlView(String scope, String id) { reads++; return Optional.of(ControlView.of(id, scope, "PENDING", 2)); }
-        @Override public Optional<io.github.jasper.monitoring.core.domain.ControlCommand> findControlCommand(String scope,String id){return Optional.empty();}
+        @Override public Optional<ControlView> findControlView(String scope, String id) { reads++; return Optional.of(ControlView.of(id, scope, "AWAITING_APPROVAL", 1)); }
+        @Override public Optional<io.github.jasper.monitoring.core.domain.ControlCommand> findControlCommand(String scope,String id){return Optional.of(new ControlCommand(scope,id,"alert-1","user:alice",ControlActionType.REQUIRE_APPROVAL,Instant.parse("2026-07-26T00:01:00Z"),"AUTH-01"));}
         @Override public boolean transitionControl(String scope, String id, long version, String expected, String target, String reason) { transitions++; return true; }
         private static <T> ManagementPage<T> page() { return ManagementPage.of(Collections.<T>emptyList(), 0, 20, 0); }
     }

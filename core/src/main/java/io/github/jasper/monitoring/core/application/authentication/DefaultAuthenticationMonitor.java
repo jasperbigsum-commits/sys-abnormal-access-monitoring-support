@@ -25,6 +25,7 @@ import io.github.jasper.monitoring.api.fact.FactSource;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.port.AuthenticationControlRepository;
+import io.github.jasper.monitoring.core.port.WhitelistRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.EnumSet;
@@ -47,6 +48,7 @@ public final class DefaultAuthenticationMonitor implements AuthenticationMonitor
     private final String systemId;
     private final LoginSubjectKeyFactory keys;
     private final AuthenticationControlRepository controls;
+    private final WhitelistRepository passes;
     private final MonitoringService monitoring;
     private final MonitoringContextAccessor context;
     private final Clock clock;
@@ -68,12 +70,20 @@ public final class DefaultAuthenticationMonitor implements AuthenticationMonitor
     public DefaultAuthenticationMonitor(String systemId, LoginSubjectKeyFactory keys,
             AuthenticationControlRepository controls, MonitoringService monitoring,
             MonitoringContextAccessor context, Clock clock, ActionFailurePolicy controlFailurePolicy) {
+        this(systemId, keys, controls, null, monitoring, context, clock, controlFailurePolicy);
+    }
+
+    /** Creates a pass-aware authentication monitor. */
+    public DefaultAuthenticationMonitor(String systemId, LoginSubjectKeyFactory keys,
+            AuthenticationControlRepository controls, WhitelistRepository passes, MonitoringService monitoring,
+            MonitoringContextAccessor context, Clock clock, ActionFailurePolicy controlFailurePolicy) {
         if (systemId == null || systemId.trim().isEmpty()) {
             throw new IllegalArgumentException("systemId is required");
         }
         this.systemId = systemId.trim();
         this.keys = Objects.requireNonNull(keys, "keys");
         this.controls = Objects.requireNonNull(controls, "controls");
+        this.passes = passes;
         this.monitoring = Objects.requireNonNull(monitoring, "monitoring");
         this.context = Objects.requireNonNull(context, "context");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -89,8 +99,8 @@ public final class DefaultAuthenticationMonitor implements AuthenticationMonitor
         try {
             Set<ControlActionType> active = EnumSet.noneOf(ControlActionType.class);
             Set<String> ruleIds = new LinkedHashSet<String>();
-            add(controls.findActive(systemId, key, at), active, ruleIds);
-            add(controls.findActive(systemId, "ip:" + request.getSourceIp(), at), active, ruleIds);
+            add(controls.findActive(systemId, key, at), active, ruleIds, at);
+            add(controls.findActive(systemId, "ip:" + request.getSourceIp(), at), active, ruleIds, at);
             return decision(active, ruleIds);
         } catch (RuntimeException failure) {
             log(failure, request);
@@ -139,8 +149,12 @@ public final class DefaultAuthenticationMonitor implements AuthenticationMonitor
         }
     }
 
-    private static void add(List<ControlCommand> commands, Set<ControlActionType> active, Set<String> ruleIds) {
+    private void add(List<ControlCommand> commands, Set<ControlActionType> active, Set<String> ruleIds, Instant at) {
         for (ControlCommand command : commands) {
+            if (passes != null && command.getRuleId() != null
+                    && passes.isActive(systemId, command.getRuleId(), command.getSubject(), at)) {
+                continue;
+            }
             active.add(command.getAction());
             if (command.getRuleId() != null && !command.getRuleId().trim().isEmpty()) {
                 ruleIds.add(command.getRuleId());

@@ -31,7 +31,7 @@ async function submit(reason: string) {
     try {
         current.value = await repository.transitionWhitelist({
             id: current.value.id,
-            action: current.value.status === 'ACTIVE' ? 'REVOKE' : 'GRANT',
+            action: 'REVOKE',
             expectedVersion: current.value.version,
             reason,
         });
@@ -78,14 +78,14 @@ async function submit(reason: string) {
                         v-if="column.key === 'status'"
                         :value="record.status"
                         :options="whitelistStatusOptions"
-                    /><span v-else-if="column.key === 'ruleId'">{{ record.ruleId ?? '全部规则' }}</span
-                    ><span v-else-if="column.key === 'expiresAt'">{{ record.expiresAt ?? '长期有效' }}</span
+                    /><span v-else-if="column.key === 'ruleId'">{{ record.ruleId ?? '-' }}</span
+                    ><span v-else-if="column.key === 'expiresAt'">{{ record.expiresAt ?? '-' }}</span
                     ><AButton
-                        v-else-if="column.key === 'action'"
+                        v-else-if="column.key === 'action' && record.status === 'ACTIVE'"
                         type="link"
-                        :danger="record.status === 'ACTIVE'"
+                        danger
                         @click="open(record as WhitelistRecord)"
-                        >{{ record.status === 'ACTIVE' ? '撤销' : '授予' }}</AButton
+                        >撤销</AButton
                     ></template
                 ></BasicTable
             >

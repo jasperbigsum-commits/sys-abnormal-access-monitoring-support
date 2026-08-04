@@ -98,10 +98,11 @@ public final class MyBatisMonitoringStore implements EventRepository, AlertRepos
     @Override public List<AlertDisposition> findDispositions(String alertId) { return read(s -> { java.util.ArrayList<AlertDisposition> result = new java.util.ArrayList<AlertDisposition>(); for (AlertDispositionPo row : s.getMapper(AlertMapper.class).findDispositions(alertId)) result.add(dispositionOf(row)); return result; }); }
     @Override public Optional<ControlRecord> findControl(String idempotencyKey) { return read(s -> controlOf(s.getMapper(ControlMapper.class).find(idempotencyKey))); }
     @Override public void save(ControlRecord record) { write(s -> { ControlMapper mapper = s.getMapper(ControlMapper.class); ControlActionPo row = controlRow(record); if (mapper.update(row) == 0) mapper.insert(row); }); }
-    @Override public boolean isActive(String ruleId, String subject, Instant at) { return read(s -> s.getMapper(WhitelistMapper.class).countActive(ruleId, subject, at) > 0); }
+    @Override public boolean isActive(String systemId, String ruleId, String subject, Instant at) { return read(s -> s.getMapper(WhitelistMapper.class).countActive(systemId, ruleId, subject, at) > 0); }
     @Override public void add(WhitelistEntry entry) { write(s -> s.getMapper(WhitelistMapper.class).insert(
         entry.getWhitelistId() == null ? java.util.UUID.randomUUID().toString() : entry.getWhitelistId(),
-        entry.getSystemId(), entry.getRuleId(), entry.getSubject(), entry.getExpiresAt())); }
+        entry.getSystemId(), entry.getRuleId(), entry.getSubject(), entry.getExpiresAt(),
+        entry.getApprovedBy(), entry.getReason())); }
     @Override public Optional<NotificationDelivery> find(String channel, String aggregateId) {
         return read(s -> deliveryOf(s.getMapper(NotificationDeliveryMapper.class).find(channel, aggregateId)));
     }

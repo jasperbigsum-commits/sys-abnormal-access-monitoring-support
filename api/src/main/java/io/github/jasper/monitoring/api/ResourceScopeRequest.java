@@ -10,6 +10,8 @@ public final class ResourceScopeRequest {
     private final String resourceType;
     private final String resourceId;
     private final String orgScope;
+    private final String passRuleId;
+    private final String passSubject;
     /**
      * 创建资源范围授权请求。
      *
@@ -19,10 +21,21 @@ public final class ResourceScopeRequest {
      * @param orgScope 适用时提供的租户、组织或数据域边界
      */
     public ResourceScopeRequest(MonitoringRequestContext request, String resourceType, String resourceId, String orgScope) {
+        this(request, resourceType, resourceId, orgScope, null, null);
+    }
+
+    /**
+     * 创建可由服务端通行证覆盖监测阻断的资源授权请求。
+     * 规则和主体必须来自可信服务端上下文，不得直接采用客户端参数。
+     */
+    public ResourceScopeRequest(MonitoringRequestContext request, String resourceType, String resourceId,
+            String orgScope, String passRuleId, String passSubject) {
         this.request = request;
         this.resourceType = SecurityFieldSanitizer.text(resourceType, 128);
         this.resourceId = SecurityFieldSanitizer.text(resourceId, 256);
         this.orgScope = SecurityFieldSanitizer.text(orgScope, 256);
+        this.passRuleId = SecurityFieldSanitizer.text(passRuleId, 128);
+        this.passSubject = SecurityFieldSanitizer.text(passSubject, 512);
     }
     /** @return 正在授权的操作对应的请求上下文 */
     public MonitoringRequestContext getRequest() { return request; }
@@ -32,4 +45,8 @@ public final class ResourceScopeRequest {
     public String getResourceId() { return resourceId; }
     /** @return 已清洗的组织或数据域边界；不可用时为 {@code null} */
     public String getOrgScope() { return orgScope; }
+    /** @return 可信服务端声明的通行证规则范围 */
+    public String getPassRuleId() { return passRuleId; }
+    /** @return 可信服务端声明的通行证精确主体 */
+    public String getPassSubject() { return passSubject; }
 }

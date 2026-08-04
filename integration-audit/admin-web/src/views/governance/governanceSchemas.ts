@@ -10,6 +10,7 @@ export const ruleModeOptions = [
 export const whitelistStatusOptions = [
     { value: 'ACTIVE', label: '生效', color: 'success' },
     { value: 'REVOKED', label: '已撤销', color: 'default' },
+    { value: 'EXPIRED', label: '已过期', color: 'default' },
 ];
 export const ruleSearchSchemas: FormSchema[] = [
     {
@@ -69,7 +70,7 @@ export const ruleColumns: TableColumnType[] = [
 export const whitelistColumns: TableColumnType[] = [
     { title: '记录编号', dataIndex: 'id', key: 'id', width: 180 },
     { title: '主体', dataIndex: 'subject', key: 'subject', width: 190 },
-    { title: '适用范围', dataIndex: 'scope', key: 'scope', ellipsis: true },
+    { title: '系统范围', dataIndex: 'systemScope', key: 'systemScope', ellipsis: true },
     { title: '规则', dataIndex: 'ruleId', key: 'ruleId', width: 190 },
     { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
     { title: '到期时间', dataIndex: 'expiresAt', key: 'expiresAt', width: 190 },

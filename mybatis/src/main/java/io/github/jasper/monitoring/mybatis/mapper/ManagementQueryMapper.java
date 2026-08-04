@@ -70,10 +70,10 @@ public interface ManagementQueryMapper {
     RuleChangePo ruleChange(@Param("scope") String scope, @Param("id") String id,
         @Param("idempotencyKey") String idempotencyKey);
 
-    @Select("SELECT whitelist_id AS id, status, version FROM monitoring_security_whitelist WHERE system_id=#{scope} ORDER BY created_at DESC, whitelist_id ASC LIMIT #{limit} OFFSET #{offset}")
+    @Select("SELECT whitelist_id AS id, CASE WHEN status='ACTIVE' AND expires_at<=CURRENT_TIMESTAMP THEN 'EXPIRED' ELSE status END AS status, version, subject, rule_id AS ruleId, expires_at AS expiresAt, approved_by AS approvedBy, reason FROM monitoring_security_whitelist WHERE system_id=#{scope} ORDER BY created_at DESC, whitelist_id ASC LIMIT #{limit} OFFSET #{offset}")
     List<ManagementRowPo> whitelists(@Param("scope") String scope, @Param("limit") int limit, @Param("offset") long offset);
     @Select("SELECT COUNT(*) FROM monitoring_security_whitelist WHERE system_id=#{scope}") long countWhitelists(@Param("scope") String scope);
-    @Select("SELECT whitelist_id AS id, status, version FROM monitoring_security_whitelist WHERE system_id=#{scope} AND whitelist_id=#{id}")
+    @Select("SELECT whitelist_id AS id, CASE WHEN status='ACTIVE' AND expires_at<=CURRENT_TIMESTAMP THEN 'EXPIRED' ELSE status END AS status, version, subject, rule_id AS ruleId, expires_at AS expiresAt, approved_by AS approvedBy, reason FROM monitoring_security_whitelist WHERE system_id=#{scope} AND whitelist_id=#{id}")
     ManagementRowPo whitelist(@Param("scope") String scope, @Param("id") String id);
     @Update("UPDATE monitoring_security_whitelist SET status=#{status}, approved_by=#{actorId}, reason=#{reason}, version=version+1 WHERE system_id=#{scope} AND whitelist_id=#{id} AND version=#{version}")
     int transitionWhitelist(@Param("scope") String scope, @Param("id") String id, @Param("version") long version,

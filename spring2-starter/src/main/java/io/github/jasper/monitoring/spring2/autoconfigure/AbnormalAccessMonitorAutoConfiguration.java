@@ -395,8 +395,9 @@ public class AbnormalAccessMonitorAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ResourceAccessGuard abnormalAccessResourceAccessGuard(ResourceScopeAuthorizer authorizer,
-            MonitoringService monitoring) {
-        return new ResourceAccessGuard(authorizer, monitoring);
+            MonitoringService monitoring, MyBatisMonitoringStore store,
+            AbnormalAccessMonitorProperties properties) {
+        return new ResourceAccessGuard(properties.getSystemId(), authorizer, store, monitoring, Clock.systemUTC());
     }
 
     @Bean
@@ -540,8 +541,8 @@ public class AbnormalAccessMonitorAutoConfiguration {
             havingValue = "true", matchIfMissing = true)
         AuthenticationMonitor abnormalAccessAuthenticationMonitor(AbnormalAccessMonitorProperties properties,
                 LoginSubjectKeyFactory keys, MyBatisControlExecutionStore controls,
-                MonitoringService monitoring, MonitoringContextAccessor context) {
-            return new DefaultAuthenticationMonitor(properties.getSystemId(), keys, controls, monitoring,
+                MyBatisMonitoringStore passes, MonitoringService monitoring, MonitoringContextAccessor context) {
+            return new DefaultAuthenticationMonitor(properties.getSystemId(), keys, controls, passes, monitoring,
                 context, Clock.systemUTC(), properties.getAuthentication().getControlFailurePolicy());
         }
 

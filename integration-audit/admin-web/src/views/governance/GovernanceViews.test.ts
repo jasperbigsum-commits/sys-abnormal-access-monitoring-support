@@ -21,6 +21,8 @@ describe('governance views', () => {
         const wrapper = mount(WhitelistView, { global: { provide: provide() } });
         await flushPromises();
         expect(wrapper.text()).toContain('ops-demo-batch-01');
+        expect(wrapper.text()).toContain('integration-audit');
+        expect(wrapper.text()).toContain('已过期');
         expect(wrapper.text()).not.toMatch(/编辑|删除/);
         wrapper.unmount();
     }, 15_000);

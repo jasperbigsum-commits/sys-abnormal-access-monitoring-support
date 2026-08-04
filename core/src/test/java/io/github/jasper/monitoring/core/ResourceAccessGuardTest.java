@@ -12,6 +12,8 @@ import io.github.jasper.monitoring.core.application.DefaultMonitoringRuntime;
 import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
+import io.github.jasper.monitoring.core.domain.WhitelistEntry;
+import io.github.jasper.monitoring.core.port.WhitelistRepository;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.port.EventRepository;
 import java.time.Clock;
@@ -28,6 +30,43 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceAccessGuardTest {
+
+    @Test
+    void activeExplicitlyScopedPassCanOverrideAHostDenial() {
+        WhitelistRepository passes = new WhitelistRepository() {
+            @Override public boolean isActive(String systemId, String ruleId, String subject, Instant at) {
+                return "orders".equals(systemId) && "AUTHZ-01".equals(ruleId)
+                    && "user:user-1".equals(subject);
+            }
+            @Override public void add(WhitelistEntry entry) { }
+        };
+        ResourceAccessGuard guard = guard(
+            (identity, request) -> AuthorizationDecision.denied(
+                io.github.jasper.monitoring.api.code.BuiltInReasonCodes.Authorization.RESOURCE_SCOPE_DENIED),
+            new RecordingEvents(), passes);
+        ResourceScopeRequest resource = new ResourceScopeRequest(resource("report-1").getRequest(),
+            "REPORT", "report-1", "org-1",
+            "AUTHZ-01", "user:user-1");
+
+        assertTrue(guard.authorize(identity(), resource).isAllowed());
+    }
+
+    @Test
+    void passCannotOverrideAnAuthorizerFailure() {
+        WhitelistRepository passes = new WhitelistRepository() {
+            @Override public boolean isActive(String systemId, String ruleId, String subject, Instant at) {
+                return true;
+            }
+            @Override public void add(WhitelistEntry entry) { }
+        };
+        ResourceAccessGuard guard = guard((identity, request) -> {
+            throw new IllegalStateException("authorization unavailable");
+        }, new RecordingEvents(), passes);
+        ResourceScopeRequest resource = new ResourceScopeRequest(resource("report-1").getRequest(),
+            "REPORT", "report-1", "org-1", "AUTHZ-01", "user:user-1");
+
+        assertFalse(guard.authorize(identity(), resource).isAllowed());
+    }
 
     @Test
     void preservesDeniedDecisionAndRecordsTypedAccessDeniedAction() {
@@ -71,6 +110,16 @@ class ResourceAccessGuardTest {
     }
 
     private static ResourceAccessGuard guard(ResourceScopeAuthorizer authorizer, EventRepository events) {
+        return guard(authorizer, events, new WhitelistRepository() {
+            @Override public boolean isActive(String systemId, String ruleId, String subject, Instant at) {
+                return false;
+            }
+            @Override public void add(WhitelistEntry entry) { }
+        });
+    }
+
+    private static ResourceAccessGuard guard(ResourceScopeAuthorizer authorizer, EventRepository events,
+            WhitelistRepository passes) {
         ActionCatalog catalog = new ActionCatalog();
         BuiltInActions.registerInto(catalog);
         catalog.freeze();
@@ -79,7 +128,7 @@ class ResourceAccessGuardTest {
             new SecurityEventAssembler("orders", clock),
             new DefaultMonitoringRuntime(catalog, builtInFacts(), Collections.emptyList()),
             (type, action, event, facts, sources, ineligible, issues) -> { }, stableCodes());
-        return new ResourceAccessGuard(authorizer, monitoring);
+        return new ResourceAccessGuard("orders", authorizer, passes, monitoring, clock);
     }
 
     private static io.github.jasper.monitoring.api.fact.FactCatalog builtInFacts() {

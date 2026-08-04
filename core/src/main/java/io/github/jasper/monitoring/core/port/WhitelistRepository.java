@@ -5,6 +5,6 @@ import java.time.Instant;
 
 /** Persistence boundary for time-bounded rule exemptions. */
 public interface WhitelistRepository {
-    boolean isActive(String ruleId, String subject, Instant at);
+    boolean isActive(String systemId, String ruleId, String subject, Instant at);
     void add(WhitelistEntry entry);
 }

@@ -1,6 +1,7 @@
 package io.github.jasper.monitoring.mybatis.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.jasper.monitoring.api.SecurityEventResult;
@@ -87,13 +88,15 @@ class MyBatisMonitoringStoreTest {
         ControlCommand command = new ControlCommand("orders", "control-ports", "alert-ports", "alice",
             ControlActionType.REQUIRE_MFA, at.plusSeconds(300), "AUTH-01");
         store.save(new ControlRecord(command, ControlExecution.succeeded("control-ports"), at));
-        store.add(new WhitelistEntry("AUTH-01", "alice", at.plusSeconds(300)));
+        store.add(WhitelistEntry.issued("pass-ports", "orders", "AUTH-01", "alice",
+            at.plusSeconds(300), "operator-1", "approved login"));
 
         assertEquals(1, store.findDispositions("alert-ports").size());
         assertEquals(DispositionType.ACKNOWLEDGED,
             store.findDispositions("alert-ports").get(0).getDispositionType());
         assertTrue(store.findControl("control-ports").get().getExecution().isSucceeded());
-        assertTrue(store.isActive("AUTH-01", "alice", at));
+        assertTrue(store.isActive("orders", "AUTH-01", "alice", at));
+        assertFalse(store.isActive("billing", "AUTH-01", "alice", at));
     }
 
     @Test

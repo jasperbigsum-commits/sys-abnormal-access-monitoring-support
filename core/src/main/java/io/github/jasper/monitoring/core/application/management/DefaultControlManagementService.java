@@ -109,8 +109,9 @@ public final class DefaultControlManagementService extends AbstractManagementSer
             return require(queries.findControlCommand(actor.getSystemScope(), id), "control", id);
         });
         if (action == 0) {
+            WhitelistEntry pass = passIfRequested(actor, control, (ControlApprovalCommand) command);
+            if (pass != null) whitelists.add(pass);
             executions.approve(control, command.getExpectedVersion());
-            issuePassIfRequested(actor, control, (ControlApprovalCommand) command);
         } else if (action == 1) {
             executions.reject(control.getIdempotencyKey(), command.getReason(), command.getExpectedVersion());
         } else {
@@ -123,16 +124,19 @@ public final class DefaultControlManagementService extends AbstractManagementSer
         });
     }
 
-    private void issuePassIfRequested(ManagementActor actor, ControlCommand control,
-                                      ControlApprovalCommand approval) {
+    private WhitelistEntry passIfRequested(ManagementActor actor, ControlCommand control,
+                                           ControlApprovalCommand approval) {
         Instant expiresAt = approval.getPassExpiresAt();
-        if (expiresAt == null) return;
+        if (expiresAt == null) return null;
         if (whitelists == null) throw new IllegalStateException("Temporary passes are not configured");
         if (!expiresAt.isAfter(Instant.now(clock))) throw new IllegalArgumentException("passExpiresAt must be in the future");
         if (control.getRuleId() == null || control.getRuleId().trim().isEmpty()) {
             throw new IllegalStateException("Control has no rule scope for a temporary pass");
         }
-        whitelists.add(WhitelistEntry.issued(UUID.randomUUID().toString(), control.getSystemId(),
-            control.getRuleId(), control.getSubject(), expiresAt));
+        if (!actor.getSystemScope().equals(control.getSystemId())) {
+            throw new IllegalStateException("Control system scope changed");
+        }
+        return WhitelistEntry.issued(UUID.randomUUID().toString(), actor.getSystemScope(),
+            control.getRuleId(), control.getSubject(), expiresAt, actor.getActorId(), approval.getReason());
     }
 }

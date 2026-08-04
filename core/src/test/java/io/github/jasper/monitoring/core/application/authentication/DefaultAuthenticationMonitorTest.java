@@ -29,6 +29,7 @@ import io.github.jasper.monitoring.core.domain.ControlCommand;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.port.AuthenticationControlRepository;
 import io.github.jasper.monitoring.core.port.EventRepository;
+import io.github.jasper.monitoring.core.port.WhitelistRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -94,7 +95,26 @@ class DefaultAuthenticationMonitorTest {
             fixture(broken, ActionFailurePolicy.FAIL_CLOSED).monitor.preCheck(input()).getDisposition());
     }
 
+    @Test void ignoresActiveControlsCoveredByATemporaryPass() {
+        WhitelistRepository passes = new WhitelistRepository() {
+            @Override public boolean isActive(String systemId, String ruleId, String subject, Instant at) {
+                return "test-system".equals(systemId) && "AUTH-01".equals(ruleId);
+            }
+            @Override public void add(io.github.jasper.monitoring.core.domain.WhitelistEntry entry) { }
+        };
+        Fixture fixture = fixture((system, subject, at) ->
+            Collections.singletonList(command(ControlActionType.DENY, "AUTH-01")),
+            passes, ActionFailurePolicy.FAIL_CLOSED);
+
+        assertTrue(fixture.monitor.preCheck(input()).isAllowed());
+    }
+
     private static Fixture fixture(AuthenticationControlRepository controls, ActionFailurePolicy policy) {
+        return fixture(controls, noPasses(), policy);
+    }
+
+    private static Fixture fixture(AuthenticationControlRepository controls, WhitelistRepository passes,
+            ActionFailurePolicy policy) {
         RecordingEvents events = new RecordingEvents();
         ActionCatalog actions = new ActionCatalog();
         BuiltInActions.registerInto(actions);
@@ -116,8 +136,17 @@ class DefaultAuthenticationMonitorTest {
         LoginSubjectKeyFactory keys = new LoginSubjectKeyFactory(
             "01234567890123456789012345678901".getBytes(StandardCharsets.UTF_8),
             subject -> subject.getLoginUser().trim().toLowerCase(java.util.Locale.ROOT));
-        return new Fixture(new DefaultAuthenticationMonitor("test-system", keys, controls, service,
+        return new Fixture(new DefaultAuthenticationMonitor("test-system", keys, controls, passes, service,
             context, Clock.fixed(NOW, ZoneOffset.UTC), policy), events);
+    }
+
+    private static WhitelistRepository noPasses() {
+        return new WhitelistRepository() {
+            @Override public boolean isActive(String systemId, String ruleId, String subject, Instant at) {
+                return false;
+            }
+            @Override public void add(io.github.jasper.monitoring.core.domain.WhitelistEntry entry) { }
+        };
     }
 
     private static LoginSubjectInput input() { return new LoginSubjectInput("Alice", "primary"); }

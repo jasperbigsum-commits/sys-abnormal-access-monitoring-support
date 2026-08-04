@@ -9,6 +9,8 @@ import io.github.jasper.monitoring.api.management.ManagementOperation;
 import io.github.jasper.monitoring.api.management.ManagementPageRequest;
 import io.github.jasper.monitoring.api.management.query.SecurityEventQuery;
 import io.github.jasper.monitoring.api.management.query.AlertAssignmentQuery;
+import io.github.jasper.monitoring.api.management.query.WhitelistQuery;
+import io.github.jasper.monitoring.api.management.model.WhitelistView;
 import io.github.jasper.monitoring.api.rule.RuleMode;
 import io.github.jasper.monitoring.core.domain.management.ManagementAuditRecord;
 import io.github.jasper.monitoring.mybatis.MyBatisMonitoringStoreRegistrar;
@@ -46,6 +48,7 @@ class MyBatisManagementRepositoryTest {
             statement.execute("CREATE TABLE monitoring_alert_event_link(alert_id VARCHAR(128),event_id VARCHAR(128))");
             statement.execute("CREATE TABLE monitoring_alert_disposition(disposition_id VARCHAR(128) PRIMARY KEY,alert_id VARCHAR(128),disposition_type VARCHAR(64),operator_id VARCHAR(128),assignee_id VARCHAR(128),expected_version BIGINT,comment_text VARCHAR(1024),evidence_summary VARCHAR(1024),created_at TIMESTAMP)");
             statement.execute("CREATE TABLE monitoring_security_rule(system_id VARCHAR(128),rule_id VARCHAR(128),rule_version BIGINT,rule_name VARCHAR(256),rule_definition CLOB,risk_level VARCHAR(32),rule_mode VARCHAR(32),rule_threshold BIGINT,enabled BOOLEAN,created_at TIMESTAMP,created_by VARCHAR(128),change_reason VARCHAR(512),approved_by VARCHAR(128),idempotency_key VARCHAR(128),UNIQUE(system_id,idempotency_key),PRIMARY KEY(system_id,rule_id,rule_version))");
+            statement.execute("CREATE TABLE monitoring_security_whitelist(whitelist_id VARCHAR(128) PRIMARY KEY,system_id VARCHAR(128),rule_id VARCHAR(128),subject VARCHAR(256),reason VARCHAR(512),approved_by VARCHAR(128),expires_at TIMESTAMP,created_at TIMESTAMP,status VARCHAR(32),version BIGINT)");
             statement.execute("INSERT INTO monitoring_security_event VALUES('event-a','system-a',TIMESTAMP '2026-07-20 00:00:00','report:export','SUCCESS')");
             statement.execute("INSERT INTO monitoring_security_event VALUES('event-b','system-b',TIMESTAMP '2026-07-20 00:00:00','report:export','SUCCESS')");
             statement.execute("INSERT INTO monitoring_security_alert VALUES('alert-a','NEW',0,TIMESTAMP '2026-07-20 00:00:00')");
@@ -57,6 +60,28 @@ class MyBatisManagementRepositoryTest {
         MyBatisMonitoringStoreRegistrar.register(configuration);
         SqlSessionFactory factory=new SqlSessionFactoryBuilder().build(configuration);
         repository=new MyBatisManagementRepository(SqlSessionManager.newInstance(factory));
+    }
+
+    @Test
+    void whitelistViewsExposePassScopeAndRevocationImmediatelyDisablesIt() throws Exception {
+        try (Connection connection=dataSource.getConnection(); Statement statement=connection.createStatement()) {
+            statement.execute("INSERT INTO monitoring_security_whitelist VALUES('pass-a','system-a','AUTH-01','user:alice','approved login','operator',TIMESTAMP '2099-07-20 00:00:00',CURRENT_TIMESTAMP,'ACTIVE',1)");
+            statement.execute("INSERT INTO monitoring_security_whitelist VALUES('pass-b','system-b','AUTH-01','user:alice','other system','operator-b',TIMESTAMP '2099-07-20 00:00:00',CURRENT_TIMESTAMP,'ACTIVE',1)");
+        }
+
+        WhitelistView view = repository.findWhitelistView("system-a", "pass-a").get();
+        assertEquals("user:alice", view.getSubject());
+        assertEquals("AUTH-01", view.getRuleId());
+        assertEquals("operator", view.getApprovedBy());
+        assertEquals("approved login", view.getReason());
+        assertEquals(1, repository.searchWhitelists("system-a", WhitelistQuery.of(
+            ManagementPageRequest.of(0, 20, WhitelistQuery.Sort.CREATED_AT))).getItems().size());
+
+        assertTrue(repository.transitionWhitelist("system-a", "pass-a", 1, false,
+            "operator-2", "access withdrawn"));
+        assertEquals("REVOKED", repository.findWhitelistView("system-a", "pass-a").get().getStatus());
+        assertFalse(repository.transitionWhitelist("system-b", "pass-a", 2, false,
+            "operator-b", "cross-system revoke"));
     }
 
     @Test

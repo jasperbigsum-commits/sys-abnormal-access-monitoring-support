@@ -351,7 +351,7 @@ class DeterministicMockMonitoringRepository implements MockMonitoringRepository 
     async searchWhitelists(query: WhitelistQuery): Promise<PageResult<WhitelistRecord>> {
         await this.prepare('searchWhitelists');
         const items = this.whitelists.filter((item) =>
-            includesText([item.id, item.subject, item.scope, item.ruleId, item.approvedBy, item.reason], query.keyword)
+                includesText([item.id, item.subject, item.systemScope, item.ruleId, item.approvedBy, item.reason], query.keyword)
             && (!query.statuses?.length || query.statuses.includes(item.status))
         );
         return paginate(items, query);

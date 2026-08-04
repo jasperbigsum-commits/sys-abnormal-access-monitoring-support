@@ -162,7 +162,7 @@ public final class MyBatisManagementRepository implements ManagementQueryReposit
     private static List<RuleView> rules(List<ManagementRowPo> rows,String scope){List<RuleView> out=new ArrayList<RuleView>();for(ManagementRowPo r:rows)out.add(rule(r,scope));return out;}
     private static RuleView rule(ManagementRowPo row,String scope){return RuleView.of(row.getId(),scope,row.getVersion(),RuleMode.valueOf(row.getStatus()),row.getThreshold());}
     private static List<WhitelistView> whitelists(List<ManagementRowPo> rows,String scope){List<WhitelistView> out=new ArrayList<WhitelistView>();for(ManagementRowPo r:rows)out.add(whitelist(r,scope));return out;}
-    private static WhitelistView whitelist(ManagementRowPo row,String scope){return WhitelistView.of(row.getId(),scope,row.getStatus(),row.getVersion());}
+    private static WhitelistView whitelist(ManagementRowPo row,String scope){return WhitelistView.of(row.getId(),scope,row.getStatus(),row.getVersion(),row.getSubject(),row.getRuleId(),row.getExpiresAt(),row.getApprovedBy(),row.getReason());}
     private static List<ControlView> controls(List<ManagementRowPo> rows,String scope){List<ControlView> out=new ArrayList<ControlView>();for(ManagementRowPo r:rows)out.add(ControlView.of(r.getId(),scope,r.getStatus(),r.getVersion()));return out;}
     private static Optional<SecurityEventView> optionalEvent(ManagementRowPo r,String scope){return r==null?Optional.<SecurityEventView>empty():Optional.of(SecurityEventView.of(r.getId(),scope));}
     private static Optional<AlertView> optionalAlert(ManagementRowPo r,String scope){return r==null?Optional.<AlertView>empty():Optional.of(AlertView.of(r.getId(),scope,r.getStatus(),r.getAssigneeId(),r.getVersion()));}

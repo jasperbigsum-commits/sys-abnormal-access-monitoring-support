@@ -116,7 +116,7 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
             RuleEvaluationContext.Evaluation evaluation = evaluate(input, rule);
             if (!evaluation.getMatch().isPresent()) continue;
             RuleMatch match = evaluation.getMatch().get();
-            if (whitelist.isActive(match.getRuleId(), match.getSubject(), Instant.now(clock))) continue;
+            if (whitelist.isActive(event.getSystemId(), match.getRuleId(), match.getSubject(), Instant.now(clock))) continue;
             matchedRuleIds.add(match.getRuleId());
             if (match.getDisposition() == ActionDisposition.BLOCK) disposition = ActionDisposition.BLOCK;
             requirements.addAll(match.getRequirements());
@@ -153,7 +153,7 @@ public final class TypedRuleEvaluationService implements MonitoringService.RuleE
                 continue;
             }
             RuleMatch match = evaluation.getMatch().get();
-            if (whitelist.isActive(match.getRuleId(), match.getSubject(), Instant.now(clock))) {
+            if (whitelist.isActive(event.getSystemId(), match.getRuleId(), match.getSubject(), Instant.now(clock))) {
                 continue;
             }
             if (ruleMode == RuleMode.OBSERVE) {

@@ -161,8 +161,8 @@ CREATE TABLE monitoring_alert_disposition (
 CREATE INDEX idx_alert_disposition_alert_at ON monitoring_alert_disposition (alert_id, created_at);
 
 CREATE TABLE monitoring_security_whitelist (
-    whitelist_id VARCHAR(128) COMMENT '管理侧白名单标识',
-    system_id VARCHAR(128) COMMENT '管理授权所属系统范围',
+    whitelist_id VARCHAR(128) NOT NULL COMMENT '管理侧白名单标识',
+    system_id VARCHAR(128) NOT NULL COMMENT '管理授权所属系统范围',
     rule_id VARCHAR(128) NOT NULL COMMENT '适用规则标识',
     subject VARCHAR(256) NOT NULL COMMENT '豁免主体',
     reason VARCHAR(512) NOT NULL DEFAULT 'Created by monitoring repository' COMMENT '豁免原因',
@@ -171,11 +171,11 @@ CREATE TABLE monitoring_security_whitelist (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' COMMENT '管理生命周期状态',
     version BIGINT NOT NULL DEFAULT 1 COMMENT '乐观锁版本',
-    PRIMARY KEY (rule_id, subject, expires_at)
+    PRIMARY KEY (whitelist_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安全规则白名单表';
 
-CREATE INDEX idx_security_whitelist_lookup ON monitoring_security_whitelist (rule_id, subject, expires_at);
-CREATE UNIQUE INDEX uk_security_whitelist_id ON monitoring_security_whitelist (whitelist_id);
+CREATE INDEX idx_security_whitelist_lookup ON monitoring_security_whitelist
+    (system_id, rule_id, subject, status, expires_at);
 
 CREATE TABLE monitoring_control_action_attempt (
     control_id VARCHAR(128) NOT NULL,
