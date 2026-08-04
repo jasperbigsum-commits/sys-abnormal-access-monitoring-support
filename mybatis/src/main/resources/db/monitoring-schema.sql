@@ -9,7 +9,6 @@ CREATE TABLE monitoring_security_event (
     source_ip VARCHAR(128) NOT NULL COMMENT '请求来源 IP 地址',
     device_id_hash VARCHAR(256) COMMENT '设备标识哈希值',
     session_id_hash VARCHAR(256) COMMENT '会话标识哈希值',
-    attempted_account_hash VARCHAR(128) COMMENT '登录尝试账号的版本化不可逆关联值',
     request_id VARCHAR(128) NOT NULL COMMENT '请求关联标识',
     trace_id VARCHAR(128) COMMENT '链路追踪标识',
     action VARCHAR(128) NOT NULL COMMENT '被监测操作',
@@ -217,3 +216,9 @@ CREATE TABLE monitoring_management_audit (
     PRIMARY KEY (audit_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理操作脱敏审计记录';
 CREATE INDEX idx_management_audit_system_at ON monitoring_management_audit (system_id, occurred_at, audit_id);
+
+-- 开发版基线统一在原始 SQL 末尾补充登录尝试账号关联字段。
+-- 值由 LoginSubjectKeyFactory 生成，只允许版本化不可逆哈希，不保存账号明文。
+ALTER TABLE monitoring_security_event
+    ADD COLUMN attempted_account_hash VARCHAR(128) NULL COMMENT '登录尝试账号的版本化不可逆关联值'
+    AFTER session_id_hash;
