@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.action.ResourceAccess;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.fact.ActionFact;
 import io.github.jasper.monitoring.api.fact.ActionFacts;
@@ -88,6 +89,21 @@ class MonitorActionContractValidatorTest {
                 Fixture.class.getMethod("staticExport")));
     }
 
+    @Test
+    void enforcesResourceAccessCompositionAndCompilesItIntoTheActionBinding() throws Exception {
+        MonitorActionContractValidator validator = validator(Collections.<FactBinding>emptyList());
+
+        MonitorActionContractValidator.MethodBinding binding = validator.validate(
+            Fixture.class.getMethod("resourceQuery", String.class));
+        assertEquals(true, binding.hasResourceAccess());
+        assertThrows(MonitoringConfigurationException.class, () -> validator.validate(
+            Fixture.class.getMethod("resourceOnly")));
+        assertThrows(MonitoringConfigurationException.class, () -> validator.validate(
+            Fixture.class.getMethod("resourceWithoutId")));
+        assertThrows(MonitoringConfigurationException.class, () -> validator.validate(
+            Fixture.class.getMethod("requiredOrgWithoutDeclaration")));
+    }
+
     private static MonitorActionContractValidator validator(java.util.List<FactBinding> bindings) {
         ActionCatalog actions = new ActionCatalog();
         BuiltInActions.registerInto(actions);
@@ -99,6 +115,22 @@ class MonitorActionContractValidatorTest {
     }
 
     public static final class Fixture {
+        @MonitorAction(BuiltInActions.Query.class)
+        @ResourceAccess
+        public void resourceQuery(@ActionFact(BuiltInFacts.ResourceId.class) String resourceId) { }
+
+        @ResourceAccess
+        public void resourceOnly() { }
+
+        @MonitorAction(BuiltInActions.SessionConcurrent.class)
+        @ResourceAccess
+        public void resourceWithoutId() { }
+
+        @MonitorAction(BuiltInActions.SensitiveView.class)
+        @ResourceAccess(requireOrgScope = true)
+        @StaticActionFact(fact = BuiltInFacts.ResourceId.class, value = "resource-1")
+        public void requiredOrgWithoutDeclaration() { }
+
         @MonitorAction(BuiltInActions.ReportExport.class)
         public void export(@ActionFact(BuiltInFacts.DataCount.class) Long count) { }
 

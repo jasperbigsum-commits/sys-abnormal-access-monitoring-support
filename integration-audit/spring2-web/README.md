@@ -166,12 +166,12 @@ abnormal:
 
 ### 4. 在真实资源决策点执行授权
 
-夹具的 `AuditReportAuthorizationInterceptor` 在报告 Controller 执行前调用 `ResourceAccessGuard`，并且：
+夹具在 `@MonitorAction` 的资源阶段调用 `ResourceScopeResolver` 和 `ResourceAccessGuard`，并且：
 
-1. 先加载目标资源及其组织范围。
-2. 使用服务端派生身份与 `ResourceScopeAuthorizer` 判断权限。
+1. resolver 从服务端报告目录加载一次目标资源组织范围，并产出 typed `OrgScope` Fact。
+2. 使用服务端派生身份与 `ResourceScopeAuthorizer` 判断权限，后续事件复用同一 Fact 快照。
 3. 跨组织时返回 404，不泄露资源存在性；其他拒绝返回 403。
-4. 只有授权通过时才把报告对象放入请求属性供后续导出使用。
+4. 只有授权通过时才进入报告查询或导出业务方法。
 
 目标宿主应把同样的模式放在 Controller、Service 或网关之后的**真实授权决策点**。仅记录请求上下文不会自动产生登录、查询、导出或权限变更等业务事件。
 
@@ -265,7 +265,7 @@ public ControlExecution revokeSession(ControlCommand command) {
 | 场景 | 示例位置 | 关键验收编号 |
 | --- | --- | --- |
 | 登录失败、挑战和限流 | `security/AuthenticationController`、`AuditAuthenticationService` | TC-01、TC-02、TC-03、TC-17 |
-| 报告资源范围授权 | `security/AuditReportAuthorizationInterceptor` | TC-05、IA-07 |
+| 报告资源范围授权 | `security/AuditShiroRbacConfiguration`、`spring-support/ResourceAccessStage` | TC-05、IA-07 |
 | 查询遍历与阈值控制 | `report/ReportQueryService`、`ReportQueryController` | TC-06、TC-07 |
 | 导出同步决策与台账 | `report/ReportExportService` | TC-08、TC-09、IA-05 |
 | 权限提升拒绝 | `privilege/PrivilegeGrantService` | TC-10 |

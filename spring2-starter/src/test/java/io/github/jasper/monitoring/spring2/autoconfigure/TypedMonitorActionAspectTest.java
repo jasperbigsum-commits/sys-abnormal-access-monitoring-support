@@ -19,12 +19,14 @@ import io.github.jasper.monitoring.api.fact.StaticActionFact;
 import io.github.jasper.monitoring.core.application.DefaultMonitoringRuntime;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
+import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.EventFact;
 import io.github.jasper.monitoring.core.port.EventRepository;
 import io.github.jasper.monitoring.spring.support.ActionFactExtractor;
 import io.github.jasper.monitoring.spring.support.MonitorActionContractValidator;
+import io.github.jasper.monitoring.spring.support.ResourceAccessStage;
 import io.github.jasper.monitoring.spring.support.MonitoringFacts;
 import io.github.jasper.monitoring.spring.support.MonitoringGate;
 import java.time.Clock;
@@ -156,9 +158,14 @@ class TypedMonitorActionAspectTest {
                 }
                 @Override public IdentityContext identityContext() { return IdentityContext.anonymous(); }
             };
+            ResourceAccessGuard guard = new ResourceAccessGuard(null,
+                (identity, request) -> io.github.jasper.monitoring.api.AuthorizationDecision.allowed(),
+                null, monitoring, Clock.systemUTC());
             return new TypedMonitorActionAspect(monitoring, context,
                 new ActionFactExtractor(facts), new MonitorActionContractValidator(actions, facts,
-                    Collections.emptyList()));
+                    Collections.emptyList()), new ResourceAccessStage(guard, context,
+                        request -> io.github.jasper.monitoring.api.ResourceScopeResolution.unresolved(),
+                        new ActionFactExtractor(facts)));
         }
 
         MonitoredApi proxy() {

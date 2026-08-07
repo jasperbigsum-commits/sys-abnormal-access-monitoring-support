@@ -3,6 +3,8 @@ package io.github.jasper.monitoring.audit.spring3.report;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.action.ResourceAccess;
+import io.github.jasper.monitoring.api.fact.ActionFact;
 import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureRepository;
 import io.github.jasper.monitoring.spring.support.MonitoringFacts;
@@ -56,13 +58,13 @@ public class ReportExportService {
      * @return 阻断结果或包含已生成 XLSX 内容的成功结果
      */
     @MonitorAction(BuiltInActions.ReportExport.class)
-    public Result export(String reportId, ReportExportRequest request) {
+    @ResourceAccess(requireOrgScope = true)
+    public Result export(@ActionFact(BuiltInFacts.ResourceId.class) String reportId, ReportExportRequest request) {
         validate(reportId, request);
         List<String> fields = authorizedFields(request.getFields());
         long rows = fixtures.countReportRows(reportId, request.getMinId(), request.getMaxId(),
             request.getSelectedIds());
         String userId = contexts.identityContext().getUserId();
-        MonitoringFacts.put(BuiltInFacts.ResourceId.class, reportId);
         MonitoringFacts.put(BuiltInFacts.DataCount.class, rows);
         if (request.getFields() != null && request.getFields().contains("sensitiveValue")) {
             MonitoringFacts.put(BuiltInFacts.Sensitivity.class, BuiltInFacts.SensitivityLevel.HIGH);

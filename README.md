@@ -54,7 +54,7 @@
 
 1. 通过受控迁移执行 `mybatis/src/main/resources/db/monitoring-schema.sql`。
 2. 配置宿主的数据源和 `SqlSessionFactory`。
-3. 注册服务端 `IdentityContextProvider`、`ResourceScopeAuthorizer` 和可信代理策略。
+3. 注册服务端 `IdentityContextProvider`、`ResourceScopeResolver`、`ResourceScopeAuthorizer` 和可信代理策略。
 4. 以 `OBSERVE` 启动并验证事件、告警、管理授权和审计。
 5. 为所有内置规则控制类型注册真实、幂等的 `ControlHandler`，验收后再切换 `ENFORCE`。
 
@@ -63,7 +63,7 @@ Boot 3 的完整接入顺序、内置 Action/Fact 责任表、控制触发器清
 1. 先由宿主认证和可信代理建立 `IdentityContext`、请求上下文和可信来源 IP。
 2. 在真实业务 Service 的决策点调用 `MonitoringService.monitor(ActionExecution)`；登录失败、导出行数、资源 ID、权限变化等服务端事实必须由宿主显式提交。
 3. 固定 MVC 或普通 Service 动作可使用 `@MonitorAction`；稳定参数使用受限的 `@ActionFact`，执行中得到的服务端事实使用 `MonitoringFacts.put`。
-4. 由宿主实现 `ResourceScopeAuthorizer`、通知渠道和六类可执行控制处理器；默认 anonymous、deny、noop、fallback 只用于安全占位或验收，不代表真实能力已接入。
+4. 由宿主实现 `ResourceScopeResolver`（从服务端资源目录解析组织及扩展 Fact）、`ResourceScopeAuthorizer`、通知渠道和六类可执行控制处理器；默认 unresolved、deny、noop、fallback 只用于安全占位或验收，不代表真实能力已接入。
 5. 先运行 `OBSERVE` 验证事件、规则、告警、控制状态和管理审计，再打开 `ENFORCE`。
 
 Spring3 路由对照见 [`MonitoringFixtureController.java`](integration-audit/spring3-web/src/main/java/io/github/jasper/monitoring/audit/spring3/monitoring/MonitoringFixtureController.java)，请求示例 DTO 见 [`AuditExportRequest.java`](integration-audit/spring3-web/src/main/java/io/github/jasper/monitoring/audit/spring3/monitoring/AuditExportRequest.java)。其中 `/audit/context-only` 明确不会产生业务事件；`/audit/annotated-query` 展示纯注解动作；`/audit/annotated-export` 展示普通 Service 内追加运行时 Fact；`/audit/export` 展示服务端显式 Fact；`/audit/annotated-export-denied` 展示 403 结果分类；`/audit/login-failure` 展示认证 Service 显式提交失败结果。

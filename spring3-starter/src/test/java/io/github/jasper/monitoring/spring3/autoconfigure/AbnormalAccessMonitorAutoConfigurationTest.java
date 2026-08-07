@@ -4,6 +4,8 @@ import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
+import io.github.jasper.monitoring.api.ResourceScopeResolution;
+import io.github.jasper.monitoring.api.ResourceScopeResolver;
 import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.authentication.AuthenticationMonitor;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
@@ -115,6 +117,17 @@ class AbnormalAccessMonitorAutoConfigurationTest {
     }
 
     @Test
+    void providesAnOverrideableUnresolvedResourceScopeResolver() {
+        contextRunner.run(context -> {
+            assertThat(context).hasSingleBean(ResourceScopeResolver.class);
+            assertThat(context.getBean(ResourceScopeResolver.class).resolve(null).isResolved()).isFalse();
+        });
+        contextRunner.withUserConfiguration(ResourceScopeResolverConfiguration.class)
+            .run(context -> assertThat(context.getBean(ResourceScopeResolver.class))
+                .isSameAs(ResourceScopeResolverConfiguration.RESOLVER));
+    }
+
+    @Test
     void leavesGenericIpControlDisabledByDefault() {
         webContextRunner.run(context -> {
             assertThat(context).doesNotHaveBean(IpControlFilter.class);
@@ -217,6 +230,16 @@ class AbnormalAccessMonitorAutoConfigurationTest {
                         command.getIdempotencyKey());
                 }
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ResourceScopeResolverConfiguration {
+        static final ResourceScopeResolver RESOLVER = request -> ResourceScopeResolution.unresolved();
+
+        @Bean
+        ResourceScopeResolver resourceScopeResolver() {
+            return RESOLVER;
         }
     }
 }

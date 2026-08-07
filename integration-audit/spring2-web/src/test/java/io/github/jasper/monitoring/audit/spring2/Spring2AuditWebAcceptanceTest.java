@@ -309,6 +309,7 @@ class Spring2AuditWebAcceptanceTest {
         ResponseEntity<byte[]> allowed=export("audit-exporter",exportBody(1L,4999L,
             java.util.Arrays.asList("rowId","displayValue","amount")));
         assertEquals(HttpStatus.OK,allowed.getStatusCode());
+        assertEquals("org-a", latestEvent("report:export").getOrgScope());
         try(XSSFWorkbook workbook=new XSSFWorkbook(new ByteArrayInputStream(allowed.getBody()))){
             assertEquals(5000,workbook.getSheetAt(0).getPhysicalNumberOfRows());
             assertEquals(3,workbook.getSheetAt(0).getRow(0).getPhysicalNumberOfCells());

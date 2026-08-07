@@ -63,10 +63,12 @@ public final class SecurityEventAssembler {
             .occurredAt(Instant.now(clock)).reasonCode(outcome.getReason() == null ? null : outcome.getReason().getCode())
             .latencyMs(outcome.getLatencyMs());
         String resourceId = facts.get(BuiltInFacts.ResourceId.class);
+        String orgScope = facts.get(BuiltInFacts.OrgScope.class);
         String attemptedAccountHash = facts.get(BuiltInFacts.LoginSubjectKey.class);
         Long dataCount = facts.get(BuiltInFacts.DataCount.class);
         BuiltInFacts.SensitivityLevel sensitivity = facts.get(BuiltInFacts.Sensitivity.class);
         if (resourceId != null) draft.resourceId(resourceId);
+        if (orgScope != null) draft.orgScope(orgScope);
         if (attemptedAccountHash != null) draft.attemptedAccountHash(attemptedAccountHash);
         if (dataCount != null) draft.dataCount(dataCount.longValue());
         putAttribute(draft, BuiltInFacts.SENSITIVITY, sensitivity);

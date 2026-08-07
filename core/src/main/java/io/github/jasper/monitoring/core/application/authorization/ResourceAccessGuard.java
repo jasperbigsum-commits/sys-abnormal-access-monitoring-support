@@ -11,7 +11,7 @@ import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
 import io.github.jasper.monitoring.api.ResourceScopeRequest;
-import io.github.jasper.monitoring.core.application.MonitoringService;
+import io.github.jasper.monitoring.core.application.SecurityEventRecorder;
 import io.github.jasper.monitoring.core.port.WhitelistRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -25,23 +25,19 @@ import java.util.Objects;
  */
 public final class ResourceAccessGuard {
     private final ResourceScopeAuthorizer authorizer;
-    private final MonitoringService typedMonitoring;
+    private final SecurityEventRecorder eventRecorder;
     private final String systemId;
     private final WhitelistRepository passes;
     private final Clock clock;
 
     /** Creates the strict typed authorization audit bridge. */
-    public ResourceAccessGuard(ResourceScopeAuthorizer authorizer, MonitoringService monitoring) {
-        this(null, authorizer, null, monitoring, Clock.systemUTC());
-    }
-
     /** Creates an authorization bridge that can honor explicitly scoped temporary passes. */
     public ResourceAccessGuard(String systemId, ResourceScopeAuthorizer authorizer, WhitelistRepository passes,
-            MonitoringService monitoring, Clock clock) {
+            SecurityEventRecorder eventRecorder, Clock clock) {
         this.systemId = systemId;
         this.authorizer = Objects.requireNonNull(authorizer, "authorizer");
         this.passes = passes;
-        this.typedMonitoring = Objects.requireNonNull(monitoring, "monitoring");
+        this.eventRecorder = Objects.requireNonNull(eventRecorder, "eventRecorder");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -57,7 +53,15 @@ public final class ResourceAccessGuard {
      */
     public AuthorizationDecision authorize(IdentityContext identity, ResourceScopeRequest resource) {
         AuthorizationDecision decision;
-        try {
+        boolean invalidScope = resource != null && (resource.isScopeResolutionFailed()
+            || resource.isOrgScopeRequired() && resource.getOrgScope() == null);
+        if (resource != null && resource.isScopeResolutionFailed()) {
+            decision = AuthorizationDecision.denied(BuiltInReasonCodes.Authorization.EVALUATION_ERROR);
+        } else if (resource == null || resource.getResourceId() == null
+                || resource.isOrgScopeRequired() && resource.getOrgScope() == null) {
+            decision = AuthorizationDecision.denied(
+                BuiltInReasonCodes.Authorization.RESOURCE_SCOPE_DENIED);
+        } else try {
             decision = authorizer.authorize(identity == null ? IdentityContext.anonymous() : identity, resource);
             if (decision == null) {
                 decision = AuthorizationDecision.denied(BuiltInReasonCodes.Authorization.NO_DECISION);
@@ -65,10 +69,12 @@ public final class ResourceAccessGuard {
         } catch (RuntimeException ignored) {
             decision = AuthorizationDecision.denied(BuiltInReasonCodes.Authorization.EVALUATION_ERROR);
         }
-        if (canBeOverridden(decision) && hasActivePass(resource)) {
+        if (!invalidScope && canBeOverridden(decision) && hasActivePass(resource)) {
             decision = AuthorizationDecision.allowed();
         }
-        recordDecision(identity == null ? IdentityContext.anonymous() : identity, resource, decision);
+        if (resource != null) {
+            recordDecision(identity == null ? IdentityContext.anonymous() : identity, resource, decision);
+        }
         return decision;
     }
 
@@ -100,9 +106,12 @@ public final class ResourceAccessGuard {
             if (resource.getResourceId() != null) {
                 facts.put(BuiltInFacts.ResourceId.class, resource.getResourceId());
             }
+            if (resource.getOrgScope() != null) {
+                facts.put(BuiltInFacts.OrgScope.class, resource.getOrgScope());
+            }
             ActionOutcome outcome = decision.isAllowed() ? ActionOutcome.success(0L)
                 : ActionOutcome.denied(decision.getReason(), 0L);
-            typedMonitoring.monitor(ActionExecution.of(type, resource.getRequest(), identity, outcome,
+            eventRecorder.record(ActionExecution.of(type, resource.getRequest(), identity, outcome,
                 facts.build(), FactSource.TRUSTED_REQUEST));
         } catch (RuntimeException ignored) {
             // Monitoring failures cannot bypass the host system's established authorization decision.

@@ -1,15 +1,14 @@
 package io.github.jasper.monitoring.audit.spring2.report;
 
-import io.github.jasper.monitoring.audit.spring2.security.AuditReportAuthorizationInterceptor;
 import io.github.jasper.monitoring.api.error.ActionBlockedException;
 import java.util.Collections;
-import javax.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,8 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 可直接挂接 Controller 的 XLSX 导出适配器。
  *
- * <p>授权拦截器必须先放入服务端报告对象；风险阻断返回审批状态且不生成文件，参数错误返回客户端
- * 错误。前端 URL、响应协议和真实导出实现仍由宿主负责。</p>
+ * <p>导出 Service 的资源阶段先解析服务端组织范围；风险阻断返回审批状态且不生成文件，参数错误
+ * 返回客户端错误。前端 URL、响应协议和真实导出实现仍由宿主负责。</p>
  */
 @RestController
 @RequestMapping("/audit/reports/{reportId}/exports")
@@ -30,9 +29,9 @@ public class ReportExportController {
     }
 
     @PostMapping
-    public ResponseEntity<?> export(@RequestBody ReportExportRequest selection, HttpServletRequest request) {
-        AuditReportCatalog.AuditReport report = authorizedReport(request);
-        ReportExportService.Result result = exports.export(report.getId(), selection);
+    public ResponseEntity<?> export(@PathVariable("reportId") String reportId,
+                                    @RequestBody ReportExportRequest selection) {
+        ReportExportService.Result result = exports.export(reportId, selection);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
@@ -51,11 +50,4 @@ public class ReportExportController {
             .body(Collections.singletonMap("status", "AWAITING_APPROVAL"));
     }
 
-    private static AuditReportCatalog.AuditReport authorizedReport(HttpServletRequest request) {
-        Object report = request.getAttribute(AuditReportAuthorizationInterceptor.AUTHORIZED_REPORT);
-        if (!(report instanceof AuditReportCatalog.AuditReport)) {
-            throw new IllegalStateException("Authorized report attribute is missing");
-        }
-        return (AuditReportCatalog.AuditReport) report;
-    }
 }

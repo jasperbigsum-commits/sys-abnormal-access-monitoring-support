@@ -12,7 +12,7 @@ import io.github.jasper.monitoring.core.port.EventRepository;
 import java.util.Objects;
 
 /** Application entry point: assemble, persist, then delegate eligible rule evaluation. */
-public final class MonitoringService {
+public final class MonitoringService implements SecurityEventRecorder {
     private final EventRepository repository;
     private final SecurityEventAssembler assembler;
     private final MonitoringRuntimePort runtime;
@@ -42,6 +42,18 @@ public final class MonitoringService {
         evaluator.evaluate(execution.getActionType(), action, result.getEvent(), result.getFacts(), collected.getSources(),
             result.getIneligibleRuleTypes(), result.getIssues());
         return result;
+    }
+
+    /** Records an event only; resource authorization must not trigger rule evaluation again. */
+    @Override
+    public void record(ActionExecution execution) {
+        Objects.requireNonNull(execution, "execution");
+        ActionDefinition action = runtime.resolve(execution.getActionType());
+        validateReason(execution);
+        MonitoringRuntimePort.FactCollection collected = runtime.collect(execution, action);
+        SecurityEventAssembler.AssemblyResult result = assembler.assemble(execution.getActionType(), action,
+            execution, collected.getFacts(), collected.getPersistedFacts());
+        repository.save(result.getEvent());
     }
 
     /** Evaluates completed runtime facts without persisting the candidate event. */

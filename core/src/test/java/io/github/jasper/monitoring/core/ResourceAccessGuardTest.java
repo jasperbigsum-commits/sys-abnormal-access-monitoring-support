@@ -118,6 +118,60 @@ class ResourceAccessGuardTest {
         });
     }
 
+    @Test
+    void missingResourceIdFailsClosedAndIsRecorded() {
+        RecordingEvents events = new RecordingEvents();
+        ResourceAccessGuard guard = guard((identity, request) -> AuthorizationDecision.allowed(), events);
+        MonitoringRequestContext request = MonitoringRequestContext.builder()
+            .method("GET").path("/orders").sourceIp("203.0.113.7").requestId("req-missing").build();
+
+        AuthorizationDecision decision = guard.authorize(identity(),
+            new ResourceScopeRequest(request, "order", null, "org-b"));
+
+        assertFalse(decision.isAllowed());
+        assertEquals(SecurityEventType.ACCESS_DENIED, events.single().getEventType());
+    }
+
+    @Test
+    void requiredMissingOrgScopeFailsClosedWithoutCallingTheAuthorizer() {
+        RecordingEvents events = new RecordingEvents();
+        final int[] calls = {0};
+        ResourceAccessGuard guard = guard((identity, request) -> {
+            calls[0]++;
+            return AuthorizationDecision.allowed();
+        }, events);
+        MonitoringRequestContext request = MonitoringRequestContext.builder()
+            .method("GET").path("/orders/o-1").sourceIp("203.0.113.7").requestId("req-scope").build();
+
+        AuthorizationDecision decision = guard.authorize(identity(),
+            new ResourceScopeRequest(request, "order", "o-1", null, null, null, true, false));
+
+        assertFalse(decision.isAllowed());
+        assertEquals(0, calls[0]);
+        assertEquals(SecurityEventType.ACCESS_DENIED, events.single().getEventType());
+    }
+
+    @Test
+    void resolverFailureCannotBeOverriddenByAnActivePass() {
+        WhitelistRepository passes = new WhitelistRepository() {
+            @Override public boolean isActive(String systemId, String ruleId, String subject, Instant at) {
+                return true;
+            }
+            @Override public void add(WhitelistEntry entry) { }
+        };
+        ResourceAccessGuard guard = guard((identity, request) -> AuthorizationDecision.allowed(),
+            new RecordingEvents(), passes);
+        MonitoringRequestContext request = MonitoringRequestContext.builder()
+            .method("GET").path("/orders/o-1").sourceIp("203.0.113.7").requestId("req-error").build();
+
+        AuthorizationDecision decision = guard.authorize(identity(),
+            new ResourceScopeRequest(request, "order", "o-1", null,
+                "AUTHZ-01", "user:user-1", true, true));
+
+        assertFalse(decision.isAllowed());
+        assertEquals("MON.AUTHZ.EVALUATION_ERROR", decision.getReason().getCode());
+    }
+
     private static ResourceAccessGuard guard(ResourceScopeAuthorizer authorizer, EventRepository events,
             WhitelistRepository passes) {
         ActionCatalog catalog = new ActionCatalog();

@@ -1,11 +1,17 @@
 package io.github.jasper.monitoring.audit.spring2.report;
 
-import io.github.jasper.monitoring.audit.spring2.security.AuditReportAuthorizationInterceptor;
+import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.action.ResourceAccess;
+import io.github.jasper.monitoring.api.fact.ActionFact;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
+import io.github.jasper.monitoring.api.error.ActionBlockedException;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import javax.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,41 +20,50 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 报告业务查询和导出入口。
  *
- * <p>资源授权在 Controller 前由宿主拦截器完成，本类只消费已授权报告对象，不信任路径中的组织
- * 或客户端资源字段；固定 URL 和响应仅用于集成验收。</p>
+ * <p>资源授权在 Controller 前由 {@code @MonitorAction} 的资源阶段完成，组织范围由宿主 resolver
+ * 从报告目录解析；固定 URL 和响应仅用于集成验收。</p>
  */
 @RestController
 @RequestMapping("/audit/reports")
 public class ReportController {
     private static final long SERVER_REPORTED_ROW_COUNT = 37L;
     private final AuditExportService exports;
+    private final AuditReportCatalog reports;
 
-    public ReportController(AuditExportService exports) {
+    public ReportController(AuditExportService exports, AuditReportCatalog reports) {
         this.exports = exports;
+        this.reports = reports;
     }
 
     @GetMapping("/{reportId}")
-    public Map<String, Object> report(@PathVariable("reportId") String ignored, HttpServletRequest request) {
-        AuditReportCatalog.AuditReport report = authorizedReport(request);
+    @MonitorAction(BuiltInActions.Query.class)
+    @ResourceAccess(requireOrgScope = true)
+    public Map<String, Object> report(@ActionFact(BuiltInFacts.ResourceId.class) @PathVariable("reportId") String reportId) {
+        AuditReportCatalog.AuditReport report = require(reportId);
         Map<String, Object> body = new LinkedHashMap<String, Object>();
         body.put("reportId", report.getId());
         return body;
     }
 
     @PostMapping("/{reportId}/export")
-    public ResponseEntity<Map<String, Object>> export(@PathVariable("reportId") String ignored,
-                                                      HttpServletRequest request) {
-        exports.export(authorizedReport(request));
+    @MonitorAction(BuiltInActions.Query.class)
+    @ResourceAccess(requireOrgScope = true)
+    public ResponseEntity<Map<String, Object>> export(
+            @ActionFact(BuiltInFacts.ResourceId.class) @PathVariable("reportId") String reportId) {
+        exports.export(require(reportId));
         Map<String, Object> body = new LinkedHashMap<String, Object>();
         body.put("rowCount", Long.valueOf(SERVER_REPORTED_ROW_COUNT));
         return ResponseEntity.ok(body);
     }
 
-    private static AuditReportCatalog.AuditReport authorizedReport(HttpServletRequest request) {
-        Object report = request.getAttribute(AuditReportAuthorizationInterceptor.AUTHORIZED_REPORT);
-        if (!(report instanceof AuditReportCatalog.AuditReport)) {
-            throw new IllegalStateException("Authorized report attribute is missing");
-        }
-        return (AuditReportCatalog.AuditReport) report;
+    private AuditReportCatalog.AuditReport require(String reportId) {
+        AuditReportCatalog.AuditReport report = reports.find(reportId);
+        if (report == null) throw new IllegalArgumentException("REPORT_NOT_FOUND");
+        return report;
+    }
+
+    @ExceptionHandler(ActionBlockedException.class)
+    public ResponseEntity<Void> blocked(ActionBlockedException ignored) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
     }
 }

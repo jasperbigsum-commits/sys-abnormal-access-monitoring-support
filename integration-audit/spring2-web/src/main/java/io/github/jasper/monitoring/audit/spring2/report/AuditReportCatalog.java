@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 /**
  * 参考宿主持有的报告元数据目录。
  *
- * <p>只返回服务端确认的报告 ID 和组织范围，供资源授权拦截器复用；生产接入应替换为真实报告、
+ * <p>只返回服务端确认的报告 ID 和组织范围，供资源 resolver 使用；生产接入应替换为真实报告、
  * 数据权限或租户服务，不能复用验收夹具表。</p>
  */
 @Component

@@ -5,6 +5,10 @@ import io.github.jasper.monitoring.api.AuthorizationDecision;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.IdentityContextProvider;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
+import io.github.jasper.monitoring.api.ResourceScopeResolution;
+import io.github.jasper.monitoring.api.ResourceScopeResolver;
+import io.github.jasper.monitoring.api.fact.ActionFacts;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.audit.spring3.report.AuditReportCatalog;
 import io.github.jasper.monitoring.audit.spring3.persistence.AuditFixtureRepository;
 import java.util.Collections;
@@ -63,21 +67,29 @@ public class AuditShiroRbacConfiguration {
     }
 
     @Bean
-    public ResourceScopeAuthorizer auditResourceScopeAuthorizer(AuditReportCatalog catalog, Realm realm) {
+    public ResourceScopeResolver auditResourceScopeResolver(AuditReportCatalog catalog) {
+        return request -> {
+            AuditReportCatalog.AuditReport report = catalog.find(request.getResourceId());
+            return report == null ? ResourceScopeResolution.unresolved()
+                : ResourceScopeResolution.resolved(ActionFacts.builder()
+                    .put(BuiltInFacts.OrgScope.class, report.getOrganization()).build());
+        };
+    }
+
+    @Bean
+    public ResourceScopeAuthorizer auditResourceScopeAuthorizer(Realm realm) {
         return (identity, request) -> {
-            // 集成夹具实现：用固定报告目录、组织范围和 Shiro 权限验证资源访问。
+            // 资源目录已由 resolver 查询一次；授权器消费同一可信组织范围。
             Subject subject = SecurityUtils.getSubject();
             String principal = subject.getPrincipal() == null ? null : String.valueOf(subject.getPrincipal());
-            AuditReportCatalog.AuditReport report = catalog.find(request.getResourceId());
             String permission = "POST".equals(request.getRequest().getMethod())
                 ? "report:export" : "report:read";
             boolean allowed = subject.isAuthenticated()
                 && principal != null
                 && identity != null
                 && principal.equals(identity.getUserId())
-                && report != null
-                && report.getOrganization().equals(request.getOrgScope())
-                && report.getOrganization().equals(((AuditRbacRealm) realm).organization(principal))
+                && request.getOrgScope() != null
+                && request.getOrgScope().equals(((AuditRbacRealm) realm).organization(principal))
                 && subject.isPermitted(permission);
             return allowed ? AuthorizationDecision.allowed()
                 : AuthorizationDecision.denied(

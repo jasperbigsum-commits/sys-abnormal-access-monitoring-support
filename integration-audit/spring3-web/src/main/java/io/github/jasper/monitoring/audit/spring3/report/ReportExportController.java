@@ -1,9 +1,7 @@
 package io.github.jasper.monitoring.audit.spring3.report;
 
-import io.github.jasper.monitoring.audit.spring3.security.AuditReportAuthorizationInterceptor;
 import io.github.jasper.monitoring.api.error.ActionBlockedException;
 import java.util.Collections;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -11,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,8 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 验收夹具 XLSX 导出流程的 HTTP 适配器。
  *
- * <p>The authorization interceptor must have placed the server-loaded report in the request
- * 执行前完成授权。导出被阻断时返回审批状态且不返回工作簿；选择参数格式错误时映射为客户端错误。</p>
+ * <p>资源授权由导出服务的 {@code @ResourceAccess} 动作阶段在业务执行前完成。</p>
  */
 @RestController
 @RequestMapping("/audit/reports/{reportId}/exports")
@@ -33,7 +31,7 @@ public class ReportExportController {
     /**
      * 接收导出选择并返回审批状态或 XLSX 文件。
      *
-     * <p>授权拦截器必须先把服务端报告对象写入请求属性；本方法不从请求体读取组织、身份或最终
+     * <p>导出 Service 的资源阶段先解析服务端组织范围；本方法不从请求体读取组织、身份或最终
      * 行数，也不在 Controller 内直接调用监测组件。</p>
      *
      * @param selection 客户端导出选择
@@ -42,9 +40,9 @@ public class ReportExportController {
      */
     @PostMapping
     @Transactional
-    public ResponseEntity<?> export(@RequestBody ReportExportRequest selection, HttpServletRequest request) {
-        AuditReportCatalog.AuditReport report = authorizedReport(request);
-        ReportExportService.Result result = exports.export(report.getId(), selection);
+    public ResponseEntity<?> export(@PathVariable("reportId") String reportId,
+                                    @RequestBody ReportExportRequest selection) {
+        ReportExportService.Result result = exports.export(reportId, selection);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
@@ -68,11 +66,4 @@ public class ReportExportController {
             .body(Collections.singletonMap("status", "AWAITING_APPROVAL"));
     }
 
-    private static AuditReportCatalog.AuditReport authorizedReport(HttpServletRequest request) {
-        Object report = request.getAttribute(AuditReportAuthorizationInterceptor.AUTHORIZED_REPORT);
-        if (!(report instanceof AuditReportCatalog.AuditReport)) {
-            throw new IllegalStateException("Authorized report attribute is missing");
-        }
-        return (AuditReportCatalog.AuditReport) report;
-    }
 }

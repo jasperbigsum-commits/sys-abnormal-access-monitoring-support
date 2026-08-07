@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 /**
  * 参考宿主持有的报告元数据目录。
  *
- * <p>目录只返回服务端确认的报告 ID 和组织范围，供资源授权拦截器和报告 Controller 复用。
+ * <p>目录只返回服务端确认的报告 ID 和组织范围，供资源 resolver 和报告 Controller 复用。
  * 它是验收夹具的业务仓储适配，不是监测组件提供的通用报告目录；生产接入时应替换为真实报告、
  * 数据权限或租户服务。</p>
  */

@@ -38,7 +38,8 @@ public final class BuiltInActions {
         // ExportContract：导出类统一契约。对象=导出行为；用例=报表导出、批量数据导出前统一校验资源ID和数据量。
         catalog.registerContract(ExportContract.class, ActionContractDefinition.builder()
             .require(BuiltInFacts.ResourceId.class,
-                FactSource.TRUSTED_REQUEST, FactSource.HOST_PROVIDER)
+                FactSource.TRUSTED_REQUEST, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+            .optional(BuiltInFacts.OrgScope.class, FactSource.HOST_PROVIDER)
             .require(BuiltInFacts.DataCount.class,
                 FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
             .minimumFailurePolicy(ActionFailurePolicy.FAIL_CLOSED)
@@ -65,7 +66,8 @@ public final class BuiltInActions {
         catalog.register(Query.class, ActionDefinition.builder("data:query")
             .eventType(SecurityEventType.QUERY).resourceType("resource")
             .optional(BuiltInFacts.ResourceId.class, FactSource.TRUSTED_REQUEST,
-                FactSource.HOST_PROVIDER)
+                FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+            .optional(BuiltInFacts.OrgScope.class, FactSource.HOST_PROVIDER)
             .optional(BuiltInFacts.SequentialAccess.class, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
             .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build());
         // session:concurrent：会话并发动作。对象=同主体多会话访问；用例=同账号在不同终端/网络短时并发操作。
@@ -118,6 +120,7 @@ public final class BuiltInActions {
     private static ActionDefinition access(String code, SecurityEventType eventType) {
         return ActionDefinition.builder(code).eventType(eventType).resourceType("resource")
             .optional(BuiltInFacts.ResourceId.class, FactSource.TRUSTED_REQUEST, FactSource.HOST_PROVIDER)
+            .optional(BuiltInFacts.OrgScope.class, FactSource.TRUSTED_REQUEST, FactSource.HOST_PROVIDER)
             .failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
     }
 

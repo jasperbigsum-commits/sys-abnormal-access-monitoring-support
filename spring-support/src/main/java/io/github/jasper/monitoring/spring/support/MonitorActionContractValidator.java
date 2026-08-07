@@ -4,6 +4,8 @@ import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.action.ActionDefinition;
 import io.github.jasper.monitoring.api.action.ActionType;
 import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.action.ResourceAccess;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
 import io.github.jasper.monitoring.api.error.MonitoringConfigurationException;
 import io.github.jasper.monitoring.api.error.MonitoringErrorCode;
 import io.github.jasper.monitoring.api.fact.ActionFact;
@@ -59,6 +61,19 @@ public final class MonitorActionContractValidator {
         if (monitored == null) throw configuration("Method is not annotated with MonitorAction");
         Class<? extends ActionType> actionType = monitored.value();
         ActionDefinition action = actions.require(actionType);
+        boolean resourceAccess = method.isAnnotationPresent(ResourceAccess.class);
+        if (resourceAccess && !action.getRequiredFacts().contains(BuiltInFacts.ResourceId.class)
+                && !action.getOptionalFacts().contains(BuiltInFacts.ResourceId.class)) {
+            throw configuration("ResourceAccess requires ResourceId to be declared by the monitored action");
+        }
+        ResourceAccess access = method.getAnnotation(ResourceAccess.class);
+        if (access != null && access.requireOrgScope()
+                && ((!action.getOptionalFacts().contains(BuiltInFacts.OrgScope.class)
+                    && !action.getRequiredFacts().contains(BuiltInFacts.OrgScope.class))
+                    || !action.getAllowedSources(BuiltInFacts.OrgScope.class)
+                        .contains(FactSource.HOST_PROVIDER))) {
+            throw configuration("ResourceAccess requiring OrgScope must declare OrgScope from HOST_PROVIDER");
+        }
         List<ParameterFact> result = new ArrayList<ParameterFact>();
         Set<Class<? extends FactType<?>>> ownership =
             new LinkedHashSet<Class<? extends FactType<?>>>();
@@ -107,7 +122,7 @@ public final class MonitorActionContractValidator {
                 result.add(new ParameterFact(index, factType, fact.path()));
             }
         }
-        return new MethodBinding(actionType, action, result, staticFacts.build());
+        return new MethodBinding(method, actionType, action, result, staticFacts.build(), resourceAccess);
     }
 
     private void rejectProviderConflict(Class<? extends ActionType> actionType,
@@ -127,22 +142,28 @@ public final class MonitorActionContractValidator {
     /** Immutable action and parameter fact metadata consumed by instrumentation adapters. */
     public static final class MethodBinding {
         private final Class<? extends ActionType> actionType;
+        private final Method method;
         private final ActionDefinition action;
         private final List<ParameterFact> facts;
         private final ActionFacts staticFacts;
+        private final boolean resourceAccess;
 
-        private MethodBinding(Class<? extends ActionType> actionType, ActionDefinition action,
-                List<ParameterFact> facts, ActionFacts staticFacts) {
+        private MethodBinding(Method method, Class<? extends ActionType> actionType, ActionDefinition action,
+                List<ParameterFact> facts, ActionFacts staticFacts, boolean resourceAccess) {
+            this.method = method;
             this.actionType = actionType;
             this.action = action;
             this.facts = Collections.unmodifiableList(new ArrayList<ParameterFact>(facts));
             this.staticFacts = staticFacts;
+            this.resourceAccess = resourceAccess;
         }
 
         public Class<? extends ActionType> getActionType() { return actionType; }
         public ActionDefinition getAction() { return action; }
         public List<ParameterFact> getFacts() { return facts; }
         public ActionFacts getStaticFacts() { return staticFacts; }
+        public boolean hasResourceAccess() { return resourceAccess; }
+        public Method getMethod() { return method; }
     }
 
     /** One fact owned by one zero-based method parameter. */

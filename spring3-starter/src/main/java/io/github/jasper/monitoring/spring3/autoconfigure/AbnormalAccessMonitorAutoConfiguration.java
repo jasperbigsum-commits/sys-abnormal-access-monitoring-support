@@ -10,6 +10,8 @@ import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.code.StableCodeCatalog;
 import io.github.jasper.monitoring.api.ControlActionType;
 import io.github.jasper.monitoring.api.ResourceScopeAuthorizer;
+import io.github.jasper.monitoring.api.ResourceScopeResolution;
+import io.github.jasper.monitoring.api.ResourceScopeResolver;
 import io.github.jasper.monitoring.api.TrustedProxyResolver;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
@@ -35,6 +37,7 @@ import io.github.jasper.monitoring.core.application.MonitoringService;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.application.TypedRuleEvaluationService;
 import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
+import io.github.jasper.monitoring.spring.support.ResourceAccessStage;
 import io.github.jasper.monitoring.core.application.authentication.DefaultAuthenticationMonitor;
 import io.github.jasper.monitoring.core.application.authentication.LoginSubjectKeyFactory;
 import io.github.jasper.monitoring.core.application.control.AnnotatedControlHandler;
@@ -474,6 +477,12 @@ public class AbnormalAccessMonitorAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    public ResourceScopeResolver abnormalAccessResourceScopeResolver() {
+        return request -> ResourceScopeResolution.unresolved();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public ResourceAccessGuard abnormalAccessResourceAccessGuard(ResourceScopeAuthorizer authorizer,
             MonitoringService monitoring, MyBatisMonitoringStore store,
             AbnormalAccessMonitorProperties properties) {
@@ -508,9 +517,11 @@ public class AbnormalAccessMonitorAutoConfiguration {
         @Bean("abnormalAccessTypedMonitorActionAspect")
         @ConditionalOnMissingBean(TypedMonitorActionAspect.class)
         TypedMonitorActionAspect abnormalAccessTypedMonitorActionAspect(MonitoringService monitoring,
-                MonitoringContextAccessor context, ActionFactExtractor facts,
-                MonitorActionContractValidator contracts) {
-            return new TypedMonitorActionAspect(monitoring, context, facts, contracts);
+                 MonitoringContextAccessor context, ActionFactExtractor facts,
+                 MonitorActionContractValidator contracts, ResourceAccessGuard guard,
+                 ResourceScopeResolver resolver) {
+            return new TypedMonitorActionAspect(monitoring, context, facts, contracts,
+                new ResourceAccessStage(guard, context, resolver, facts));
         }
     }
 

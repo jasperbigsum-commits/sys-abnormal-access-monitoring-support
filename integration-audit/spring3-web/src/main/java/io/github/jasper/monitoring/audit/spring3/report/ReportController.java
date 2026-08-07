@@ -1,11 +1,17 @@
 package io.github.jasper.monitoring.audit.spring3.report;
 
-import io.github.jasper.monitoring.audit.spring3.security.AuditReportAuthorizationInterceptor;
+import io.github.jasper.monitoring.api.action.BuiltInActions;
+import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.action.ResourceAccess;
+import io.github.jasper.monitoring.api.fact.ActionFact;
+import io.github.jasper.monitoring.api.fact.BuiltInFacts;
+import io.github.jasper.monitoring.api.error.ActionBlockedException;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,8 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 报告业务查询和导出入口。
  *
- * <p>报告资源授权由宿主拦截器在 Controller 前完成，Controller 只消费拦截器放入的已授权报告对象，
- * 不再次相信路径中的资源或组织信息。真实业务应保持“授权先于查询/导出”的顺序；本类的 URL、
+ * <p>报告资源授权由 {@code @MonitorAction} 的资源阶段在 Controller 前完成，组织范围由宿主
+ * resolver 从报告目录解析。真实业务应保持“授权先于查询/导出”的顺序；本类的 URL、
  * 固定响应和夹具导出服务仅用于验收。</p>
  */
 @RestController
@@ -23,9 +29,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReportController {
     private static final long SERVER_REPORTED_ROW_COUNT = 37L;
     private final AuditExportService exports;
+    private final AuditReportCatalog reports;
 
-    public ReportController(AuditExportService exports) {
+    public ReportController(AuditExportService exports, AuditReportCatalog reports) {
         this.exports = exports;
+        this.reports = reports;
     }
 
     /**
@@ -36,8 +44,10 @@ public class ReportController {
      * @return 服务端确认的报告 ID
      */
     @GetMapping("/{reportId}")
-    public Map<String, Object> report(@PathVariable("reportId") String ignored, HttpServletRequest request) {
-        AuditReportCatalog.AuditReport report = authorizedReport(request);
+    @MonitorAction(BuiltInActions.Query.class)
+    @ResourceAccess(requireOrgScope = true)
+    public Map<String, Object> report(@ActionFact(BuiltInFacts.ResourceId.class) @PathVariable("reportId") String reportId) {
+        AuditReportCatalog.AuditReport report = require(reportId);
         Map<String, Object> body = new LinkedHashMap<String, Object>();
         body.put("reportId", report.getId());
         return body;
@@ -54,19 +64,24 @@ public class ReportController {
      * @return 固定的服务端行数响应
      */
     @PostMapping("/{reportId}/export")
-    public ResponseEntity<Map<String, Object>> export(@PathVariable("reportId") String ignored,
-                                                      HttpServletRequest request) {
-        exports.export(authorizedReport(request));
+    @MonitorAction(BuiltInActions.Query.class)
+    @ResourceAccess(requireOrgScope = true)
+    public ResponseEntity<Map<String, Object>> export(
+            @ActionFact(BuiltInFacts.ResourceId.class) @PathVariable("reportId") String reportId) {
+        exports.export(require(reportId));
         Map<String, Object> body = new LinkedHashMap<String, Object>();
         body.put("rowCount", Long.valueOf(SERVER_REPORTED_ROW_COUNT));
         return ResponseEntity.ok(body);
     }
 
-    private static AuditReportCatalog.AuditReport authorizedReport(HttpServletRequest request) {
-        Object report = request.getAttribute(AuditReportAuthorizationInterceptor.AUTHORIZED_REPORT);
-        if (!(report instanceof AuditReportCatalog.AuditReport)) {
-            throw new IllegalStateException("Authorized report attribute is missing");
-        }
-        return (AuditReportCatalog.AuditReport) report;
+    private AuditReportCatalog.AuditReport require(String reportId) {
+        AuditReportCatalog.AuditReport report = reports.find(reportId);
+        if (report == null) throw new IllegalArgumentException("REPORT_NOT_FOUND");
+        return report;
+    }
+
+    @ExceptionHandler(ActionBlockedException.class)
+    public ResponseEntity<Void> blocked(ActionBlockedException ignored) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
     }
 }

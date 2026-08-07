@@ -6,10 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.github.jasper.monitoring.api.IdentityContext;
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.MonitoringRequestContext;
+import io.github.jasper.monitoring.api.ResourceScopeResolution;
 import io.github.jasper.monitoring.api.SecurityEventResult;
 import io.github.jasper.monitoring.api.action.ActionCatalog;
 import io.github.jasper.monitoring.api.action.BuiltInActions;
 import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.action.ResourceAccess;
 import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
 import io.github.jasper.monitoring.api.code.StableCodeCatalog;
 import io.github.jasper.monitoring.api.fact.ActionFact;
@@ -20,12 +22,14 @@ import io.github.jasper.monitoring.api.fact.StaticActionFact;
 import io.github.jasper.monitoring.core.application.DefaultMonitoringRuntime;
 import io.github.jasper.monitoring.core.application.MonitoringRuntimePort;
 import io.github.jasper.monitoring.core.application.MonitoringService;
+import io.github.jasper.monitoring.core.application.authorization.ResourceAccessGuard;
 import io.github.jasper.monitoring.core.application.SecurityEventAssembler;
 import io.github.jasper.monitoring.core.domain.SecurityEvent;
 import io.github.jasper.monitoring.core.domain.EventFact;
 import io.github.jasper.monitoring.core.port.EventRepository;
 import io.github.jasper.monitoring.spring.support.ActionFactExtractor;
 import io.github.jasper.monitoring.spring.support.MonitorActionContractValidator;
+import io.github.jasper.monitoring.spring.support.ResourceAccessStage;
 import io.github.jasper.monitoring.spring.support.MonitoringFacts;
 import io.github.jasper.monitoring.spring.support.MonitoringGate;
 import java.time.Clock;
@@ -35,12 +39,24 @@ import java.util.Collections;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.core.Ordered;
 import org.springframework.http.ResponseEntity;
 
 class TypedMonitorActionAspectTest {
+    @Test
+    void reusesResolvedOrgScopeInTheFinalMonitoredEvent() {
+        Fixture fixture = new Fixture();
+
+        fixture.proxy().resource("report-7");
+
+        assertEquals(1, fixture.resolverCalls.get());
+        assertEquals("org-7", fixture.events.last.getOrgScope());
+        assertEquals(FactSource.HOST_PROVIDER, fixture.fact("org_scope").getSource());
+    }
+
     @Test
     void monitoringAdvisorRunsOutsideHostTransactions() {
         assertEquals(Ordered.HIGHEST_PRECEDENCE, new Fixture().aspect().getOrder());
@@ -161,12 +177,17 @@ class TypedMonitorActionAspectTest {
         String checkpointWithInvalidFact();
         String withoutCheckpointOrRequiredFacts();
         String staticFactCheckpoint();
+        String resource(String resourceId);
     }
 
     static class MonitoredService implements MonitoredApi {
         private MonitoredApi self;
 
         @Override @MonitorAction(BuiltInActions.Query.class) public String ok() { return "ok"; }
+        @Override @MonitorAction(BuiltInActions.Query.class) @ResourceAccess(requireOrgScope = true)
+        public String resource(@ActionFact(BuiltInFacts.ResourceId.class) String resourceId) {
+            return resourceId;
+        }
         @Override @MonitorAction(BuiltInActions.Query.class) public ResponseEntity<Void> unauthorized() { return ResponseEntity.status(401).build(); }
         @Override @MonitorAction(BuiltInActions.Query.class) public ResponseEntity<Void> forbidden() { return ResponseEntity.status(403).build(); }
         @Override @MonitorAction(BuiltInActions.Query.class) public ResponseEntity<Void> badRequest() { return ResponseEntity.badRequest().build(); }
@@ -226,6 +247,7 @@ class TypedMonitorActionAspectTest {
         private final CapturingEvents events = new CapturingEvents();
         private final ActionCatalog actions = actions();
         private final FactCatalog facts = facts();
+        private final AtomicInteger resolverCalls = new AtomicInteger();
 
         TypedMonitorActionAspect aspect() {
             MonitoringRuntimePort runtime = new DefaultMonitoringRuntime(actions, facts, Collections.emptyList());
@@ -239,9 +261,16 @@ class TypedMonitorActionAspectTest {
                 }
                 @Override public IdentityContext identityContext() { return IdentityContext.anonymous(); }
             };
+            ResourceAccessGuard guard = new ResourceAccessGuard(null,
+                (identity, request) -> io.github.jasper.monitoring.api.AuthorizationDecision.allowed(),
+                null, monitoring, Clock.systemUTC());
             return new TypedMonitorActionAspect(monitoring, context,
                 new ActionFactExtractor(facts), new MonitorActionContractValidator(actions, facts,
-                    Collections.emptyList()));
+                    Collections.emptyList()), new ResourceAccessStage(guard, context, request -> {
+                        resolverCalls.incrementAndGet();
+                        return ResourceScopeResolution.resolved(io.github.jasper.monitoring.api.fact.ActionFacts
+                            .builder().put(BuiltInFacts.OrgScope.class, "org-7").build());
+                    }, new ActionFactExtractor(facts)));
         }
 
         MonitoredApi proxy() {

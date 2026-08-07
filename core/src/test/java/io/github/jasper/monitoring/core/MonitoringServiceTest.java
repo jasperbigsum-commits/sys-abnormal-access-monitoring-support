@@ -126,6 +126,31 @@ class MonitoringServiceTest {
     }
 
     @Test
+    void recordPersistsWithoutEvaluatingRules() {
+        RecordingEventRepository repository = new RecordingEventRepository();
+        AtomicBoolean evaluated = new AtomicBoolean(false);
+        ActionDefinition action = ActionDefinition.builder("demo:query").eventType(SecurityEventType.QUERY)
+            .resourceType("report").failurePolicy(ActionFailurePolicy.OBSERVE_ONLY).build();
+        ActionCatalog catalog = new ActionCatalog();
+        catalog.register(QueryAction.class, action);
+        catalog.freeze();
+        MonitoringService service = new MonitoringService(repository,
+            new SecurityEventAssembler("demo", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)),
+            new MonitoringRuntimePort() {
+                public ActionDefinition resolve(Class<? extends ActionType> type) { return catalog.require(type); }
+                public MonitoringRuntimePort.FactCollection collect(ActionExecution execution, ActionDefinition definition) {
+                    return MonitoringRuntimePort.FactCollection.empty();
+                }
+            }, (type, definition, event, facts, sources, ineligible, issues) -> evaluated.set(true), codes());
+
+        service.record(ActionExecution.of(QueryAction.class, request(), IdentityContext.anonymous(),
+            ActionOutcome.success(1L)));
+
+        assertEquals(1, repository.events.size());
+        assertEquals(false, evaluated.get());
+    }
+
+    @Test
     void rejectsExecutionWhenTypedActionIsNotRegistered() {
         ActionCatalog catalog = new ActionCatalog();
         catalog.freeze();

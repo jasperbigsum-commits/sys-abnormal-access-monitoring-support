@@ -33,6 +33,14 @@ public final class BuiltInFacts {
         .codec(FactDefinition.stringCodec(value -> value.trim()))
         .build();
 
+    /** Organization or tenant boundary used by host resource authorization. */
+    public static final FactDefinition<String> ORG_SCOPE = FactDefinition
+        .builder(OrgScope.class, "org_scope", String.class)
+        .allowedSources(FactSource.TRUSTED_REQUEST, FactSource.METHOD_PARAMETER, FactSource.HOST_PROVIDER)
+        .sensitivity(FactDefinition.Sensitivity.INTERNAL).maxLength(256)
+        .storage(FactDefinition.Storage.STANDARD_COLUMN)
+        .codec(FactDefinition.stringCodec(value -> value.trim())).build();
+
     /**
      * 数据量计数（对象：一次行为涉及的数据规模）。
      * <p>
@@ -127,7 +135,7 @@ public final class BuiltInFacts {
         .build();
 
     private static final List<FactDefinition<?>> ALL = Collections.unmodifiableList(
-        Arrays.<FactDefinition<?>>asList(RESOURCE_ID, DATA_COUNT, SENSITIVITY, DIFFERENT_NETWORKS,
+        Arrays.<FactDefinition<?>>asList(RESOURCE_ID, ORG_SCOPE, DATA_COUNT, SENSITIVITY, DIFFERENT_NETWORKS,
             SEQUENTIAL_ACCESS, SENSITIVE, WORK_HOURS, PRIVILEGE_INCREASE, HIGH_PRIVILEGE,
             TARGET_USER_ID, BASELINE_RATIO, LOGIN_SUBJECT_KEY, AUTHENTICATION_STAGE));
 
@@ -150,6 +158,10 @@ public final class BuiltInFacts {
     public static final class ResourceId implements BuiltInFactType<String> {
         private ResourceId() {
         }
+    }
+
+    public static final class OrgScope implements BuiltInFactType<String> {
+        private OrgScope() { }
     }
 
     /** 数据计数 token：例如导出行数、查询结果条数。 */

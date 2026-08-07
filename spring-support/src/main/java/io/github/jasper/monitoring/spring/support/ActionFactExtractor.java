@@ -57,15 +57,36 @@ public final class ActionFactExtractor {
     /** Validates completeness, source ownership, and values for one action invocation. */
     public ActionFacts validate(MonitorActionContractValidator.MethodBinding binding,
             ActionFacts actionFacts, Map<Class<? extends FactType<?>>, FactSource> sources) {
+        return validate(binding, actionFacts, sources, true);
+    }
+
+    /** Validates and normalizes a partial fact snapshot without requiring later runtime facts. */
+    public ActionFacts validateSupplied(MonitorActionContractValidator.MethodBinding binding,
+            ActionFacts actionFacts, FactSource source) {
+        Objects.requireNonNull(actionFacts, "actionFacts");
+        Objects.requireNonNull(source, "source");
+        Map<Class<? extends FactType<?>>, FactSource> sources =
+            new java.util.LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
+        for (Class<? extends FactType<?>> factType : actionFacts.asMap().keySet()) {
+            sources.put(factType, source);
+        }
+        return validate(binding, actionFacts, sources, false);
+    }
+
+    private ActionFacts validate(MonitorActionContractValidator.MethodBinding binding,
+            ActionFacts actionFacts, Map<Class<? extends FactType<?>>, FactSource> sources,
+            boolean requireComplete) {
         Objects.requireNonNull(binding, "binding");
         Objects.requireNonNull(actionFacts, "actionFacts");
         Objects.requireNonNull(sources, "sources");
         if (!actionFacts.asMap().keySet().equals(sources.keySet()) || sources.containsValue(null)) {
             throw new IllegalStateException("Every action fact must have exactly one source");
         }
-        for (Class<? extends FactType<?>> required : binding.getAction().getRequiredFacts()) {
-            if (!actionFacts.asMap().containsKey(required)) {
-                throw new IllegalStateException("Required action fact is missing: " + required.getName());
+        if (requireComplete) {
+            for (Class<? extends FactType<?>> required : binding.getAction().getRequiredFacts()) {
+                if (!actionFacts.asMap().containsKey(required)) {
+                    throw new IllegalStateException("Required action fact is missing: " + required.getName());
+                }
             }
         }
         ActionFacts.Builder validated = ActionFacts.builder();

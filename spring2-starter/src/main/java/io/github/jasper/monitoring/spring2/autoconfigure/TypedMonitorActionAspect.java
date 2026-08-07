@@ -2,6 +2,7 @@ package io.github.jasper.monitoring.spring2.autoconfigure;
 
 import io.github.jasper.monitoring.api.MonitoringContextAccessor;
 import io.github.jasper.monitoring.api.action.MonitorAction;
+import io.github.jasper.monitoring.api.action.ResourceAccess;
 import io.github.jasper.monitoring.api.action.ActionDecision;
 import io.github.jasper.monitoring.api.action.ActionFailurePolicy;
 import io.github.jasper.monitoring.api.code.BuiltInReasonCodes;
@@ -17,6 +18,7 @@ import io.github.jasper.monitoring.spring.support.ActionFactExtractor;
 import io.github.jasper.monitoring.spring.support.MonitorActionContractValidator;
 import io.github.jasper.monitoring.spring.support.MonitoringFactScope;
 import io.github.jasper.monitoring.spring.support.MonitoringCheckpoint;
+import io.github.jasper.monitoring.spring.support.ResourceAccessStage;
 import java.lang.reflect.Method;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,19 +38,25 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
     private final MonitoringContextAccessor context;
     private final ActionFactExtractor facts;
     private final MonitorActionContractValidator contracts;
+    private final ResourceAccessStage resourceAccess;
 
     public TypedMonitorActionAspect(MonitoringService monitoring, MonitoringContextAccessor context,
-            ActionFactExtractor facts, MonitorActionContractValidator contracts) {
+            ActionFactExtractor facts, MonitorActionContractValidator contracts, ResourceAccessStage resourceAccess) {
         this.monitoring = Objects.requireNonNull(monitoring, "monitoring");
         this.context = Objects.requireNonNull(context, "context");
         this.facts = Objects.requireNonNull(facts, "facts");
         this.contracts = Objects.requireNonNull(contracts, "contracts");
+        this.resourceAccess = Objects.requireNonNull(resourceAccess, "resourceAccess");
         // Wrap transaction advice declared on the same monitored method.
         setOrder(Ordered.HIGHEST_PRECEDENCE);
         setAdvice(this);
     }
 
     @Override public boolean matches(Method method, Class<?> targetClass) {
+        if (method.isAnnotationPresent(ResourceAccess.class)
+                && !method.isAnnotationPresent(MonitorAction.class)) {
+            contracts.validate(method);
+        }
         if (!method.isAnnotationPresent(MonitorAction.class)) return false;
         contracts.validate(method);
         return true;
@@ -57,10 +65,15 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
     @Override public Object invoke(MethodInvocation invocation) throws Throwable {
         MonitorActionContractValidator.MethodBinding binding = contracts.validate(invocation.getMethod());
         ActionFacts suppliedFacts = facts.extract(binding, invocation.getArguments());
+        final ActionFacts resourceFacts;
+        if (binding.hasResourceAccess()) {
+            resourceFacts = resourceAccess.authorize(binding, mergedFacts(binding.getStaticFacts(), suppliedFacts,
+                ActionFacts.builder().build(), ActionFacts.builder().build()).facts);
+        } else resourceFacts = ActionFacts.builder().build();
         long startedAt = System.nanoTime();
         MonitoringFactScope scope = MonitoringFactScope.open(binding.getActionType(), new MonitoringCheckpoint() {
             @Override public ActionDecision decide(ActionFacts runtimeFacts) {
-                MergedFacts merged = validatedFacts(binding, suppliedFacts, runtimeFacts);
+                MergedFacts merged = validatedFacts(binding, suppliedFacts, resourceFacts, runtimeFacts);
                 try {
                     return monitoring.decide(ActionExecution.of(binding.getActionType(),
                         context.requestContext(), context.identityContext(), ActionOutcome.success(0L),
@@ -80,7 +93,7 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
             } catch (ActionBlockedException blocked) {
                 scope.complete(ActionOutcome.denied(BuiltInReasonCodes.Action.BLOCKED, elapsed(startedAt)));
                 try {
-                    monitor(binding, suppliedFacts, scope.snapshot(),
+                    monitor(binding, suppliedFacts, resourceFacts, scope.snapshot(),
                         ActionOutcome.denied(BuiltInReasonCodes.Action.BLOCKED, elapsed(startedAt)));
                 } catch (RuntimeException monitoringFailure) {
                     blocked.addSuppressed(monitoringFailure);
@@ -90,7 +103,7 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
                 scope.complete(ActionOutcome.failure(BuiltInReasonCodes.Action.INVOCATION_FAILED,
                     FailureClass.UNKNOWN, elapsed(startedAt)));
                 try {
-                    monitor(binding, suppliedFacts, scope.snapshot(),
+                    monitor(binding, suppliedFacts, resourceFacts, scope.snapshot(),
                         ActionOutcome.failure(BuiltInReasonCodes.Action.INVOCATION_FAILED,
                             FailureClass.UNKNOWN, elapsed(startedAt)));
                 } catch (RuntimeException monitoringFailure) {
@@ -100,7 +113,7 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
             }
             ActionOutcome completed = outcome(result, elapsed(startedAt));
             scope.complete(completed);
-            monitor(binding, suppliedFacts, scope.snapshot(), completed);
+            monitor(binding, suppliedFacts, resourceFacts, scope.snapshot(), completed);
             return result;
         } finally {
             scope.close();
@@ -122,25 +135,27 @@ public final class TypedMonitorActionAspect extends StaticMethodMatcherPointcutA
     }
 
     private void monitor(MonitorActionContractValidator.MethodBinding binding,
-            ActionFacts parameterFacts, ActionFacts runtimeFacts, ActionOutcome outcome) {
-        MergedFacts merged = validatedFacts(binding, parameterFacts, runtimeFacts);
+            ActionFacts parameterFacts, ActionFacts resourceFacts,
+            ActionFacts runtimeFacts, ActionOutcome outcome) {
+        MergedFacts merged = validatedFacts(binding, parameterFacts, resourceFacts, runtimeFacts);
         monitoring.monitor(ActionExecution.of(binding.getActionType(), context.requestContext(),
             context.identityContext(), outcome, merged.facts, merged.sources));
     }
 
     private MergedFacts validatedFacts(MonitorActionContractValidator.MethodBinding binding,
-            ActionFacts parameterFacts, ActionFacts runtimeFacts) {
-        MergedFacts merged = mergedFacts(binding.getStaticFacts(), parameterFacts, runtimeFacts);
+            ActionFacts parameterFacts, ActionFacts resourceFacts, ActionFacts runtimeFacts) {
+        MergedFacts merged = mergedFacts(binding.getStaticFacts(), parameterFacts, resourceFacts, runtimeFacts);
         return new MergedFacts(facts.validate(binding, merged.facts, merged.sources), merged.sources);
     }
 
     private static MergedFacts mergedFacts(ActionFacts staticFacts,
-            ActionFacts parameterFacts, ActionFacts runtimeFacts) {
+            ActionFacts parameterFacts, ActionFacts resourceFacts, ActionFacts runtimeFacts) {
         ActionFacts.Builder merged = ActionFacts.builder();
         Map<Class<? extends FactType<?>>, FactSource> sources =
             new LinkedHashMap<Class<? extends FactType<?>>, FactSource>();
         addFacts(merged, sources, staticFacts, FactSource.HOST_PROVIDER);
         addFacts(merged, sources, parameterFacts, FactSource.METHOD_PARAMETER);
+        addFacts(merged, sources, resourceFacts, FactSource.HOST_PROVIDER);
         addFacts(merged, sources, runtimeFacts, FactSource.HOST_PROVIDER);
         return new MergedFacts(merged.build(), sources);
     }
